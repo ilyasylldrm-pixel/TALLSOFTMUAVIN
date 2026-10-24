@@ -1254,41 +1254,6 @@ export function getStoredData(targetCompanyId?: string) {
     };
   }
 
-  const syncMainBranchWithSettings = (branchList: Branch[]): Branch[] => {
-    if (!Array.isArray(branchList) || branchList.length === 0) return branchList;
-    return branchList.map((br) => {
-      if (!br.isMain) return br;
-      const isUntouchedDemoMain =
-        !br.address?.fullAddress ||
-        br.address.fullAddress.includes("Büyükdere Cad. No:199") ||
-        br.address.fullAddress === `${compMeta?.city || "İstanbul"} / ${compMeta?.district || "Merkez"}`;
-      if (isUntouchedDemoMain && loadedSettings.address) {
-        return {
-          ...br,
-          name:
-            br.name === "Genel Merkez (Levent)" && loadedSettings.district
-              ? `Genel Merkez (${loadedSettings.district})`
-              : br.name,
-          phone: loadedSettings.phone || br.phone,
-          email: loadedSettings.email || br.email,
-          address: {
-            ...br.address,
-            country: loadedSettings.country || br.address?.country || "Türkiye",
-            city: loadedSettings.city || br.address?.city || "İstanbul",
-            district: loadedSettings.district || br.address?.district || "",
-            neighborhood: loadedSettings.neighborhood || br.address?.neighborhood || "",
-            street: loadedSettings.street || br.address?.street || "",
-            buildingNo: loadedSettings.buildingNo || br.address?.buildingNo || "",
-            doorNo: loadedSettings.doorNo || br.address?.doorNo || "",
-            postalCode: loadedSettings.postalCode || br.address?.postalCode || "",
-            fullAddress: loadedSettings.address,
-          },
-        };
-      }
-      return br;
-    });
-  };
-
   return {
     settings: loadedSettings,
     contacts: normalizedContacts,
@@ -1305,14 +1270,14 @@ export function getStoredData(targetCompanyId?: string) {
       if (isDefault) {
         const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
         const list = Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
-        return syncMainBranchWithSettings(list);
+        return list;
       }
       const scopedKey = `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
       const existingRaw = safeGetStorageItem(scopedKey);
       if (existingRaw) {
         try {
           const parsed = JSON.parse(existingRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) return syncMainBranchWithSettings(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         } catch (_) {}
       }
       const defaultBranchForComp: Branch[] = [
@@ -2092,6 +2057,164 @@ export function formatAddressWithBranch(
   }
 
   return `${baseAddr} — ${branchLabel}`;
+}
+
+/**
+ * Resolves the Company Headquarters Address (Firma Merkez Adresi)
+ * strictly from the Company Profile (Firma Profili - companySettings).
+ */
+export function getCompanyHeadquartersAddress(
+  companySettings?: Partial<CompanySettings> | null
+): string {
+  if (!companySettings) return "";
+  const explicitFull = String(
+    companySettings.address || companySettings.addressDetails?.fullAddress || ""
+  ).trim();
+  const city = String(
+    companySettings.city || companySettings.addressDetails?.city || ""
+  ).trim();
+  const district = String(
+    companySettings.district || companySettings.addressDetails?.district || ""
+  ).trim();
+  const neighborhood = String(
+    companySettings.neighborhood || companySettings.addressDetails?.neighborhood || ""
+  ).trim();
+  const street = String(
+    companySettings.street || companySettings.addressDetails?.street || ""
+  ).trim();
+  const buildingNo = String(
+    companySettings.buildingNo || companySettings.addressDetails?.buildingNo || ""
+  ).trim();
+  const doorNo = String(
+    companySettings.doorNo || companySettings.addressDetails?.doorNo || ""
+  ).trim();
+  const postalCode = String(
+    companySettings.postalCode || companySettings.addressDetails?.postalCode || ""
+  ).trim();
+
+  if (explicitFull) {
+    return appendCityDistrictToAddress(explicitFull, city, district) || explicitFull;
+  }
+
+  const compiled = compileStructuredAddress(
+    neighborhood,
+    street,
+    district,
+    city,
+    buildingNo,
+    doorNo,
+    postalCode
+  );
+  if (compiled) return compiled;
+
+  return [district, city].filter(Boolean).join(" / ");
+}
+
+/**
+ * Resolves a Branch Address (Şube Adresi)
+ * strictly from a Branch item in the Branches (Şubeler) section.
+ */
+export function getBranchAddressFromBranchItem(branch?: Branch | null): string {
+  if (!branch || !branch.address) return "";
+  const brAddr = branch.address;
+  const explicitFull = String(brAddr.fullAddress || "").trim();
+  const city = String(brAddr.city || "").trim();
+  const district = String(brAddr.district || "").trim();
+  const neighborhood = String(brAddr.neighborhood || "").trim();
+  const street = String(brAddr.street || "").trim();
+  const buildingNo = String(brAddr.buildingNo || "").trim();
+  const doorNo = String(brAddr.doorNo || "").trim();
+  const postalCode = String(brAddr.postalCode || "").trim();
+
+  if (explicitFull) {
+    return appendCityDistrictToAddress(explicitFull, city, district) || explicitFull;
+  }
+
+  const compiled = compileStructuredAddress(
+    neighborhood,
+    street,
+    district,
+    city,
+    buildingNo,
+    doorNo,
+    postalCode
+  );
+  if (compiled) return compiled;
+
+  return [district, city].filter(Boolean).join(" / ");
+}
+
+/**
+ * Looks up the branch in the Branches (Şubeler) section and returns its address
+ * strictly from the Şubeler list (never falling back to Firma Profili address).
+ */
+export function resolveBranchAddressFromBranches(options: {
+  branchId?: string;
+  branchCode?: string;
+  branchName?: string;
+  fallbackBranchAddress?: string;
+  branches?: Branch[];
+  companyId?: string;
+}): {
+  branch: Branch | null;
+  branchAddress: string;
+  branchName: string;
+  branchCode: string;
+  branchCity: string;
+  branchDistrict: string;
+} {
+  let list = options.branches;
+  if (!Array.isArray(list) || list.length === 0) {
+    try {
+      const targetCompId = options.companyId || getActiveCompanyId();
+      const isDefault = !targetCompId || targetCompId === DEFAULT_COMPANY.id;
+      const key = isDefault ? STORAGE_KEYS.BRANCHES : `${STORAGE_KEYS.BRANCHES}_${targetCompId}`;
+      const raw = safeGetStorageItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = parsed;
+      }
+      if ((!list || list.length === 0) && isDefault) {
+        list = initialBranches;
+      }
+    } catch {
+      list = [];
+    }
+  }
+
+  const safeList = Array.isArray(list) ? list : [];
+  const cleanId = String(options.branchId || "").trim();
+  const cleanCode = String(options.branchCode || "").trim().toLowerCase();
+  const cleanName = String(options.branchName || "").trim().toLowerCase();
+
+  let matched: Branch | null = null;
+  if (cleanId) {
+    matched = safeList.find((b) => b.id === cleanId) || null;
+  }
+  if (!matched && cleanCode) {
+    matched =
+      safeList.find((b) => String(b.code || "").trim().toLowerCase() === cleanCode) || null;
+  }
+  if (!matched && cleanName) {
+    matched =
+      safeList.find((b) => String(b.name || "").trim().toLowerCase() === cleanName) || null;
+  }
+
+  const fromBranchStore = getBranchAddressFromBranchItem(matched);
+  const cleanFallback = String(options.fallbackBranchAddress || "")
+    .replace(/\s*—\s*Şube:\s*.*$/i, "")
+    .replace(/\s*-\s*Şube:\s*.*$/i, "")
+    .replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "")
+    .trim();
+
+  return {
+    branch: matched,
+    branchAddress: fromBranchStore || cleanFallback,
+    branchName: matched?.name || String(options.branchName || "").trim(),
+    branchCode: matched?.code || String(options.branchCode || "").trim(),
+    branchCity: matched?.address?.city || "",
+    branchDistrict: matched?.address?.district || "",
+  };
 }
 
 /**

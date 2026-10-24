@@ -1,5 +1,9 @@
 import type { CompanySettings, Contact, EDocumentType, Invoice, InvoiceItem } from "../types";
 import { normalizeMysoftTenantIdentifier } from "./mysoftTenant.ts";
+import {
+  getCompanyHeadquartersAddress,
+  resolveBranchAddressFromBranches,
+} from "../utils/storage";
 
 /**
  * Maps Muavin's "Yeni Gelir Faturası Kes / Hazırla" form onto Mysoft's
@@ -418,9 +422,23 @@ export function buildMysoftInvoiceOutboxPayload(
           });
         }
       }
-      const effBranchName = (invoice.branchName || "Merkez").trim();
-      const effBranchCode = (invoice.branchCode || "").trim();
-      const effBranchAddr = (invoice.branchAddress || company.address || "").trim();
+      const resolvedBranch = resolveBranchAddressFromBranches({
+        branchId: invoice.branchId,
+        branchCode: invoice.branchCode,
+        branchName: invoice.branchName,
+        fallbackBranchAddress: invoice.branchAddress,
+        fallbackBranchCity: invoice.branchCity,
+        fallbackBranchDistrict: invoice.branchDistrict,
+      });
+      const effHqAddr = getCompanyHeadquartersAddress(company);
+      const effBranchName = (invoice.branchName || resolvedBranch.branchName || "Merkez").trim();
+      const effBranchCode = (invoice.branchCode || resolvedBranch.branchCode || "").trim();
+      const effBranchAddr = (resolvedBranch.branchAddress || "").trim();
+      if (effHqAddr && !rawNoteText.includes("Firma Merkez Adresi:")) {
+        noteList.push({
+          note: `Firma Merkez Adresi: ${effHqAddr}`,
+        });
+      }
       if (
         (effBranchName || effBranchAddr) &&
         !rawNoteText.includes("Düzenleyen Şube:") &&
@@ -428,7 +446,7 @@ export function buildMysoftInvoiceOutboxPayload(
         !rawNoteText.includes("Şube Adresi")
       ) {
         noteList.push({
-          note: `Şube Adresi (${effBranchName}${effBranchCode ? ` - ${effBranchCode}` : ""}): ${effBranchAddr}`,
+          note: `Şube Adresi (${effBranchName}${effBranchCode ? ` - ${effBranchCode}` : ""}): ${effBranchAddr || "-"}`,
         });
       }
       const effBankName = (invoice.paymentAccountName || company.defaultBankName || company.bankName || "").trim();

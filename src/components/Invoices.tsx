@@ -75,6 +75,8 @@ import {
   appendCityDistrictToAddress,
   formatAddressWithBranch,
   compileStructuredAddress,
+  getCompanyHeadquartersAddress,
+  getBranchAddressFromBranchItem,
 } from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile } from "../utils/logoUpload";
@@ -396,87 +398,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const manualAddressInputRef = React.useRef<HTMLInputElement | null>(null);
   const lastQueriedManualVknRef = React.useRef<string>("");
 
-  // Şube Bilgileri: 1. Düzenleyen Şirket Şubesi, 2. Müşteri / Alıcı Şubesi (Adreste görünür)
+  // Firma Merkez Adresi: Doğrudan Firma Profili (companySettings) bölümündeki adresten alınır
+  const companyHeadquartersAddress = React.useMemo(
+    () => getCompanyHeadquartersAddress(companySettings),
+    [companySettings]
+  );
+
+  // Şube Bilgileri: Şube adresi doğrudan Şubeler (branches) bölümündeki adresten alınır
   const effectiveBranchesList = React.useMemo(() => {
-    const compOpenAddr =
-      [
-        companySettings.neighborhood,
-        companySettings.street,
-        companySettings.buildingNo ? `No:${companySettings.buildingNo}` : "",
-        companySettings.doorNo ? `D:${companySettings.doorNo}` : "",
-      ]
-        .filter(Boolean)
-        .join(" ") ||
-      companySettings.address ||
-      "";
-    const compCity = companySettings.city || "İstanbul";
-    const compDistrict = companySettings.district || "";
-    const compFullAddr = [compOpenAddr, [compDistrict, compCity].filter(Boolean).join(" / ")]
-      .filter(Boolean)
-      .join(" ");
-
-    const hasMain = branches.some((b) => b.isMain);
-    const syncedList = branches.map((b) => {
-      if (!b.isMain) return b;
-      const isPlaceholderAddr =
-        !b.address?.fullAddress ||
-        b.address.fullAddress.includes("Esentepe Mah. Büyükdere Cad. No:199");
-      if (compOpenAddr && isPlaceholderAddr) {
-        return {
-          ...b,
-          address: {
-            ...b.address,
-            city: compCity,
-            district: compDistrict || b.address?.district || "",
-            neighborhood: companySettings.neighborhood || b.address?.neighborhood || "",
-            street: companySettings.street || b.address?.street || "",
-            buildingNo: companySettings.buildingNo || b.address?.buildingNo || "",
-            doorNo: companySettings.doorNo || b.address?.doorNo || "",
-            postalCode: companySettings.postalCode || b.address?.postalCode || "",
-            fullAddress: compFullAddr || b.address?.fullAddress || "",
-          },
-        };
-      }
-      return b;
-    });
-
-    if (!hasMain) {
-      return [
-        {
-          id: "__MERKEZ__",
-          companyId: companySettings.id || "comp_default",
-          name: "Merkez",
-          code: "MRK-01",
-          isMain: true,
-          status: "active" as const,
-          address: {
-            country: companySettings.country || "Türkiye",
-            city: compCity,
-            district: compDistrict,
-            neighborhood: companySettings.neighborhood || "",
-            street: companySettings.street || "",
-            buildingNo: companySettings.buildingNo || "",
-            doorNo: companySettings.doorNo || "",
-            postalCode: companySettings.postalCode || "",
-            fullAddress: compFullAddr,
-          },
-          contact: {
-            phone: companySettings.phone || "",
-            email: companySettings.email || "",
-          },
-          createdAt: new Date().toISOString().split("T")[0],
-        },
-        ...syncedList,
-      ];
+    if (Array.isArray(branches) && branches.length > 0) {
+      return branches;
     }
-    return syncedList;
-  }, [branches, companySettings]);
+    return [];
+  }, [branches]);
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
-    const mainBr =
-      branches.find((b) => b.isMain && b.status !== "passive") ||
-      branches.find((b) => b.status !== "passive");
-    return mainBr?.id || "__MERKEZ__";
+    const firstActive =
+      branches.find((b) => b.status !== "passive") || branches[0];
+    return firstActive?.id || "";
   });
   const [customBranchAddressOverride, setCustomBranchAddressOverride] = useState<string>("");
 
@@ -496,61 +435,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const selectedCompanyBranch = React.useMemo(
     () =>
       effectiveBranchesList.find((b) => b.id === selectedBranchId) ||
-      effectiveBranchesList.find((b) => b.isMain) ||
+      effectiveBranchesList.find((b) => b.status !== "passive") ||
       effectiveBranchesList[0] ||
       null,
     [effectiveBranchesList, selectedBranchId]
   );
 
+  // Şube Adresi: Yalnızca Şubeler (branches) bölümündeki seçili şubenin adresinden alınır
   const computedCompanyBranchAddress = React.useMemo(() => {
-    const compOpenAddr =
-      [
-        companySettings.neighborhood,
-        companySettings.street,
-        companySettings.buildingNo ? `No:${companySettings.buildingNo}` : "",
-        companySettings.doorNo ? `D:${companySettings.doorNo}` : "",
-      ]
-        .filter(Boolean)
-        .join(" ") ||
-      companySettings.address ||
-      "";
-
-    if (!selectedCompanyBranch) {
-      return appendCityDistrictToAddress(
-        compOpenAddr,
-        companySettings.city,
-        companySettings.district
-      );
-    }
-    const brAddr = selectedCompanyBranch.address;
-    const branchStructuredOpen = [
-      brAddr?.neighborhood,
-      brAddr?.street,
-      brAddr?.buildingNo ? `No:${brAddr.buildingNo}` : "",
-      brAddr?.doorNo ? `D:${brAddr.doorNo}` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    const rawOpen = selectedCompanyBranch.isMain
-      ? compOpenAddr || brAddr?.fullAddress || branchStructuredOpen
-      : brAddr?.fullAddress || branchStructuredOpen || compOpenAddr;
-
-    const targetCity = selectedCompanyBranch.isMain
-      ? companySettings.city || brAddr?.city
-      : brAddr?.city || companySettings.city;
-    const targetDistrict = selectedCompanyBranch.isMain
-      ? companySettings.district || brAddr?.district
-      : brAddr?.district || companySettings.district;
-
-    return formatAddressWithBranch(
-      rawOpen,
-      targetCity,
-      targetDistrict,
-      selectedCompanyBranch.name,
-      selectedCompanyBranch.code
-    );
-  }, [selectedCompanyBranch, companySettings]);
+    if (!selectedCompanyBranch) return "";
+    return getBranchAddressFromBranchItem(selectedCompanyBranch);
+  }, [selectedCompanyBranch]);
 
   const resolvedCompanyBranchAddress = React.useMemo(
     () => (customBranchAddressOverride.trim() ? customBranchAddressOverride.trim() : computedCompanyBranchAddress),
@@ -560,6 +455,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   // Clean address helper & automatic branch note line builder for Gelir (Sales) Invoices
   const selectedBranchCleanAddress = React.useMemo(() => {
     return String(resolvedCompanyBranchAddress || "")
+      .replace(/\s*—\s*Şube:\s*.*$/i, "")
       .replace(/\s*-\s*Şube:\s*.*$/i, "")
       .replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "")
       .trim();
@@ -640,8 +536,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setQuickBranchName("");
     setQuickBranchNeighborhood("");
     setQuickBranchStreet("");
-    setQuickBranchCity(companySettings.city || "");
-    setQuickBranchDistrict(companySettings.district || "");
+    setQuickBranchCity("");
+    setQuickBranchDistrict("");
     setQuickBranchAddress("");
     setIsQuickBranchFormOpen(true);
   };
@@ -650,32 +546,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
     if (!selectedCompanyBranch) return;
     setQuickBranchMode("edit");
     setQuickBranchCode(selectedCompanyBranch.code || "SUB-001");
-    setQuickBranchName(selectedCompanyBranch.name || "Merkez");
-    setQuickBranchNeighborhood(
-      selectedCompanyBranch.isMain
-        ? companySettings.neighborhood || selectedCompanyBranch.address?.neighborhood || ""
-        : selectedCompanyBranch.address?.neighborhood || ""
-    );
-    setQuickBranchStreet(
-      selectedCompanyBranch.isMain
-        ? companySettings.street || selectedCompanyBranch.address?.street || ""
-        : selectedCompanyBranch.address?.street || ""
-    );
-    setQuickBranchCity(
-      selectedCompanyBranch.isMain
-        ? companySettings.city || selectedCompanyBranch.address?.city || ""
-        : selectedCompanyBranch.address?.city || companySettings.city || ""
-    );
-    setQuickBranchDistrict(
-      selectedCompanyBranch.isMain
-        ? companySettings.district || selectedCompanyBranch.address?.district || ""
-        : selectedCompanyBranch.address?.district || companySettings.district || ""
-    );
+    setQuickBranchName(selectedCompanyBranch.name || "");
+    setQuickBranchNeighborhood(selectedCompanyBranch.address?.neighborhood || "");
+    setQuickBranchStreet(selectedCompanyBranch.address?.street || "");
+    setQuickBranchCity(selectedCompanyBranch.address?.city || "");
+    setQuickBranchDistrict(selectedCompanyBranch.address?.district || "");
     setQuickBranchAddress(
-      selectedCompanyBranch.address?.fullAddress ||
-        selectedBranchCleanAddress ||
-        companySettings.address ||
-        ""
+      selectedCompanyBranch.address?.fullAddress || selectedBranchCleanAddress || ""
     );
     setIsQuickBranchFormOpen(true);
   };
@@ -685,13 +562,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const cleanCode = quickBranchCode.trim() || `SUB-00${effectiveBranchesList.length + 1}`;
     const cleanNh = quickBranchNeighborhood.trim();
     const cleanSt = quickBranchStreet.trim();
-    const cleanCity = quickBranchCity.trim() || companySettings.city || "İstanbul";
-    const cleanDist = quickBranchDistrict.trim() || companySettings.district || "";
+    const cleanCity = quickBranchCity.trim();
+    const cleanDist = quickBranchDistrict.trim();
     if (!cleanName) return;
 
-    const formattedFullAddr =
-      compileStructuredAddress(cleanNh, cleanSt, cleanDist, cleanCity) ||
-      appendCityDistrictToAddress(quickBranchAddress.trim(), cleanCity, cleanDist);
+    const explicitFull = quickBranchAddress.trim();
+    const compiledFull = compileStructuredAddress(cleanNh, cleanSt, cleanDist, cleanCity);
+    const formattedFullAddr = explicitFull
+      ? appendCityDistrictToAddress(explicitFull, cleanCity, cleanDist) || explicitFull
+      : compiledFull || "";
 
     if (quickBranchMode === "edit" && selectedCompanyBranch) {
       const updatedBr: Branch = {
@@ -707,20 +586,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
           fullAddress: formattedFullAddr,
         },
       };
-      if (onUpdateBranch && selectedCompanyBranch.id !== "__MERKEZ__") {
+      if (onUpdateBranch) {
         onUpdateBranch(updatedBr);
-      }
-      if (selectedCompanyBranch.isMain && onSaveCompanySettings) {
-        onSaveCompanySettings({
-          ...companySettings,
-          branchName: cleanName,
-          branchCode: cleanCode,
-          neighborhood: cleanNh || companySettings.neighborhood,
-          street: cleanSt || companySettings.street,
-          city: cleanCity,
-          district: cleanDist,
-          address: formattedFullAddr,
-        });
       }
       setCustomBranchAddressOverride("");
       setIsQuickBranchFormOpen(false);
@@ -2194,8 +2061,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
       branchName: selectedCompanyBranch?.name,
       branchCode: selectedCompanyBranch?.code,
       branchAddress: resolvedCompanyBranchAddress || undefined,
-      branchCity: selectedCompanyBranch?.address?.city || companySettings.city || undefined,
-      branchDistrict: selectedCompanyBranch?.address?.district || companySettings.district || undefined,
+      branchCity: selectedCompanyBranch?.address?.city || undefined,
+      branchDistrict: selectedCompanyBranch?.address?.district || undefined,
       contactId: customerMode === "manual" ? "manual_draft" : contactId,
       contactName: customerMode === "manual"
         ? (manualCustomerName.trim() || "Münferit Müşteri")
@@ -2793,8 +2660,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
       branchName: selectedCompanyBranch?.name,
       branchCode: selectedCompanyBranch?.code,
       branchAddress: resolvedCompanyBranchAddress || undefined,
-      branchCity: selectedCompanyBranch?.address?.city || companySettings.city || undefined,
-      branchDistrict: selectedCompanyBranch?.address?.district || companySettings.district || undefined,
+      branchCity: selectedCompanyBranch?.address?.city || undefined,
+      branchDistrict: selectedCompanyBranch?.address?.district || undefined,
       contactId: finalContactId,
       contactName: effectiveContactName,
       taxNumber: effectiveTaxNumber || undefined,
@@ -4455,17 +4322,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         {effectiveBranchesList
                           .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
                           .map((b) => {
-                            const brCity = b.isMain
-                              ? companySettings.city || b.address?.city
-                              : b.address?.city || companySettings.city;
-                            const brDist = b.isMain
-                              ? companySettings.district || b.address?.district
-                              : b.address?.district || companySettings.district;
+                            const brCity = b.address?.city || "";
+                            const brDist = b.address?.district || "";
                             const locStr = [brDist, brCity].filter(Boolean).join("/");
                             return (
                               <option key={b.id} value={b.id}>
-                                {b.isMain ? "🏢 [MERKEZ] " : "🏬 [ŞUBE] "}
-                                {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
+                                🏬 [ŞUBE] {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
                               </option>
                             );
                           })}
@@ -4626,47 +4488,66 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                   )}
 
-                  {/* Seçilen Merkez veya Şubenin Adres Gösterimi ve Fatura Gönderim Kutusu */}
+                  {/* Firma Merkez Adresi (Firma Profilinden) ve Şube Adresi (Şubeler Bölümünden) Gösterimi */}
                   <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          <span>
-                            Seçilen {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} Adresi (Fatura Not Kısmına Otomatik Yansır):
+                    <div className="flex-1 min-w-0 space-y-2">
+                      {/* 1. Firma Merkez Adresi (Firma Profili Bölümünden) */}
+                      <div className="bg-white/90 border border-indigo-200 rounded-lg px-3 py-2 space-y-0.5">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[10.5px] font-extrabold text-indigo-950 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>Firma Merkez Adresi (Firma Profili Bölümünden):</span>
                           </span>
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                          ✓ Not Kısmına Otomatik Aktarıldı
-                        </span>
+                          <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+                            Firma Profili & Adres
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-900">
+                          {companyHeadquartersAddress || "Firma Profili bölümünde merkez adresi tanımlanmamış"}
+                        </p>
                       </div>
-                      <input
-                        type="text"
-                        value={customBranchAddressOverride !== "" ? customBranchAddressOverride : (computedCompanyBranchAddress || "Merkez adres bilgisi")}
-                        onChange={(e) => setCustomBranchAddressOverride(e.target.value)}
-                        placeholder="Seçilen merkez veya şube adresi..."
-                        className="w-full bg-white border border-purple-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                      />
-                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-                        <span>
-                          <strong>Kesilen Şube:</strong>{" "}
-                          {selectedCompanyBranch?.isMain ? "Merkez" : "Şube"} ({selectedCompanyBranch?.name || "Merkez"}
-                          {selectedCompanyBranch?.code ? ` - ${selectedCompanyBranch.code}` : ""})
-                        </span>
-                        <span>•</span>
-                        <span>
-                          <strong>İlçe / İl:</strong>{" "}
-                          {[
-                            selectedCompanyBranch?.isMain
-                              ? companySettings.district || selectedCompanyBranch?.address?.district
-                              : selectedCompanyBranch?.address?.district || companySettings.district,
-                            selectedCompanyBranch?.isMain
-                              ? companySettings.city || selectedCompanyBranch?.address?.city
-                              : selectedCompanyBranch?.address?.city || companySettings.city,
-                          ]
-                            .filter(Boolean)
-                            .join(" / ") || "-"}
-                        </span>
+
+                      {/* 2. Seçilen Şube Adresi (Şubeler Bölümünden) */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>
+                              Şube Adresi (Şubeler Bölümünden — {selectedCompanyBranch?.name || "Şube"}):
+                            </span>
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                            ✓ Şubeler Bölümünden Alındı & Nota Aktarıldı
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={
+                            customBranchAddressOverride !== ""
+                              ? customBranchAddressOverride
+                              : computedCompanyBranchAddress || ""
+                          }
+                          onChange={(e) => setCustomBranchAddressOverride(e.target.value)}
+                          placeholder="Şubeler bölümündeki şube adresi..."
+                          className="w-full bg-white border border-purple-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                        />
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                          <span>
+                            <strong>Seçili Şube:</strong>{" "}
+                            {selectedCompanyBranch?.name || "-"}
+                            {selectedCompanyBranch?.code ? ` (${selectedCompanyBranch.code})` : ""}
+                          </span>
+                          <span>•</span>
+                          <span>
+                            <strong>Şube İlçe / İl:</strong>{" "}
+                            {[
+                              selectedCompanyBranch?.address?.district,
+                              selectedCompanyBranch?.address?.city,
+                            ]
+                              .filter(Boolean)
+                              .join(" / ") || "-"}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -4676,7 +4557,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           type="submit"
                           disabled={isSavingMysoft}
                           className="w-full md:w-auto px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
-                          title="Seçilen merkez veya şube adresiyle faturayı kaydet ve gönder"
+                          title="Seçilen şube adresiyle faturayı kaydet ve gönder"
                         >
                           {isSavingMysoft ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -6161,17 +6042,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             {effectiveBranchesList
                               .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
                               .map((b) => {
-                                const brCity = b.isMain
-                                  ? companySettings.city || b.address?.city
-                                  : b.address?.city || companySettings.city;
-                                const brDist = b.isMain
-                                  ? companySettings.district || b.address?.district
-                                  : b.address?.district || companySettings.district;
+                                const brCity = b.address?.city || "";
+                                const brDist = b.address?.district || "";
                                 const locStr = [brDist, brCity].filter(Boolean).join("/");
                                 return (
                                   <option key={b.id} value={b.id}>
-                                    {b.isMain ? "🏢 [MERKEZ] " : "🏬 [ŞUBE] "}
-                                    {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
+                                    🏬 [ŞUBE] {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
                                   </option>
                                 );
                               })}

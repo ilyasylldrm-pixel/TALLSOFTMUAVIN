@@ -4,7 +4,11 @@ import { getContactAccountCode } from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate } from "../utils/exportUtils";
 import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
-import { formatAddressWithBranch } from "../utils/storage";
+import {
+  formatAddressWithBranch,
+  getCompanyHeadquartersAddress,
+  resolveBranchAddressFromBranches,
+} from "../utils/storage";
 import { Logo } from "./Logo";
 import {
   GibOfficialSealSvg,
@@ -87,6 +91,20 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
 
   const sellerTitle =
     companySettings?.companyTitle || companySettings?.companyName || "Firma Ünvanı";
+  const sellerHqAddress =
+    getCompanyHeadquartersAddress(companySettings) ||
+    companySettings?.address ||
+    "-";
+  const resolvedSellerBranch = resolveBranchAddressFromBranches({
+    branchId: invoice.branchId,
+    branchCode: invoice.branchCode,
+    branchName: invoice.branchName,
+    fallbackBranchAddress: invoice.branchAddress,
+    fallbackBranchCity: invoice.branchCity,
+    fallbackBranchDistrict: invoice.branchDistrict,
+  });
+  const sellerBranchName = (invoice.branchName || resolvedSellerBranch.branchName || "").trim();
+  const sellerBranchAddress = (resolvedSellerBranch.branchAddress || "").trim();
   const sellerTaxNo =
     companySettings?.vkn ||
     companySettings?.tckn ||
@@ -147,14 +165,17 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
             >
               {sellerTitle}
             </p>
-            {invoice.branchName && (
-              <p className="text-purple-800 font-bold truncate text-[9px]">
-                Şube: {invoice.branchName}
+            <p className="text-slate-600 line-clamp-2 text-[8.5px]">
+              <strong className="text-slate-800">Merkez:</strong> {sellerHqAddress}
+            </p>
+            {(sellerBranchName || sellerBranchAddress) && (
+              <p className="text-purple-800 font-semibold line-clamp-2 text-[8.5px]">
+                <strong className="font-bold">
+                  Şube{sellerBranchName ? ` (${sellerBranchName})` : ""}:
+                </strong>{" "}
+                {sellerBranchAddress || "-"}
               </p>
             )}
-            <p className="text-slate-600 line-clamp-2 text-[8.5px]">
-              {invoice.branchAddress || companySettings?.address || "-"}
-            </p>
             <p className="text-slate-700 font-semibold text-[8.5px]">
               VD: {companySettings?.taxOffice || "-"} • VKN:{" "}
               <span className="font-mono font-bold">{sellerTaxNo}</span>

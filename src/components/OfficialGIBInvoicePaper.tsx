@@ -59,7 +59,9 @@ import {
   formatAddressWithBranch,
   getActiveCompanyId,
   getCompaniesList,
+  getCompanyHeadquartersAddress,
   getStoredData,
+  resolveBranchAddressFromBranches,
   saveStoredData,
   updateCompanyItem,
 } from "../utils/storage";
@@ -1014,23 +1016,29 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     return "8a491029-3810-4b10-8201-948123019283";
   }, [invoice.eDocumentEttn, invoice.id]);
 
-  // Seller details
+  // Seller details:
+  // - Firma Merkez Adresi strictly from Firma Profili (companySettings)
+  // - Şube Adresi strictly from Şubeler (branches)
   const sellerTitle =
     companySettings?.companyTitle || companySettings?.companyName || "KURUMSAL FİRMA ÜNVANI";
-  const sellerBranchName = (invoice.branchName || "").trim();
-  const sellerBranchCode = (invoice.branchCode || "").trim();
-  const sellerAddress =
-    formatAddressWithBranch(
-      invoice.branchAddress || companySettings?.address,
-      invoice.branchCity || companySettings?.city,
-      invoice.branchDistrict || companySettings?.district,
-      sellerBranchName,
-      sellerBranchCode
-    ) ||
+  const resolvedSellerBranch = resolveBranchAddressFromBranches({
+    branchId: invoice.branchId,
+    branchCode: invoice.branchCode,
+    branchName: invoice.branchName,
+    fallbackBranchAddress: invoice.branchAddress,
+    fallbackBranchCity: invoice.branchCity,
+    fallbackBranchDistrict: invoice.branchDistrict,
+    companyId: activeCompanyId,
+  });
+  const sellerBranchName = (invoice.branchName || resolvedSellerBranch.branchName || "").trim();
+  const sellerBranchCode = (invoice.branchCode || resolvedSellerBranch.branchCode || "").trim();
+  const sellerHqAddress =
+    getCompanyHeadquartersAddress(companySettings) ||
     [companySettings?.address, companySettings?.district, companySettings?.city]
       .filter(Boolean)
       .join(" / ") ||
     "Merkez Adres";
+  const sellerBranchAddress = (resolvedSellerBranch.branchAddress || "").trim();
   const sellerTaxOffice = companySettings?.taxOffice || "-";
   const sellerTaxNo =
     companySettings?.vkn ||
@@ -1289,13 +1297,24 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
             >
               {sellerTitle}
             </p>
-            {sellerBranchName && (
-              <p className="font-bold text-slate-800 text-[10px]">
-                Şube: {sellerBranchName}
-                {sellerBranchCode ? ` (${sellerBranchCode})` : ""}
-              </p>
+            <p className="text-slate-700 leading-snug">
+              <strong className="text-slate-900">Merkez Adres:</strong> {sellerHqAddress}
+            </p>
+            {(sellerBranchName || sellerBranchAddress) && (
+              <div className="pt-0.5 space-y-0.5">
+                {sellerBranchName && (
+                  <p className="font-bold text-slate-800 text-[10px]">
+                    Şube: {sellerBranchName}
+                    {sellerBranchCode ? ` (${sellerBranchCode})` : ""}
+                  </p>
+                )}
+                {sellerBranchAddress && (
+                  <p className="text-slate-700 leading-snug text-[10px]">
+                    <strong className="text-slate-900">Şube Adresi:</strong> {sellerBranchAddress}
+                  </p>
+                )}
+              </div>
             )}
-            <p className="text-slate-700 leading-snug">{sellerAddress}</p>
 
             <div className="pt-1 border-t border-slate-200 space-y-0.5 text-[10px]">
               <div className="flex flex-wrap gap-x-3">

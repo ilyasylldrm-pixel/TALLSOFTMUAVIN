@@ -565,6 +565,23663 @@ function calculateNextInvoiceNumber(options) {
   };
 }
 
+// src/types.ts
+var EXPENSE_CATEGORIES = [
+  "Mal Al\u0131m\u0131",
+  "Yemek ve ula\u015F\u0131m",
+  "\u0130\u015F yeri e\u011Fitimleri",
+  "Kira \xF6demeleri",
+  "Elektrik Faturas\u0131",
+  "Su Faturas\u0131",
+  "Do\u011Falgaz faturas\u0131",
+  "Aidat giderleri",
+  "Kargo ve posta",
+  "Ara\xE7 kiralama",
+  "Yak\u0131t harcamalar\u0131",
+  "Bak\u0131m ve onar\u0131m",
+  "Seyahat harcamalar\u0131",
+  "Dijital reklamlar",
+  "Tasar\u0131m ve bask\u0131",
+  "Web sitesi ve SEO",
+  "Demirba\u015F al\u0131mlar\u0131",
+  "K\u0131rtasiye harcamalar\u0131",
+  "Temizlik ve mutfak",
+  "Dan\u0131\u015Fmanl\u0131k \xFCcretleri",
+  "Yaz\u0131l\u0131m lisanslar\u0131",
+  "Nakliye",
+  "Hammaliye"
+];
+
+// src/utils/generateMonthlyDemoData.ts
+var demoAccounts = [
+  {
+    id: "acc_cash_tl",
+    name: "Merkez TL Kasas\u0131",
+    type: "cash",
+    currency: "TRY",
+    balance: 145e3,
+    isDefault: true
+  },
+  {
+    id: "acc_bank_garanti",
+    name: "Garanti BBVA - Ticari TL Hesab\u0131",
+    type: "bank",
+    currency: "TRY",
+    balance: 125e4,
+    bankName: "Garanti BBVA",
+    accountNumber: "1029384",
+    iban: "TR33 0006 2000 0000 0012 3456 78",
+    isDefault: false
+  },
+  {
+    id: "acc_bank_isbank",
+    name: "\u0130\u015F Bankas\u0131 - Ana Hesap TL",
+    type: "bank",
+    currency: "TRY",
+    balance: 68e4,
+    bankName: "T\xFCrkiye \u0130\u015F Bankas\u0131",
+    accountNumber: "8472910",
+    iban: "TR64 0006 4000 0001 8472 9100 01",
+    isDefault: false
+  },
+  {
+    id: "acc_bank_usd",
+    name: "Ziraat Bankas\u0131 - USD D\xF6viz Hesab\u0131",
+    type: "bank",
+    currency: "USD",
+    balance: 52e3,
+    bankName: "Ziraat Bankas\u0131",
+    iban: "TR12 0001 0000 0000 9988 7766 55"
+  },
+  {
+    id: "acc_pos_garanti",
+    name: "Garanti Sanal POS Hesab\u0131",
+    type: "credit_card",
+    currency: "TRY",
+    balance: 24e4,
+    bankName: "Garanti BBVA Sanal POS"
+  }
+];
+var monthInfo = [
+  { num: "01", name: "Ocak", days: 31, prefix: "OCAK" },
+  { num: "02", name: "\u015Eubat", days: 28, prefix: "SUBAT" },
+  { num: "03", name: "Mart", days: 31, prefix: "MART" },
+  { num: "04", name: "Nisan", days: 30, prefix: "NISAN" },
+  { num: "05", name: "May\u0131s", days: 31, prefix: "MAYIS" },
+  { num: "06", name: "Haziran", days: 30, prefix: "HAZIRAN" },
+  { num: "07", name: "Temmuz", days: 31, prefix: "TEMMUZ" },
+  { num: "08", name: "A\u011Fustos", days: 31, prefix: "AGUSTOS" },
+  { num: "09", name: "Eyl\xFCl", days: 30, prefix: "EYLUL" },
+  { num: "10", name: "Ekim", days: 31, prefix: "EKIM" },
+  { num: "11", name: "Kas\u0131m", days: 30, prefix: "KASIM" },
+  { num: "12", name: "Aral\u0131k", days: 31, prefix: "ARALIK" }
+];
+var citiesAndDistricts = [
+  { city: "\u0130stanbul", district: "\u015Ei\u015Fli", taxOffice: "Mecidiyek\xF6y V.D." },
+  { city: "\u0130stanbul", district: "Kad\u0131k\xF6y", taxOffice: "Erenk\xF6y V.D." },
+  { city: "\u0130stanbul", district: "Maslak", taxOffice: "Maslak V.D." },
+  { city: "Ankara", district: "\xC7ankaya", taxOffice: "Kavakl\u0131dere V.D." },
+  { city: "Ankara", district: "Yenimahalle", taxOffice: "Ostim V.D." },
+  { city: "\u0130zmir", district: "Konak", taxOffice: "Konak V.D." },
+  { city: "\u0130zmir", district: "Kar\u015F\u0131yaka", taxOffice: "Kar\u015F\u0131yaka V.D." },
+  { city: "Bursa", district: "Nil\xFCfer", taxOffice: "Nil\xFCfer V.D." },
+  { city: "Kocaeli", district: "Gebze", taxOffice: "Ulu\xE7\u0131nar V.D." },
+  { city: "Antalya", district: "Muratpa\u015Fa", taxOffice: "\xDC\xE7kap\u0131lar V.D." },
+  { city: "Adana", district: "Seyhan", taxOffice: "Seyhan V.D." },
+  { city: "Gaziantep", district: "\u015Eehitkamil", taxOffice: "Gazikent V.D." }
+];
+var companyTypePrefixes = [
+  "Teknoloji & Yaz\u0131l\u0131m",
+  "Lojistik & Depolama",
+  "End\xFCstriyel Otomasyon",
+  "Elektronik & Donan\u0131m",
+  "Enerji & \u0130n\u015Faat",
+  "G\u0131da & Ambalaj",
+  "\u0130leti\u015Fim & Medya",
+  "Makine & Metal Sanayi",
+  "Saha Servis & Dan\u0131\u015Fmanl\u0131k",
+  "Perakende Ma\u011Fazac\u0131l\u0131k"
+];
+function generate1200UniqueContacts() {
+  const allContacts = [];
+  const monthlyContactMap = {};
+  monthInfo.forEach((m, mIndex) => {
+    monthlyContactMap[m.num] = [];
+    for (let i = 1; i <= 100; i++) {
+      const padIdx = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+      const loc = citiesAndDistricts[(i + mIndex) % citiesAndDistricts.length];
+      const sector = companyTypePrefixes[(i + mIndex) % companyTypePrefixes.length];
+      const isCustomer = i % 3 !== 0;
+      const contactType = isCustomer ? "customer" : "vendor";
+      const companyTitle = `${m.name} ${sector} Sanayi ve Ticaret ${i % 2 === 0 ? "A.\u015E." : "Ltd. \u015Eti."}`;
+      const name = `${m.prefix}-${padIdx} ${companyTitle}`;
+      const taxNumber = `${8e9 + mIndex * 1e3 + i}`;
+      const phone = `0${loc.city === "\u0130stanbul" ? "212" : loc.city === "Ankara" ? "312" : "232"} ${300 + i % 50} ${10 + i % 80} ${20 + i % 70}`;
+      const email = `finans.${m.prefix.toLowerCase()}${padIdx}@${sector.toLowerCase().replace(/[^a-z0-0]/g, "")}.com.tr`;
+      const isReceivable = isCustomer;
+      const rawBal = i * 1250 + mIndex * 3500;
+      const balance = isReceivable ? rawBal : -rawBal;
+      const accountCode = `${contactType === "vendor" ? "320" : "120"}.${taxNumber}`;
+      const contact = {
+        id: `c_${m.num}_${padIdx}`,
+        accountCode,
+        name,
+        companyTitle,
+        contactType,
+        taxOffice: loc.taxOffice,
+        taxNumber,
+        phone,
+        email,
+        city: loc.city,
+        district: loc.district,
+        address: `${loc.district} Organize Sanayi B\xF6lgesi ${i}. Sokak No:${i % 45 + 1} ${loc.city}`,
+        balance,
+        balanceType: balance > 0 ? "receivable" : balance < 0 ? "payable" : "balanced",
+        createdAt: `2026-${m.num}-01`
+      };
+      allContacts.push(contact);
+      monthlyContactMap[m.num].push(contact);
+    }
+  });
+  return { allContacts, monthlyContactMap };
+}
+function generate1200UniqueStockItems() {
+  const itemTemplates = [
+    { baseName: "Dell PowerEdge Sunucu", unit: "Adet", category: "Donan\u0131m & Sunucu", type: "Ticari Mal", baseBuy: 28e3 },
+    { baseName: "HP ProLiant Rack Server", unit: "Adet", category: "Donan\u0131m & Sunucu", type: "Ticari Mal", baseBuy: 32e3 },
+    { baseName: "Lenovo ThinkSystem Workstation", unit: "Adet", category: "Donan\u0131m & Sunucu", type: "Ticari Mal", baseBuy: 18e3 },
+    { baseName: "Muavin ERP Kurumsal Lisans", unit: "Adet", category: "Yaz\u0131l\u0131m Lisanslar\u0131", type: "Ticari Mal", baseBuy: 5500 },
+    { baseName: "Microsoft 365 Y\u0131ll\u0131k \u0130\u015F Paketi", unit: "Kullan\u0131c\u0131", category: "Yaz\u0131l\u0131m Lisanslar\u0131", type: "Ticari Mal", baseBuy: 1500 },
+    { baseName: "Fortinet FortiGate Firewall", unit: "Adet", category: "A\u011F & G\xFCvenlik", type: "Ticari Mal", baseBuy: 12500 },
+    { baseName: "Cisco Catalyst 24 Port Switch", unit: "Adet", category: "A\u011F & G\xFCvenlik", type: "Ticari Mal", baseBuy: 8200 },
+    { baseName: "Aruba Wireless Access Point", unit: "Adet", category: "A\u011F & G\xFCvenlik", type: "Ticari Mal", baseBuy: 4400 },
+    { baseName: "Zebra ZT230 Barkod Yaz\u0131c\u0131", unit: "Adet", category: "POS & Barkod Ekipmanlar\u0131", type: "Ticari Mal", baseBuy: 5200 },
+    { baseName: "Honeywell El Terminali Android", unit: "Adet", category: "POS & Barkod Ekipmanlar\u0131", type: "Ticari Mal", baseBuy: 7800 },
+    { baseName: "Datalogic Karekod Barkod Okuyucu", unit: "Adet", category: "POS & Barkod Ekipmanlar\u0131", type: "Ticari Mal", baseBuy: 2900 },
+    { baseName: "Siemens S7-1200 PLC Mod\xFCl\xFC", unit: "Adet", category: "Otomasyon & Elektrik", type: "Ticari Mal", baseBuy: 9500 },
+    { baseName: "Schneider Elektrik \u015Ealter Panosu", unit: "Set", category: "Otomasyon & Elektrik", type: "Ticari Mal", baseBuy: 11200 },
+    { baseName: "Samsung 32 In\xE7 Curved Monit\xF6r", unit: "Adet", category: "Ofis Teknolojileri", type: "Ticari Mal", baseBuy: 3800 },
+    { baseName: "Logitech MX Master 3S Kablosuz Mouse", unit: "Adet", category: "Ofis Teknolojileri", type: "Ticari Mal", baseBuy: 1400 },
+    { baseName: "APC 3KVA Online UPS G\xFC\xE7 Kayna\u011F\u0131", unit: "Adet", category: "Ofis Teknolojileri", type: "Ticari Mal", baseBuy: 8800 },
+    { baseName: "Kingston 64GB DDR5 Server RAM", unit: "Adet", category: "Yedek Par\xE7a & Depolama", type: "Ticari Mal", baseBuy: 2200 },
+    { baseName: "Samsung 2TB NVMe M.2 SSD Enterprise", unit: "Adet", category: "Yedek Par\xE7a & Depolama", type: "Ticari Mal", baseBuy: 3100 },
+    { baseName: "Seagate Exos 16TB Enterprise HDD", unit: "Adet", category: "Yedek Par\xE7a & Depolama", type: "Ticari Mal", baseBuy: 4800 },
+    { baseName: "Yaz\u0131l\u0131m Geli\u015Ftirme Dan\u0131\u015Fmanl\u0131\u011F\u0131", unit: "Saat", category: "Dan\u0131\u015Fmanl\u0131k & Hizmet", type: "Hizmet", baseBuy: 1500 }
+  ];
+  const allProducts = [];
+  const monthlyProductMap = {};
+  monthInfo.forEach((m) => {
+    monthlyProductMap[m.num] = [];
+    for (let i = 1; i <= 100; i++) {
+      const padIdx = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+      const template = itemTemplates[(i - 1) % itemTemplates.length];
+      const variantNumber = Math.floor((i - 1) / itemTemplates.length) + 1;
+      const code = `STK-${m.prefix}-${padIdx}`;
+      const name = `${m.name} - ${template.baseName} Mod\xFCl-V${variantNumber} (#${padIdx})`;
+      const buyPrice = template.baseBuy + i * 35;
+      const sellPrice = Math.round(buyPrice * 1.38);
+      const barcode = `869${m.num}2026${padIdx}`;
+      const serial2 = `SN-2026${m.num}-${padIdx}`;
+      const totalQty = 150 + i * 4;
+      const gebzeQty = Math.floor(totalQty * 0.5);
+      const ikitelliQty = Math.floor(totalQty * 0.3);
+      const ankaraQty = totalQty - gebzeQty - ikitelliQty;
+      const whId = i % 3 === 0 ? "wh_1" : i % 3 === 1 ? "wh_2" : "wh_3";
+      const whName = whId === "wh_1" ? "Gebze Lojistik & Ana Depo" : whId === "wh_2" ? "\u0130kitelli Yedek Par\xE7a Deposu" : "Ankara Lojistik Transit Depo";
+      const product = {
+        id: `p_${m.num}_${padIdx}`,
+        code,
+        name,
+        unit: template.unit,
+        buyPrice,
+        sellPrice,
+        vatRate: 20,
+        stockQuantity: totalQty,
+        minStockAlert: 15,
+        category: template.category,
+        stockType: template.type,
+        barcode,
+        imeiOrSerialNo: serial2,
+        warehouseId: whId,
+        warehouseName: whName,
+        warehouseQuantities: {
+          wh_1: gebzeQty,
+          wh_2: ikitelliQty,
+          wh_3: ankaraQty
+        }
+      };
+      allProducts.push(product);
+      monthlyProductMap[m.num].push(product);
+    }
+  });
+  return { allProducts, monthlyProductMap };
+}
+function generateMonthlyIntegratedData() {
+  const { allContacts, monthlyContactMap } = generate1200UniqueContacts();
+  const { allProducts, monthlyProductMap } = generate1200UniqueStockItems();
+  const invoices2 = [];
+  const transactions2 = [];
+  const quotes = [];
+  const cheques2 = [];
+  const promissoryNotes2 = [];
+  const leaveRequests = [];
+  const advanceRequests = [];
+  let invCounter = 1e3;
+  let txCounter = 2e3;
+  let qCounter = 500;
+  let chqCounter = 700;
+  let noteCounter = 800;
+  const categoriesExpense = [
+    "Ofis Kiras\u0131",
+    "Elektrik & Su & Do\u011Falgaz",
+    "Personel Maa\u015F & SGK",
+    "Yaz\u0131l\u0131m & Sunucu Giderleri",
+    "Yemek & Mutfak Gideri",
+    "Pazarlama & Reklam",
+    "Kargo & Lojistik",
+    "Abonelikler & Lisanslar",
+    "Temsil & A\u011F\u0131rlama",
+    "Saha Servis Giderleri"
+  ];
+  const categoriesIncome = [
+    "Yaz\u0131l\u0131m Sat\u0131\u015F Geliri",
+    "Dan\u0131\u015Fmanl\u0131k Geliri",
+    "Donan\u0131m Sat\u0131\u015F Geliri",
+    "Ayl\u0131k Bak\u0131m Geliri",
+    "Sistem Altyap\u0131 Deste\u011Fi",
+    "E-D\xF6n\xFC\u015F\xFCm Hizmet Bedeli"
+  ];
+  monthInfo.forEach((m) => {
+    const yearMonth = `2026-${m.num}`;
+    const productsForThisMonth = monthlyProductMap[m.num];
+    const contactsForThisMonth = monthlyContactMap[m.num];
+    const invoicesInMonth = 25;
+    const itemsPerInvoice = 4;
+    for (let invIdx = 0; invIdx < invoicesInMonth; invIdx++) {
+      invCounter++;
+      const day = Math.min(m.days, Math.floor((invIdx + 1) / invoicesInMonth * m.days));
+      const dayStr = day < 10 ? `0${day}` : `${day}`;
+      const issueDate = `${yearMonth}-${dayStr}`;
+      const dueDay = Math.min(m.days, day + 15);
+      const dueDayStr = dueDay < 10 ? `0${dueDay}` : `${dueDay}`;
+      const dueDate = `${yearMonth}-${dueDayStr}`;
+      const isSales = invIdx % 4 !== 0;
+      const contact = contactsForThisMonth[invIdx * 4 % contactsForThisMonth.length];
+      const items = [];
+      const purchaseExpenseCategory = !isSales ? EXPENSE_CATEGORIES[invIdx % EXPENSE_CATEGORIES.length] : void 0;
+      for (let k = 0; k < itemsPerInvoice; k++) {
+        const productIndex = invIdx * itemsPerInvoice + k;
+        const prod = productsForThisMonth[productIndex];
+        const qty = k % 4 + 1;
+        const price = isSales ? prod.sellPrice : prod.buyPrice;
+        const totalWithoutVat = qty * price;
+        const vatAmount = totalWithoutVat * prod.vatRate / 100;
+        const totalWithVat = totalWithoutVat + vatAmount;
+        const itemDesc = isSales ? `${prod.name} (${prod.code})` : purchaseExpenseCategory ? `${purchaseExpenseCategory} - ${prod.name}` : `${prod.name} (${prod.code})`;
+        items.push({
+          id: `item_${m.num}_${invCounter}_${k}`,
+          productId: prod.id,
+          expenseCategory: purchaseExpenseCategory,
+          description: itemDesc,
+          quantity: qty,
+          unit: prod.unit,
+          unitPrice: price,
+          vatRate: prod.vatRate,
+          totalWithoutVat,
+          vatAmount,
+          totalWithVat
+        });
+      }
+      const subtotal = items.reduce((s, x) => s + x.totalWithoutVat, 0);
+      const totalVat = items.reduce((s, x) => s + x.vatAmount, 0);
+      const grandTotal = subtotal + totalVat;
+      const status = "paid";
+      const paidAmount = grandTotal;
+      const remainingAmount = 0;
+      const isReceipt = invIdx % 3 === 0;
+      const docKind = isReceipt ? "receipt" : "invoice";
+      const inv = {
+        id: `inv_${invCounter}`,
+        invoiceNumber: isSales ? isReceipt ? `GLF2026${m.num}${invCounter.toString().slice(-4)}` : `MUV2026${m.num}${invCounter.toString().slice(-4)}` : isReceipt ? `GDF2026${m.num}${invCounter.toString().slice(-4)}` : `TED2026${m.num}${invCounter.toString().slice(-4)}`,
+        type: isSales ? "sales" : "purchase",
+        docKind,
+        expenseCategory: purchaseExpenseCategory,
+        contactId: contact.id,
+        contactName: contact.name,
+        taxNumber: contact.taxNumber || "1234567890",
+        issueDate,
+        dueDate,
+        items,
+        subtotal,
+        totalVat,
+        grandTotal,
+        paidAmount,
+        remainingAmount,
+        status,
+        currency: "TRY",
+        notes: isSales ? isReceipt ? `Say\u0131n ${contact.name}, ${m.name} 2026 d\xF6nemi perakende sat\u0131\u015F ve gelir fi\u015Fidir (${items.length} kalem).` : `Say\u0131n ${contact.name}, ${m.name} 2026 d\xF6nemi e-Fatura / e-Ar\u015Fiv sat\u0131\u015F faturas\u0131d\u0131r (${items.length} kalem).` : isReceipt ? `${m.name} 2026 d\xF6nemi ${purchaseExpenseCategory || "masraf"} fi\u015Fidir (${items.length} kalem).` : `${m.name} 2026 d\xF6nemi ${purchaseExpenseCategory || "tedarik\xE7i"} al\u0131m faturas\u0131 (${items.length} kalem).`,
+        createdAt: issueDate
+      };
+      invoices2.push(inv);
+      if (paidAmount > 0) {
+        txCounter++;
+        const acc = demoAccounts[invIdx % demoAccounts.length];
+        transactions2.push({
+          id: `tx_${txCounter}`,
+          date: issueDate,
+          type: isSales ? "income" : "expense",
+          amount: paidAmount,
+          currency: "TRY",
+          accountId: acc.id,
+          accountName: acc.name,
+          contactId: contact.id,
+          contactName: contact.name,
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          category: isSales ? "Yaz\u0131l\u0131m & Stok Sat\u0131\u015F Tahsilat\u0131" : "Tedarik\xE7i Mal Al\u0131m \xD6demesi",
+          description: `${inv.invoiceNumber} nolu ${items.length} kalemli faturan\u0131n ${isSales ? "tahsilat\u0131" : "\xF6demesi"} (${acc.name})`,
+          documentNo: `DEK-${m.num}-${txCounter}`
+        });
+      }
+    }
+    for (let v = 0; v < 3; v++) {
+      txCounter++;
+      const day = Math.min(m.days, (v + 1) * 8);
+      const dayStr = day < 10 ? `0${day}` : `${day}`;
+      const vDate = `${yearMonth}-${dayStr}`;
+      const cSource = contactsForThisMonth[v * 10];
+      const cTarget = contactsForThisMonth[v * 10 + 1];
+      const vAmount = 15e3 + v * 5e3;
+      transactions2.push({
+        id: `tx_virman_${m.num}_${v}`,
+        date: vDate,
+        type: "collection",
+        amount: vAmount,
+        currency: "TRY",
+        accountId: demoAccounts[0].id,
+        accountName: `Cari Virman (${cSource.name} -> ${cTarget.name})`,
+        contactId: cSource.id,
+        contactName: cSource.name,
+        category: "Cariler Aras\u0131 Virman",
+        description: `Cariler Aras\u0131 Virman Transferi: Bor\xE7 Virman\u0131 ${cSource.name} -> ${cTarget.name}`,
+        documentNo: `VRM-${m.num}-00${v + 1}`
+      });
+    }
+    for (let t = 1; t <= 15; t++) {
+      txCounter++;
+      const day = Math.min(m.days, Math.floor(t / 15 * m.days));
+      const dayStr = day < 10 ? `0${day}` : `${day}`;
+      const txDate = `${yearMonth}-${dayStr}`;
+      const isIncome = t % 3 === 0;
+      const acc = demoAccounts[t % demoAccounts.length];
+      const category = isIncome ? categoriesIncome[t % categoriesIncome.length] : categoriesExpense[t % categoriesExpense.length];
+      const amount = isIncome ? 22e3 + t * 1800 : 4500 + t * 1100;
+      const contact = contactsForThisMonth[t % contactsForThisMonth.length];
+      transactions2.push({
+        id: `tx_${txCounter}`,
+        date: txDate,
+        type: isIncome ? "income" : "expense",
+        amount,
+        currency: "TRY",
+        accountId: acc.id,
+        accountName: acc.name,
+        contactId: contact.id,
+        contactName: contact.name,
+        category,
+        description: `${m.name} 2026 - ${category} i\u015Flemi (${contact.name})`,
+        documentNo: `FIS-${m.num}-${txCounter}`
+      });
+    }
+    for (let q = 1; q <= 6; q++) {
+      qCounter++;
+      const day = Math.min(m.days, Math.floor(q / 6 * m.days));
+      const dayStr = day < 10 ? `0${day}` : `${day}`;
+      const issueDate = `${yearMonth}-${dayStr}`;
+      const validUntil = `${yearMonth}-${m.days}`;
+      const contact = contactsForThisMonth[q * 5];
+      const prod = productsForThisMonth[q * 12];
+      const qty = q % 5 + 1;
+      const totalWithoutVat = qty * prod.sellPrice;
+      const vatAmount = totalWithoutVat * prod.vatRate / 100;
+      const totalWithVat = totalWithoutVat + vatAmount;
+      quotes.push({
+        id: `q_${qCounter}`,
+        quoteNumber: `TEK2026${m.num}${qCounter.toString().slice(-3)}`,
+        contactId: contact.id,
+        contactName: contact.name,
+        issueDate,
+        validUntil,
+        items: [
+          {
+            id: `qi_${qCounter}`,
+            productId: prod.id,
+            description: `${prod.name} - ${m.name} D\xF6nemi Kurumsal Teklifi`,
+            quantity: qty,
+            unit: prod.unit,
+            unitPrice: prod.sellPrice,
+            vatRate: prod.vatRate,
+            totalWithoutVat,
+            vatAmount,
+            totalWithVat
+          }
+        ],
+        grandTotal: totalWithVat,
+        status: q % 3 === 0 ? "approved" : "sent",
+        notes: `Teklif ge\xE7erlilik s\xFCresi 30 g\xFCnd\xFCr. Stok tesliminde %50 pe\u015Fin tahsil edilir.`
+      });
+    }
+    for (let c = 1; c <= 4; c++) {
+      chqCounter++;
+      noteCounter++;
+      const day = Math.min(m.days, Math.floor(c / 4 * m.days));
+      const dayStr = day < 10 ? `0${day}` : `${day}`;
+      const issueDate = `${yearMonth}-${dayStr}`;
+      const dueDate = `2026-11-${c < 10 ? "0" + c : c}`;
+      const contact = contactsForThisMonth[c * 8];
+      cheques2.push({
+        id: `chq_${chqCounter}`,
+        type: c % 2 === 0 ? "received" : "issued",
+        chequeNumber: `CHK-2026-${m.num}-${chqCounter}`,
+        bankName: c % 2 === 0 ? "Garanti BBVA" : "\u0130\u015F Bankas\u0131",
+        branchName: "Levent \u015Eubesi",
+        drawerName: contact.companyTitle || contact.name,
+        contactId: contact.id,
+        contactName: contact.name,
+        issueDate,
+        dueDate,
+        amount: 45e3 + c * 7500,
+        currency: "TRY",
+        status: "portfolio",
+        notes: `${m.name} 2026 d\xF6nemi teminat ve \xF6deme \xE7eki`
+      });
+      promissoryNotes2.push({
+        id: `note_${noteCounter}`,
+        type: c % 2 === 0 ? "received" : "issued",
+        noteNumber: `SNT-2026-${m.num}-${noteCounter}`,
+        debtorName: contact.companyTitle || contact.name,
+        contactId: contact.id,
+        contactName: contact.name,
+        issueDate,
+        dueDate,
+        amount: 25e3 + c * 5e3,
+        currency: "TRY",
+        status: "portfolio",
+        notes: `${m.name} 2026 d\xF6nemi m\xFC\u015Fteri senedi`
+      });
+    }
+    leaveRequests.push({
+      id: `lreq_${m.num}`,
+      employeeId: "emp_1",
+      employeeName: "Kaan Y\u0131lmaz",
+      type: "Y\u0131ll\u0131k \u0130zin",
+      startDate: `${yearMonth}-10`,
+      endDate: `${yearMonth}-14`,
+      daysCount: 5,
+      reason: `${m.name} d\xF6nemi y\u0131ll\u0131k izin kullan\u0131m\u0131`,
+      status: "approved",
+      createdAt: `${yearMonth}-01`
+    });
+    advanceRequests.push({
+      id: `areq_${m.num}`,
+      employeeId: "emp_2",
+      employeeName: "Zeynep Arslan",
+      type: "Avans",
+      amount: 8500,
+      requestDate: `${yearMonth}-15`,
+      description: `${m.name} ay\u0131 avans talebi`,
+      status: "approved",
+      createdAt: `${yearMonth}-15`
+    });
+  });
+  const newVendorContacts = generate100NewContacts();
+  const newCustomerContacts = generate100NewCustomerContacts();
+  const newProducts = generate100NewStockItems();
+  const combinedContacts = [...allContacts, ...newVendorContacts, ...newCustomerContacts];
+  const combinedProducts = [...allProducts, ...newProducts];
+  const { purchaseInvoices, purchaseTransactions } = generate1000PurchaseInvoices(
+    combinedContacts,
+    combinedProducts,
+    invCounter
+  );
+  invCounter += 1e3;
+  const { salesInvoices, salesTransactions } = generate1000SalesInvoices(
+    combinedContacts,
+    combinedProducts,
+    invCounter
+  );
+  const new200Cheques = generate200CustomerCheques(combinedContacts);
+  const new250Notes = generate250CustomerPromissoryNotes(combinedContacts);
+  const new150VirmanTxs = generate150VirmanTransactions(combinedContacts);
+  const allInvoices = [...invoices2, ...purchaseInvoices, ...salesInvoices];
+  const allTransactions = [...transactions2, ...purchaseTransactions, ...salesTransactions, ...new150VirmanTxs];
+  const allCheques = [...cheques2, ...new200Cheques];
+  const allNotes = [...promissoryNotes2, ...new250Notes];
+  const contactBalanceMap = {};
+  allInvoices.forEach((inv) => {
+    if (!inv.contactId) return;
+    const current = contactBalanceMap[inv.contactId] || 0;
+    if (inv.type === "sales") {
+      contactBalanceMap[inv.contactId] = current + inv.grandTotal;
+    } else {
+      contactBalanceMap[inv.contactId] = current - inv.grandTotal;
+    }
+  });
+  allTransactions.forEach((tx) => {
+    if (!tx.contactId) return;
+    const current = contactBalanceMap[tx.contactId] || 0;
+    if (tx.type === "income" || tx.type === "collection") {
+      contactBalanceMap[tx.contactId] = current - tx.amount;
+    } else if (tx.type === "expense" || tx.type === "payment") {
+      contactBalanceMap[tx.contactId] = current + tx.amount;
+    }
+  });
+  allCheques.forEach((chq) => {
+    if (!chq.contactId) return;
+    const current = contactBalanceMap[chq.contactId] || 0;
+    if (chq.type === "received") {
+      contactBalanceMap[chq.contactId] = current - chq.amount;
+    } else {
+      contactBalanceMap[chq.contactId] = current + chq.amount;
+    }
+  });
+  allNotes.forEach((note) => {
+    if (!note.contactId) return;
+    const current = contactBalanceMap[note.contactId] || 0;
+    if (note.type === "received") {
+      contactBalanceMap[note.contactId] = current - note.amount;
+    } else {
+      contactBalanceMap[note.contactId] = current + note.amount;
+    }
+  });
+  const syncedContacts = combinedContacts.map((c) => {
+    const calcBal = contactBalanceMap[c.id] ?? 0;
+    return {
+      ...c,
+      balance: calcBal,
+      balanceType: calcBal > 0 ? "receivable" : calcBal < 0 ? "payable" : "balanced"
+    };
+  });
+  return {
+    contacts: syncedContacts,
+    // 1,400 UNIQUE CONTACTS WITH SYNCED BALANCES
+    products: combinedProducts,
+    // 1,300 UNIQUE STOCK ITEMS
+    accounts: demoAccounts,
+    invoices: allInvoices,
+    // 2,300 INVOICES (300 monthly + 1,000 purchase + 1,000 sales)
+    transactions: allTransactions,
+    quotes,
+    cheques: allCheques,
+    // 200+ CHEQUES
+    promissoryNotes: allNotes,
+    // 250+ PROMISSORY NOTES
+    leaveRequests,
+    advanceRequests
+  };
+}
+function generate100NewContacts() {
+  const contacts2 = [];
+  const vendorPrefixes = [
+    "End\xFCstriyel Hammadde Sanayi",
+    "Teknik H\u0131rdavat & Malzeme",
+    "Elektronik Komponent Da\u011F\u0131t\u0131m",
+    "Lojistik & Ambalaj Hizmetleri",
+    "Otomasyon & Makine Par\xE7alar\u0131",
+    "Yaz\u0131l\u0131m & Donan\u0131m Tedarik",
+    "Enerji & Kablo Sanayi",
+    "Metal & \u0130malat \xC7\xF6z\xFCmleri",
+    "Kimya & Plastik Hammadde",
+    "Ofis & K\u0131rtasiye Deposu"
+  ];
+  for (let i = 1; i <= 100; i++) {
+    const pad = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+    const loc = citiesAndDistricts[(i - 1) % citiesAndDistricts.length];
+    const prefix = vendorPrefixes[(i - 1) % vendorPrefixes.length];
+    const companyTitle = `YEN\u0130-${pad} ${prefix} ${i % 2 === 0 ? "A.\u015E." : "Ltd. \u015Eti."}`;
+    const name = `CARI-YENI-${pad} (${companyTitle})`;
+    const taxNumber = `${9e9 + i * 17}`;
+    const accountCode = `320.${taxNumber}`;
+    const balance = -(i * 1250 + 1500);
+    contacts2.push({
+      id: `cnt_new_${pad}`,
+      accountCode,
+      name,
+      companyTitle,
+      contactType: "vendor",
+      taxOffice: loc.taxOffice,
+      taxNumber,
+      phone: `0${loc.city === "\u0130stanbul" ? "212" : loc.city === "Ankara" ? "312" : "232"} ${400 + i % 50} ${10 + i % 60} ${20 + i % 70}`,
+      email: `tedarik.yeni${pad}@${prefix.toLowerCase().replace(/[^a-z0-9]/g, "")}.com.tr`,
+      city: loc.city,
+      district: loc.district,
+      address: `${loc.district} Sanayi Sitesi ${i}. Blok No:${i % 30 + 1} ${loc.city}`,
+      balance,
+      balanceType: "payable",
+      createdAt: "2026-01-15"
+    });
+  }
+  return contacts2;
+}
+function generate100NewStockItems() {
+  const products2 = [];
+  const templates = [
+    { name: "Bosch Profesyonel \u015Earjl\u0131 Matkap Seti", unit: "Set", cat: "Donan\u0131m & El Aletleri", buy: 4800, sell: 6500 },
+    { name: "Siemens Al\xE7ak Gerilim \u015Ealter 100A", unit: "Adet", cat: "Otomasyon & Elektrik", buy: 3200, sell: 4500 },
+    { name: "3M End\xFCstriyel \xC7ift Tarafl\u0131 Bant 50mm", unit: "Rulo", cat: "Ambalaj & Sarf", buy: 450, sell: 650 },
+    { name: "Schneider Elektrik 3 Kutuplu Kontakt\xF6r", unit: "Adet", cat: "Otomasyon & Elektrik", buy: 1200, sell: 1750 },
+    { name: "Philips LED End\xFCstriyel Ayd\u0131nlatma Paneli 60W", unit: "Adet", cat: "Elektrik & Ayd\u0131nlatma", buy: 850, sell: 1250 },
+    { name: "Eaton 10KVA Online UPS G\xFC\xE7 Depolama", unit: "Adet", cat: "Ofis & Altyap\u0131", buy: 24500, sell: 32e3 },
+    { name: "Makita K\u0131r\u0131c\u0131 Delici Hilti 800W", unit: "Adet", cat: "Donan\u0131m & El Aletleri", buy: 5600, sell: 7800 },
+    { name: "Festo Pn\xF6matik \xC7ift Etkili Silindir", unit: "Adet", cat: "Otomasyon & Elektrik", buy: 2100, sell: 2950 },
+    { name: "Rittal Pano \u0130klimlendirme Fan\u0131 230V", unit: "Adet", cat: "Otomasyon & Elektrik", buy: 1750, sell: 2400 },
+    { name: "Grundfos Santrif\xFCj Su Pompas\u0131 2.2kW", unit: "Adet", cat: "Makine & Tesisat", buy: 14200, sell: 18900 }
+  ];
+  for (let i = 1; i <= 100; i++) {
+    const pad = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+    const tpl = templates[(i - 1) % templates.length];
+    const variant = Math.floor((i - 1) / templates.length) + 1;
+    const code = `STK-YENI-${pad}`;
+    const name = `STOK-YENI-${pad} ${tpl.name} Mod\xFCl-V${variant}`;
+    const buyPrice = tpl.buy + i * 35;
+    const sellPrice = Math.round(buyPrice * 1.35);
+    const totalQty = 120 + i * 4;
+    const whId = i % 3 === 0 ? "wh_1" : i % 3 === 1 ? "wh_2" : "wh_3";
+    const whName = whId === "wh_1" ? "Gebze Lojistik & Ana Depo" : whId === "wh_2" ? "\u0130kitelli Yedek Par\xE7a Deposu" : "Ankara Lojistik Transit Depo";
+    products2.push({
+      id: `p_new_${pad}`,
+      code,
+      name,
+      unit: tpl.unit,
+      buyPrice,
+      sellPrice,
+      vatRate: 20,
+      stockQuantity: totalQty,
+      minStockAlert: 10,
+      category: tpl.cat,
+      stockType: "Ticari Mal",
+      barcode: `8699000${pad}2026`,
+      imeiOrSerialNo: `SN-YENI-2026-${pad}`,
+      warehouseId: whId,
+      warehouseName: whName,
+      warehouseQuantities: {
+        wh_1: Math.floor(totalQty * 0.5),
+        wh_2: Math.floor(totalQty * 0.3),
+        wh_3: totalQty - Math.floor(totalQty * 0.5) - Math.floor(totalQty * 0.3)
+      }
+    });
+  }
+  return products2;
+}
+function generate1000PurchaseInvoices(contacts2, products2, startInvCounter) {
+  const purchaseInvoices = [];
+  const purchaseTransactions = [];
+  const supplierPool = contacts2.filter((c) => c.contactType === "vendor" || c.id.startsWith("cnt_new_"));
+  const vendors = supplierPool.length > 0 ? supplierPool : contacts2;
+  let invCounter = startInvCounter;
+  let txCounter = 9e3;
+  for (let i = 1; i <= 1e3; i++) {
+    invCounter++;
+    const pad = i < 10 ? `0000${i}` : i < 100 ? `000${i}` : i < 1e3 ? `00${i}` : `0${i}`;
+    const monthIndex = (i - 1) % 12;
+    const monthObj = monthInfo[monthIndex];
+    const day = Math.min(monthObj.days, i % monthObj.days + 1);
+    const dayStr = day < 10 ? `0${day}` : `${day}`;
+    const issueDate = `2026-${monthObj.num}-${dayStr}`;
+    const dueDay = Math.min(monthObj.days, day + 14);
+    const dueDayStr = dueDay < 10 ? `0${dueDay}` : `${dueDay}`;
+    const dueDate = `2026-${monthObj.num}-${dueDayStr}`;
+    const contact = vendors[(i - 1) % vendors.length];
+    const invoiceNumber = `ALIS2026${monthObj.num}${pad.slice(-4)}`;
+    const itemCount = i % 3 + 2;
+    const items = [];
+    for (let k = 0; k < itemCount; k++) {
+      const prod = products2[(i * 4 + k) % products2.length];
+      const quantity = k % 4 + 1;
+      const unitPrice = prod.buyPrice;
+      const totalWithoutVat = quantity * unitPrice;
+      const vatAmount = totalWithoutVat * prod.vatRate / 100;
+      const totalWithVat = totalWithoutVat + vatAmount;
+      items.push({
+        id: `pitem_${i}_${k}`,
+        productId: prod.id,
+        description: `${prod.name} (${prod.code})`,
+        quantity,
+        unit: prod.unit,
+        unitPrice,
+        vatRate: prod.vatRate,
+        totalWithoutVat,
+        vatAmount,
+        totalWithVat
+      });
+    }
+    const subtotal = items.reduce((s, x) => s + x.totalWithoutVat, 0);
+    const totalVat = items.reduce((s, x) => s + x.vatAmount, 0);
+    const grandTotal = subtotal + totalVat;
+    const statusMod = i % 100;
+    let status = "paid";
+    let paidAmount = grandTotal;
+    let remainingAmount = 0;
+    if (statusMod >= 82 && statusMod < 94) {
+      status = "sent";
+      paidAmount = 0;
+      remainingAmount = grandTotal;
+    } else if (statusMod >= 94) {
+      status = "partial";
+      paidAmount = Math.round(grandTotal * 0.5);
+      remainingAmount = grandTotal - paidAmount;
+    }
+    const inv = {
+      id: `inv_pur_${invCounter}`,
+      invoiceNumber,
+      type: "purchase",
+      contactId: contact.id,
+      contactName: contact.name,
+      taxNumber: contact.taxNumber || "9000000000",
+      issueDate,
+      dueDate,
+      items,
+      subtotal,
+      totalVat,
+      grandTotal,
+      paidAmount,
+      remainingAmount,
+      status,
+      currency: "TRY",
+      notes: `Tedarik\xE7i Mal Al\u0131\u015F Faturas\u0131 - Stok Kabul #${i}`,
+      createdAt: issueDate
+    };
+    purchaseInvoices.push(inv);
+    if (paidAmount > 0) {
+      txCounter++;
+      const acc = demoAccounts[i % demoAccounts.length];
+      purchaseTransactions.push({
+        id: `tx_pur_${txCounter}`,
+        date: issueDate,
+        type: "expense",
+        amount: paidAmount,
+        currency: "TRY",
+        accountId: acc.id,
+        accountName: acc.name,
+        contactId: contact.id,
+        contactName: contact.name,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        category: "Tedarik\xE7i Mal Al\u0131m \xD6demesi",
+        description: `${inv.invoiceNumber} nolu ${items.length} kalemli mal al\u0131\u015F faturas\u0131n\u0131n \xF6demesi (${acc.name})`,
+        documentNo: `ALIS-DEK-${txCounter}`
+      });
+    }
+  }
+  return { purchaseInvoices, purchaseTransactions };
+}
+function generate100NewCustomerContacts() {
+  const contacts2 = [];
+  const customerPrefixes = [
+    "Perakende & Ma\u011Fazac\u0131l\u0131k A.\u015E.",
+    "Bili\u015Fim & Yaz\u0131l\u0131m \xC7\xF6z\xFCmleri",
+    "G\u0131da & T\xFCketim Maddeleri",
+    "\u0130n\u015Faat & Taahh\xFCt Hizmetleri",
+    "Tekstil & Konfeksiyon Sanayi",
+    "Otomotiv & Yedek Par\xE7a",
+    "Sa\u011Fl\u0131k & Medikal \xC7\xF6z\xFCmler",
+    "E\u011Fitim & Dan\u0131\u015Fmanl\u0131k Grubu",
+    "Turizm & Otelcilik \u0130\u015Fletmeleri",
+    "Reklam & Medya Pazarlama"
+  ];
+  for (let i = 1; i <= 100; i++) {
+    const pad = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+    const loc = citiesAndDistricts[(i - 1) % citiesAndDistricts.length];
+    const prefix = customerPrefixes[(i - 1) % customerPrefixes.length];
+    const companyTitle = `YEN\u0130-M\xDC\u015ETER\u0130-${pad} ${prefix} ${i % 2 === 0 ? "A.\u015E." : "Ltd. \u015Eti."}`;
+    const name = `CARI-MUSTERI-YENI-${pad} (${companyTitle})`;
+    const taxNumber = `${8e9 + i * 23}`;
+    const accountCode = `120.${taxNumber}`;
+    const balance = i * 1850 + 2e3;
+    contacts2.push({
+      id: `cnt_cust_new_${pad}`,
+      accountCode,
+      name,
+      companyTitle,
+      contactType: "customer",
+      taxOffice: loc.taxOffice,
+      taxNumber,
+      phone: `0${loc.city === "\u0130stanbul" ? "212" : loc.city === "Ankara" ? "312" : "232"} ${500 + i % 50} ${10 + i % 60} ${30 + i % 70}`,
+      email: `musteri.yeni${pad}@${prefix.toLowerCase().replace(/[^a-z0-9]/g, "")}.com.tr`,
+      city: loc.city,
+      district: loc.district,
+      address: `${loc.district} Merkez Mah. ${i}. Cadde No:${i % 40 + 1} ${loc.city}`,
+      balance,
+      balanceType: "receivable",
+      createdAt: "2026-01-20"
+    });
+  }
+  return contacts2;
+}
+function generate1000SalesInvoices(contacts2, products2, startInvCounter) {
+  const salesInvoices = [];
+  const salesTransactions = [];
+  const customerPool = contacts2.filter((c) => c.contactType === "customer" || c.id.startsWith("cnt_cust_new_"));
+  const buyers = customerPool.length > 0 ? customerPool : contacts2;
+  let invCounter = startInvCounter;
+  let txCounter = 19e3;
+  for (let i = 1; i <= 1e3; i++) {
+    invCounter++;
+    const pad = i < 10 ? `0000${i}` : i < 100 ? `000${i}` : i < 1e3 ? `00${i}` : `0${i}`;
+    const monthIndex = (i - 1) % 12;
+    const monthObj = monthInfo[monthIndex];
+    const day = Math.min(monthObj.days, i % monthObj.days + 1);
+    const dayStr = day < 10 ? `0${day}` : `${day}`;
+    const issueDate = `2026-${monthObj.num}-${dayStr}`;
+    const dueDay = Math.min(monthObj.days, day + 14);
+    const dueDayStr = dueDay < 10 ? `0${dueDay}` : `${dueDay}`;
+    const dueDate = `2026-${monthObj.num}-${dueDayStr}`;
+    const contact = buyers[(i - 1) % buyers.length];
+    const invoiceNumber = `SATIS2026${monthObj.num}${pad.slice(-4)}`;
+    const itemCount = i % 3 + 2;
+    const items = [];
+    for (let k = 0; k < itemCount; k++) {
+      const prod = products2[(i * 3 + k) % products2.length];
+      const quantity = k % 3 + 1;
+      const unitPrice = prod.sellPrice;
+      const totalWithoutVat = quantity * unitPrice;
+      const vatAmount = totalWithoutVat * prod.vatRate / 100;
+      const totalWithVat = totalWithoutVat + vatAmount;
+      items.push({
+        id: `sitem_${i}_${k}`,
+        productId: prod.id,
+        description: `${prod.name} (${prod.code})`,
+        quantity,
+        unit: prod.unit,
+        unitPrice,
+        vatRate: prod.vatRate,
+        totalWithoutVat,
+        vatAmount,
+        totalWithVat
+      });
+    }
+    const subtotal = items.reduce((s, x) => s + x.totalWithoutVat, 0);
+    const totalVat = items.reduce((s, x) => s + x.vatAmount, 0);
+    const grandTotal = subtotal + totalVat;
+    const statusMod = i % 100;
+    let status = "paid";
+    let paidAmount = grandTotal;
+    let remainingAmount = 0;
+    if (statusMod >= 85 && statusMod < 95) {
+      status = "sent";
+      paidAmount = 0;
+      remainingAmount = grandTotal;
+    } else if (statusMod >= 95) {
+      status = "partial";
+      paidAmount = Math.round(grandTotal * 0.5);
+      remainingAmount = grandTotal - paidAmount;
+    }
+    const inv = {
+      id: `inv_sal_${invCounter}`,
+      invoiceNumber,
+      type: "sales",
+      contactId: contact.id,
+      contactName: contact.name,
+      taxNumber: contact.taxNumber || "8000000000",
+      issueDate,
+      dueDate,
+      items,
+      subtotal,
+      totalVat,
+      grandTotal,
+      paidAmount,
+      remainingAmount,
+      status,
+      currency: "TRY",
+      notes: `M\xFC\u015Fteri Mal Sat\u0131\u015F Faturas\u0131 - Teslimat #${i}`,
+      createdAt: issueDate
+    };
+    salesInvoices.push(inv);
+    if (paidAmount > 0) {
+      txCounter++;
+      const acc = demoAccounts[i % demoAccounts.length];
+      salesTransactions.push({
+        id: `tx_sal_${txCounter}`,
+        date: issueDate,
+        type: "income",
+        amount: paidAmount,
+        currency: "TRY",
+        accountId: acc.id,
+        accountName: acc.name,
+        contactId: contact.id,
+        contactName: contact.name,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        category: "M\xFC\u015Fteri Mal Sat\u0131\u015F Tahsilat\u0131",
+        description: `${inv.invoiceNumber} nolu ${items.length} kalemli mal sat\u0131\u015F faturas\u0131n\u0131n tahsilat\u0131 (${acc.name})`,
+        documentNo: `SATIS-DEK-${txCounter}`
+      });
+    }
+  }
+  return { salesInvoices, salesTransactions };
+}
+function generate200CustomerCheques(contacts2) {
+  const cheques2 = [];
+  const customerContacts = contacts2.filter((c) => c.contactType === "customer" || c.id.startsWith("cnt_cust_"));
+  const pool2 = customerContacts.length > 0 ? customerContacts : contacts2;
+  const banks = [
+    { name: "Garanti BBVA", branch: "Levent \u015Eubesi" },
+    { name: "\u0130\u015F Bankas\u0131", branch: "Maslak \u015Eubesi" },
+    { name: "Akbank", branch: "K\u0131z\u0131lay \u015Eubesi" },
+    { name: "Yap\u0131 Kredi", branch: "Alsancak \u015Eubesi" },
+    { name: "Ziraat Bankas\u0131", branch: "Ostim \u015Eubesi" },
+    { name: "QNB Finansbank", branch: "G\xFCne\u015Fli \u015Eubesi" },
+    { name: "Halkbank", branch: "Bornova \u015Eubesi" },
+    { name: "Vak\u0131fBank", branch: "Kad\u0131k\xF6y \u015Eubesi" }
+  ];
+  for (let i = 1; i <= 200; i++) {
+    const pad = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+    const contact = pool2[(i - 1) % pool2.length];
+    const bank = banks[(i - 1) % banks.length];
+    const monthIdx = (i - 1) % 12;
+    const m = monthInfo[monthIdx];
+    const day = Math.min(m.days, i % m.days + 1);
+    const dayStr = day < 10 ? `0${day}` : `${day}`;
+    const issueDate = `2026-${m.num}-${dayStr}`;
+    const dueMonthIdx = (monthIdx + 2) % 12;
+    const dueM = monthInfo[dueMonthIdx];
+    const dueDay = Math.min(dueM.days, day);
+    const dueDayStr = dueDay < 10 ? `0${dueDay}` : `${dueDay}`;
+    const dueDate = `2026-${dueM.num}-${dueDayStr}`;
+    const amount = 25e3 + i * 1250 % 15e4;
+    cheques2.push({
+      id: `chq_rec_200_${pad}`,
+      type: "received",
+      chequeNumber: `CHK-2026-REC-${pad}`,
+      bankName: bank.name,
+      branchName: bank.branch,
+      drawerName: contact.companyTitle || contact.name,
+      contactId: contact.id,
+      contactName: contact.name,
+      issueDate,
+      dueDate,
+      amount,
+      currency: "TRY",
+      status: i % 10 === 0 ? "collected" : "portfolio",
+      notes: `Alacakl\u0131 M\xFC\u015Fteri \xC7ek Tahsilat\u0131 #${pad} (${contact.name})`
+    });
+  }
+  return cheques2;
+}
+function generate250CustomerPromissoryNotes(contacts2) {
+  const notes = [];
+  const customerContacts = contacts2.filter((c) => c.contactType === "customer" || c.id.startsWith("cnt_cust_"));
+  const pool2 = customerContacts.length > 0 ? customerContacts : contacts2;
+  for (let i = 1; i <= 250; i++) {
+    const pad = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+    const contact = pool2[(i - 1) % pool2.length];
+    const monthIdx = (i - 1) % 12;
+    const m = monthInfo[monthIdx];
+    const day = Math.min(m.days, i % m.days + 1);
+    const dayStr = day < 10 ? `0${day}` : `${day}`;
+    const issueDate = `2026-${m.num}-${dayStr}`;
+    const dueMonthIdx = (monthIdx + 3) % 12;
+    const dueM = monthInfo[dueMonthIdx];
+    const dueDay = Math.min(dueM.days, day);
+    const dueDayStr = dueDay < 10 ? `0${dueDay}` : `${dueDay}`;
+    const dueDate = `2026-${dueM.num}-${dueDayStr}`;
+    const amount = 18e3 + i * 950 % 11e4;
+    notes.push({
+      id: `note_rec_250_${pad}`,
+      type: "received",
+      noteNumber: `SNT-2026-REC-${pad}`,
+      debtorName: contact.companyTitle || contact.name,
+      contactId: contact.id,
+      contactName: contact.name,
+      issueDate,
+      dueDate,
+      amount,
+      currency: "TRY",
+      status: i % 12 === 0 ? "collected" : "portfolio",
+      notes: `Alacakl\u0131 M\xFC\u015Fteri Senet Tahsilat\u0131 #${pad} (${contact.name})`
+    });
+  }
+  return notes;
+}
+function generate150VirmanTransactions(contacts2) {
+  const virmanTxs = [];
+  const customerContacts = contacts2.filter((c) => c.contactType === "customer" || c.id.startsWith("cnt_cust_"));
+  const vendorContacts = contacts2.filter((c) => c.contactType === "vendor" || c.id.startsWith("cnt_ven_"));
+  const sources = customerContacts.length > 0 ? customerContacts : contacts2;
+  const targets = vendorContacts.length > 0 ? vendorContacts : contacts2;
+  for (let i = 1; i <= 150; i++) {
+    const pad = i < 10 ? `00${i}` : i < 100 ? `0${i}` : `${i}`;
+    const cSource = sources[(i - 1) % sources.length];
+    const cTarget = targets[i % targets.length];
+    const monthIdx = (i - 1) % 12;
+    const m = monthInfo[monthIdx];
+    const day = Math.min(m.days, i % m.days + 1);
+    const dayStr = day < 10 ? `0${day}` : `${day}`;
+    const vDate = `2026-${m.num}-${dayStr}`;
+    const amount = 12e3 + i * 1100 % 85e3;
+    virmanTxs.push({
+      id: `tx_vrm_150_${pad}`,
+      date: vDate,
+      type: "collection",
+      amount,
+      currency: "TRY",
+      accountId: demoAccounts[0].id,
+      accountName: `Cari Virman (${cSource.name} -> ${cTarget.name})`,
+      contactId: cSource.id,
+      contactName: cSource.name,
+      category: "Cariler Aras\u0131 Virman",
+      description: `Cariler Aras\u0131 Virman Tahsilat\u0131: Virman Dekontu ile ${cSource.name} borcunun ${cTarget.name} hesab\u0131ndan mahsuben tahsilat\u0131`,
+      documentNo: `VRM-2026-${pad}`
+    });
+  }
+  return virmanTxs;
+}
+
+// src/mockData.ts
+var generatedData = generateMonthlyIntegratedData();
+var initialContacts = generatedData.contacts;
+var initialAccounts = generatedData.accounts;
+var initialProducts = generatedData.products;
+var initialInvoices = generatedData.invoices;
+var initialTransactions = generatedData.transactions;
+var initialQuotes = generatedData.quotes;
+var initialCheques = generatedData.cheques;
+var initialPromissoryNotes = generatedData.promissoryNotes;
+
+// src/data/recipes/soupRecipes.ts
+var soupRecipes = [
+  {
+    "id": "rec_cor_01",
+    "recipeCode": "REC-COR-001",
+    "name": "Mercimek \xC7orbas\u0131 (Geleneksel)",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.19,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4,
+    "totalCostPerPortion": 14.19,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 165,
+    "proteinGrams": 7.5,
+    "carbGrams": 22,
+    "fatGrams": 4.8,
+    "allergens": [
+      "Gluten (Un)",
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "K\u0131rm\u0131z\u0131 mercimek, so\u011Fan, havu\xE7 ve patates et suyuyla yumu\u015Fayana kadar ha\u015Flan\u0131r. Blenderdan ge\xE7irilip tereya\u011Fl\u0131 un ve nane meyanesi eklenir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_01_1",
+        "name": "K\u0131rm\u0131z\u0131 Mercimek",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.03,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_01_2",
+        "name": "Kuru So\u011Fan",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 18,
+        "portionCost": 0.45,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_01_3",
+        "name": "Havu\xE7 & Patates",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 25,
+        "portionCost": 0.75,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_cor_01_4",
+        "name": "Mutfak Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 2.64,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_01_5",
+        "name": "Kemik Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 40,
+        "portionCost": 4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_01_6",
+        "name": "Baharat (Nane, Pul Biber, Kimyon)",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 0.32,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_02",
+    "recipeCode": "REC-COR-002",
+    "name": "Sar\u0131 Mercimek \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.31,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4,
+    "totalCostPerPortion": 14.31,
+    "suggestedSalePrice": 35,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 170,
+    "proteinGrams": 8,
+    "carbGrams": 23,
+    "fatGrams": 5,
+    "allergens": [
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Sar\u0131 mercimek, arpac\u0131k so\u011Fan ve patates tavuk suyuyla pi\u015Firilir. Zerde\xE7al ve tereya\u011Fl\u0131 sos ile p\xFCr\xFCzs\xFCz servis edilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_02_1",
+        "name": "Sar\u0131 Mercimek",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 2.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_02_2",
+        "name": "Kuru So\u011Fan & Patates",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 22,
+        "portionCost": 0.88,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_02_3",
+        "name": "Tavuk Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_02_4",
+        "name": "Tereya\u011F\u0131 & Zerde\xE7al",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 250,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_02_5",
+        "name": "Kaya Tuzu & Beyaz Biber",
+        "portionGrams": 3,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.18,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_03",
+    "recipeCode": "REC-COR-003",
+    "name": "Ezogelin \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 7.28,
+    "laborCostPerPortion": 2.3,
+    "gasEnergyCostPerPortion": 1.4,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.2,
+    "totalCostPerPortion": 11.48,
+    "suggestedSalePrice": 25,
+    "cookingTimeMinutes": 45,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 175,
+    "proteinGrams": 6.8,
+    "carbGrams": 26,
+    "fatGrams": 5.2,
+    "allergens": [
+      "Gluten (Bulgur)",
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "K\u0131rm\u0131z\u0131 mercimek, pilavl\u0131k bulgur ve pirin\xE7 so\u011Fan ve sal\xE7ayla kavrulup et suyuyla pi\u015Firilir, bol nane ve ac\u0131 pul biber ile harmanlan\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_03_1",
+        "name": "K\u0131rm\u0131z\u0131 Mercimek",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.58,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_03_2",
+        "name": "Pilavl\u0131k Bulgur & Pirin\xE7",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 0.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_03_3",
+        "name": "Domates & Biber Sal\xE7as\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 1.28,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_03_4",
+        "name": "Kuru So\u011Fan & Sar\u0131msak",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 22,
+        "portionCost": 0.55,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_03_5",
+        "name": "Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 2.64,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_03_6",
+        "name": "Kuru Nane & Pul Biber",
+        "portionGrams": 5,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 0.43,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_04",
+    "recipeCode": "REC-COR-004",
+    "name": "Yayla \xC7orbas\u0131 (Yo\u011Furt \xC7orbas\u0131)",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.1,
+    "laborCostPerPortion": 2.3,
+    "gasEnergyCostPerPortion": 1.1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 3.9,
+    "totalCostPerPortion": 14,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 155,
+    "proteinGrams": 5.5,
+    "carbGrams": 19,
+    "fatGrams": 6.5,
+    "allergens": [
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)",
+      "Yumurta",
+      "Gluten (Un)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Pirin\xE7 suda yumu\u015Fayana kadar ha\u015Flan\u0131r. S\xFCzme yo\u011Furt, yumurta sar\u0131s\u0131 ve unla \xE7\u0131rp\u0131lan terbiye kesilmemesi i\xE7in \u0131l\u0131kla\u015Ft\u0131r\u0131larak \xE7orbaya ilave edilir. \xDCzerine tereya\u011Fl\u0131 nane yak\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_04_1",
+        "name": "S\xFCzme & Ya\u011Fl\u0131 Yo\u011Furt",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 4.55,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_04_2",
+        "name": "K\u0131r\u0131k Pirin\xE7",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_04_3",
+        "name": "Yumurta Sar\u0131s\u0131 & Un",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 1.05,
+        "wastagePercent": 0,
+        "allergen": "Yumurta, Gluten"
+      },
+      {
+        "id": "ing_cor_04_4",
+        "name": "Mutfak Tereya\u011F\u0131",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_04_5",
+        "name": "Kuru Nane & Tuz",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 0.3,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_05",
+    "recipeCode": "REC-COR-005",
+    "name": "Tarhana \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.43,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.4,
+    "totalCostPerPortion": 13.83,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 25,
+    "prepTimeMinutes": 10,
+    "caloriePerPortion": 140,
+    "proteinGrams": 5,
+    "carbGrams": 21,
+    "fatGrams": 4.2,
+    "allergens": [
+      "Gluten (Tarhana)",
+      "Laktoz (Yo\u011Furtlu Tarhana)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Geleneksel ev tarhanas\u0131 \u0131l\u0131k suyla \u0131slat\u0131l\u0131r. Sal\xE7a ve sar\u0131msak tereya\u011F\u0131nda kokusu \xE7\u0131kana kadar sotelenip tarhana suyu eklenir ve s\xFCrekli kar\u0131\u015Ft\u0131r\u0131larak kaynat\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_05_1",
+        "name": "K\xF6y Usul\xFC Ev Tarhanas\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 3.85,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_05_2",
+        "name": "Domates Sal\xE7as\u0131",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 1.02,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_05_3",
+        "name": "Mutfak Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 2.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_05_4",
+        "name": "Sar\u0131msak & Nane",
+        "portionGrams": 6,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.36,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_05_5",
+        "name": "Kemik Suyu / Su",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_06",
+    "recipeCode": "REC-COR-006",
+    "name": "U\u015Fak Tarhanas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 13.27,
+    "laborCostPerPortion": 2.1,
+    "gasEnergyCostPerPortion": 1.1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.6,
+    "totalCostPerPortion": 16.87,
+    "suggestedSalePrice": 40,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 10,
+    "caloriePerPortion": 150,
+    "proteinGrams": 5.2,
+    "carbGrams": 22.5,
+    "fatGrams": 4.8,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Co\u011Frafi i\u015Faretli U\u015Fak tarhanas\u0131, tereya\u011F\u0131, domates-biber p\xFCresi ve k\u0131y\u0131lm\u0131\u015F kuru nane ile k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_06_1",
+        "name": "U\u015Fak Co\u011Frafi \u0130\u015Faretli Tarhana",
+        "portionGrams": 38,
+        "unit": "g",
+        "unitCost": 135,
+        "portionCost": 5.13,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_06_2",
+        "name": "K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.84,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_06_3",
+        "name": "Taze Sar\u0131msak & Biber Sal\xE7as\u0131",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 0.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_06_4",
+        "name": "Et Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_07",
+    "recipeCode": "REC-COR-007",
+    "name": "\u0130\u015Fkembe \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 27.8,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 9.2,
+    "totalCostPerPortion": 37,
+    "suggestedSalePrice": 80,
+    "cookingTimeMinutes": 120,
+    "prepTimeMinutes": 30,
+    "caloriePerPortion": 240,
+    "proteinGrams": 18.5,
+    "carbGrams": 9,
+    "fatGrams": 14.5,
+    "allergens": [
+      "Yumurta",
+      "Gluten (Un)",
+      "Laktoz (Yo\u011Furt/Tereya\u011F\u0131)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Temizlenmi\u015F dana i\u015Fkembe d\xFCd\xFCkl\xFCde lokum gibi ha\u015Flan\u0131r. K\xFC\xE7\xFCk k\xFCp do\u011Fran\u0131r. Un, yo\u011Furt, yumurta sar\u0131s\u0131 ve limon suyu terbiyesi eklenir. Sar\u0131msakl\u0131 sirke sosu ile servis edilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_07_1",
+        "name": "Temizlenmi\u015F Dana \u0130\u015Fkembe",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 19.8,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_cor_07_2",
+        "name": "\u0130\u015Fkembe Ha\u015Flama Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 20,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_07_3",
+        "name": "Yo\u011Furt & Yumurta Terbiyesi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Yumurta"
+      },
+      {
+        "id": "ing_cor_07_4",
+        "name": "Un & Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_07_5",
+        "name": "Sar\u0131msak, Sirke & Pul Biber",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.9,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_08",
+    "recipeCode": "REC-COR-008",
+    "name": "Kelle Pa\xE7a \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 42.4,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 10.2,
+    "totalCostPerPortion": 52.6,
+    "suggestedSalePrice": 115,
+    "cookingTimeMinutes": 150,
+    "prepTimeMinutes": 30,
+    "caloriePerPortion": 280,
+    "proteinGrams": 22,
+    "carbGrams": 6,
+    "fatGrams": 18,
+    "allergens": [
+      "Gluten (Un)",
+      "Laktoz (Tereya\u011F\u0131)",
+      "Yumurta"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Uzun s\xFCre kaynat\u0131lan kuzu kelle ve pa\xE7a etleri tiftiklenir. Zengin kolajenli et suyu, un-yumurta-limon terbiyesi ve k\u0131zg\u0131n biberli tereya\u011F\u0131 ile ta\xE7land\u0131r\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_08_1",
+        "name": "Kuzu Kelle & Gerdan Eti",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 32.3,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_cor_08_2",
+        "name": "Do\u011Fal Kolajenli Kelle Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.55,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_08_3",
+        "name": "Yumurta & Limon Terbiyesi",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 1.6,
+        "wastagePercent": 0,
+        "allergen": "Yumurta"
+      },
+      {
+        "id": "ing_cor_08_4",
+        "name": "Sar\u0131msakl\u0131 Sirke \xC7e\u015Fnisi",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_08_5",
+        "name": "Mutfak Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_09",
+    "recipeCode": "REC-COR-009",
+    "name": "Ayak Pa\xE7a \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 30.53,
+    "laborCostPerPortion": 4.8,
+    "gasEnergyCostPerPortion": 3.8,
+    "overheadCostPerPortion": 1.1,
+    "laborAndOverheadPerPortion": 9.7,
+    "totalCostPerPortion": 40.23,
+    "suggestedSalePrice": 85,
+    "cookingTimeMinutes": 140,
+    "prepTimeMinutes": 25,
+    "caloriePerPortion": 260,
+    "proteinGrams": 20,
+    "carbGrams": 5,
+    "fatGrams": 17.5,
+    "allergens": [
+      "Yumurta",
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Dana ve kuzu ayaklar\u0131 ilikli suyunu b\u0131rakana kadar pi\u015Firilir. Ayak etleri ay\u0131klan\u0131p un-yumurta terbiyeli kolajen \xE7orbas\u0131na kat\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_09_1",
+        "name": "Ha\u015Flanm\u0131\u015F Pa\xE7a / Ayak Eti",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 20.8,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_cor_09_2",
+        "name": "Ayak Pa\xE7a Kolajen Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 30,
+        "portionCost": 3.9,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_09_3",
+        "name": "Un, Yumurta & Yo\u011Furt Terbiyesi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 1.88,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta, Laktoz"
+      },
+      {
+        "id": "ing_cor_09_4",
+        "name": "Sar\u0131msak & \xDCz\xFCm Sirkesi",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_09_5",
+        "name": "Tereya\u011F\u0131 & K\u0131rm\u0131z\u0131 Biber",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_10",
+    "recipeCode": "REC-COR-010",
+    "name": "Tuzlama \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 31.41,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 3.2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 8.7,
+    "totalCostPerPortion": 40.11,
+    "suggestedSalePrice": 85,
+    "cookingTimeMinutes": 110,
+    "prepTimeMinutes": 25,
+    "caloriePerPortion": 250,
+    "proteinGrams": 19,
+    "carbGrams": 7,
+    "fatGrams": 16,
+    "allergens": [
+      "Gluten",
+      "Laktoz",
+      "Yumurta"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "\u0130\u015Fkembenin en etli ve kal\u0131n tuzlama k\u0131sm\u0131 iri par\xE7alar halinde do\u011Franarak terbiyeli et suyu ile haz\u0131rlan\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_10_1",
+        "name": "Dana \u0130\u015Fkembe (Tuzlama Par\xE7a)",
+        "portionGrams": 95,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 22.8,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_cor_10_2",
+        "name": "\u0130\u015Fkembe & Kemik Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_10_3",
+        "name": "Un & Yumurta Terbiyesi",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_cor_10_4",
+        "name": "K\u0131zg\u0131n Tereya\u011F\u0131 & Toz K\u0131rm\u0131z\u0131 Biber",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 3.36,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_10_5",
+        "name": "D\xF6vme Sar\u0131msak & Sirke",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_11",
+    "recipeCode": "REC-COR-011",
+    "name": "\u015Eirden \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 27.25,
+    "laborCostPerPortion": 4.6,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.1,
+    "totalCostPerPortion": 36.35,
+    "suggestedSalePrice": 80,
+    "cookingTimeMinutes": 120,
+    "prepTimeMinutes": 30,
+    "caloriePerPortion": 235,
+    "proteinGrams": 17.5,
+    "carbGrams": 8,
+    "fatGrams": 14.5,
+    "allergens": [
+      "Gluten",
+      "Laktoz",
+      "Yumurta"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Geleneksel \u015Firden sakatat\u0131 iyice temizlenip baharatl\u0131 et suyunda ha\u015Flan\u0131r, ince dilimlenip terbiyeli \xE7orba suyu ile sunulur.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_11_1",
+        "name": "Temizlenmi\u015F Kuzu \u015Eirden",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 230,
+        "portionCost": 19.55,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_cor_11_2",
+        "name": "\xD6zel Kemik Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_11_3",
+        "name": "Terbiye (Un, Yo\u011Furt, Yumurta)",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz, Yumurta"
+      },
+      {
+        "id": "ing_cor_11_4",
+        "name": "Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_12",
+    "recipeCode": "REC-COR-012",
+    "name": "Domates \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 13.58,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 3.9,
+    "totalCostPerPortion": 17.48,
+    "suggestedSalePrice": 40,
+    "cookingTimeMinutes": 35,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 145,
+    "proteinGrams": 4.5,
+    "carbGrams": 18,
+    "fatGrams": 6,
+    "allergens": [
+      "Gluten (Un)",
+      "Laktoz (S\xFCt, Ka\u015Far)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Tereya\u011F\u0131nda un kavrulur. Sal\xE7a ve taze domates rendesi eklenip et suyu ve \u0131l\u0131k s\xFCt ilavesiyle p\xFCr\xFCzs\xFCz k\u0131vama getirilir. \xDCzerine rendelenmi\u015F ka\u015Far peyniri serpilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_12_1",
+        "name": "Sal\xE7al\u0131k Domates Rendesi",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 2.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_cor_12_2",
+        "name": "Un & Mutfak Tereya\u011F\u0131",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 3.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_12_3",
+        "name": "Tam Ya\u011Fl\u0131 S\xFCt & Et Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_12_4",
+        "name": "Rendelenmi\u015F Taze Ka\u015Far",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 3.9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_12_5",
+        "name": "Tuz & Karabiber",
+        "portionGrams": 3,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.18,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_13",
+    "recipeCode": "REC-COR-013",
+    "name": "K\xF6z Domates \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 15.27,
+    "laborCostPerPortion": 2.4,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.4,
+    "totalCostPerPortion": 19.67,
+    "suggestedSalePrice": 45,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 155,
+    "proteinGrams": 4.8,
+    "carbGrams": 18.5,
+    "fatGrams": 6.8,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "F\u0131r\u0131nda k\xF6zlenen salk\u0131m domates, sar\u0131msak ve kapya biber kabuklar\u0131 soyularak tereya\u011Fl\u0131 meyane ile \xE7ekilir, fesle\u011Fen ve ka\u015Far rendesiyle servis edilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_13_1",
+        "name": "K\xF6zlenmi\u015F Salk\u0131m Domates",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.15,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_cor_13_2",
+        "name": "K\xF6z Kapya Biber & Sar\u0131msak",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.2,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_13_3",
+        "name": "Tereya\u011F\u0131 & Un",
+        "portionGrams": 16,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 3.52,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_13_4",
+        "name": "S\xFCt & Tavuk Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_13_5",
+        "name": "Taze Fesle\u011Fen & Ka\u015Far",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 3.9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_14",
+    "recipeCode": "REC-COR-014",
+    "name": "D\xFC\u011F\xFCn \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 34.57,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 41.37,
+    "suggestedSalePrice": 90,
+    "cookingTimeMinutes": 80,
+    "prepTimeMinutes": 25,
+    "caloriePerPortion": 220,
+    "proteinGrams": 15,
+    "carbGrams": 12,
+    "fatGrams": 12.5,
+    "allergens": [
+      "Gluten (Un)",
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)",
+      "Yumurta"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Kuzu gerdan eti ilikli suyunda ha\u015Flan\u0131p tel tel didiklenir. Un, yo\u011Furt ve yumurta sar\u0131s\u0131yla haz\u0131rlanan terbiye ba\u011Flan\u0131r. \xDCzerine k\u0131zd\u0131r\u0131lm\u0131\u015F k\u0131rm\u0131z\u0131 biberli tereya\u011F\u0131 gezdirilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_14_1",
+        "name": "Kuzu Gerdan Eti (Didiklenmi\u015F)",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 23.1,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_cor_14_2",
+        "name": "\u0130likli Kuzu Gerdan Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.55,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_14_3",
+        "name": "S\xFCzme Yo\u011Furt & Un Terbiyesi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 1.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Gluten"
+      },
+      {
+        "id": "ing_cor_14_4",
+        "name": "Yumurta Sar\u0131s\u0131 & Limon",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 1.2,
+        "wastagePercent": 0,
+        "allergen": "Yumurta"
+      },
+      {
+        "id": "ing_cor_14_5",
+        "name": "Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.84,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_15",
+    "recipeCode": "REC-COR-015",
+    "name": "Beyran \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "portionCost": 44.73,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 9.2,
+    "totalCostPerPortion": 53.93,
+    "suggestedSalePrice": 115,
+    "cookingTimeMinutes": 120,
+    "prepTimeMinutes": 30,
+    "caloriePerPortion": 310,
+    "proteinGrams": 23,
+    "carbGrams": 18,
+    "fatGrams": 16.5,
+    "allergens": [],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Gaziantep usul\xFC bak\u0131r sahanda i\xE7 ya\u011F\u0131 eritilir, ha\u015Flanm\u0131\u015F pirin\xE7, bol liflenmi\u015F kuzu eti, sar\u0131msak, pul biber ve kaynayan et suyu eklenip harl\u0131 ate\u015Fte kaynat\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_15_1",
+        "name": "Kuzu Gerdan / K\xFC\u015Fleme Eti (Didik)",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 33.75,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_cor_15_2",
+        "name": "Ha\u015Flanm\u0131\u015F Baldo Pirin\xE7",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_15_3",
+        "name": "\u0130likli Kuzu Et Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 40,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_15_4",
+        "name": "Kuzu \u0130\xE7 Ya\u011F\u0131 / Kavrulmu\u015F Ya\u011F",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 2.7,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_15_5",
+        "name": "Bol Sar\u0131msak & Antep \u0130pek Pul Biber",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 1.08,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_16",
+    "recipeCode": "REC-COR-016",
+    "name": "Mantar \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 15.84,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 3.9,
+    "totalCostPerPortion": 19.74,
+    "suggestedSalePrice": 45,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 160,
+    "proteinGrams": 4.2,
+    "carbGrams": 15,
+    "fatGrams": 9,
+    "allergens": [
+      "Gluten (Un)",
+      "Laktoz (Krema/S\xFCt/Tereya\u011F\u0131)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "\u0130nce k\u0131y\u0131lm\u0131\u015F k\xFClt\xFCr mantarlar\u0131 tereya\u011F\u0131nda suyunu \xE7ekene kadar sotelenir. Un ilavesiyle kavrulup sebze suyu ve krema eklenerek k\u0131vam al\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_16_1",
+        "name": "Taze K\xFClt\xFCr Mantar\u0131",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 5.2,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_cor_16_2",
+        "name": "Yemeklik S\u0131v\u0131 Krema",
+        "portionGrams": 30,
+        "unit": "ml",
+        "unitCost": 140,
+        "portionCost": 4.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_16_3",
+        "name": "Mutfak Tereya\u011F\u0131 & Un",
+        "portionGrams": 16,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 2.88,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_16_4",
+        "name": "Tavuk / Sebze Suyu",
+        "portionGrams": 110,
+        "unit": "ml",
+        "unitCost": 30,
+        "portionCost": 3.3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_16_5",
+        "name": "Taze Dereotu & Karabiber",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 0.26,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_17",
+    "recipeCode": "REC-COR-017",
+    "name": "Kremal\u0131 Tavuk \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 20.2,
+    "laborCostPerPortion": 2.5,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 4.4,
+    "totalCostPerPortion": 24.6,
+    "suggestedSalePrice": 55,
+    "cookingTimeMinutes": 35,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 185,
+    "proteinGrams": 12,
+    "carbGrams": 14,
+    "fatGrams": 9.5,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Ha\u015Flanm\u0131\u015F tavuk g\xF6\u011Fs\xFC ince tiftiklenir. Tereya\u011Fl\u0131 un meyanesi, taze tavuk suyu ve krema ile birle\u015Ftirilip k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_17_1",
+        "name": "Didiklenmi\u015F Tavuk G\xF6\u011Fs\xFC",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 9.5,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_17_2",
+        "name": "Tavuk Ha\u015Flama Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_17_3",
+        "name": "Yemeklik Krema & S\xFCt",
+        "portionGrams": 35,
+        "unit": "ml",
+        "unitCost": 130,
+        "portionCost": 4.55,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_17_4",
+        "name": "Tereya\u011F\u0131 & Un",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_17_5",
+        "name": "Havu\xE7 & Maydanoz",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 0.45,
+        "wastagePercent": 5
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_18",
+    "recipeCode": "REC-COR-018",
+    "name": "\u015Eehriye \xC7orbas\u0131 (Tel \u015Eehriye)",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 7.6,
+    "laborCostPerPortion": 1.8,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.2,
+    "totalCostPerPortion": 10.8,
+    "suggestedSalePrice": 25,
+    "cookingTimeMinutes": 25,
+    "prepTimeMinutes": 10,
+    "caloriePerPortion": 135,
+    "proteinGrams": 4,
+    "carbGrams": 22,
+    "fatGrams": 3.8,
+    "allergens": [
+      "Gluten (\u015Eehriye)"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Domates rendesi ve tereya\u011F\u0131 kavrulur. S\u0131cak tavuk suyu ilave edilip kaynay\u0131nca tel \u015Fehriyeler eklenir ve yumu\u015Fayana kadar pi\u015Firilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_18_1",
+        "name": "Tel \u015Eehriye",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_18_2",
+        "name": "Domates Sal\xE7as\u0131 & Rendesi",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.35,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_18_3",
+        "name": "Tavuk Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_18_4",
+        "name": "S\u0131v\u0131 Ya\u011F & Tereya\u011F\u0131",
+        "portionGrams": 10,
+        "unit": "ml",
+        "unitCost": 180,
+        "portionCost": 1.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_18_5",
+        "name": "\u0130nce K\u0131y\u0131lm\u0131\u015F Maydanoz",
+        "portionGrams": 5,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.25,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_19",
+    "recipeCode": "REC-COR-019",
+    "name": "Arpa \u015Eehriye \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 8.91,
+    "laborCostPerPortion": 1.8,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.2,
+    "totalCostPerPortion": 12.11,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 25,
+    "prepTimeMinutes": 10,
+    "caloriePerPortion": 145,
+    "proteinGrams": 4.2,
+    "carbGrams": 24,
+    "fatGrams": 4,
+    "allergens": [
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Arpa \u015Fehriyeler hafif kavrulup domates sosu ve lezzetli kemik suyu ile bulu\u015Fturulur, nane ile servis edilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_19_1",
+        "name": "Arpa \u015Eehriye",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_19_2",
+        "name": "Domates & Biber Sal\xE7as\u0131",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 1.35,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_19_3",
+        "name": "Kemik Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 30,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_19_4",
+        "name": "Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 2.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_19_5",
+        "name": "Kuru Nane & Limon",
+        "portionGrams": 6,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.36,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_20",
+    "recipeCode": "REC-COR-020",
+    "name": "Ma\u015F \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 9.13,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.4,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.1,
+    "totalCostPerPortion": 13.23,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 45,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 175,
+    "proteinGrams": 9.2,
+    "carbGrams": 27,
+    "fatGrams": 3.8,
+    "allergens": [],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "G\xFCneydo\u011Fu Anadolu klasi\u011Fi ma\u015F fasulyesi ha\u015Flan\u0131r. So\u011Fan, sar\u0131msak, sal\xE7a ve kimyonlu ya\u011F gezdirilerek pi\u015Firilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_20_1",
+        "name": "Ma\u015F Fasulyesi",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_20_2",
+        "name": "Kuru So\u011Fan & Sar\u0131msak",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 22,
+        "portionCost": 0.66,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_20_3",
+        "name": "Biber Sal\xE7as\u0131",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 1.08,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_20_4",
+        "name": "Zeytinya\u011F\u0131",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 280,
+        "portionCost": 3.36,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_20_5",
+        "name": "Kimyon, Pul Biber, Tuz",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 0.28,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_21",
+    "recipeCode": "REC-COR-021",
+    "name": "Toyga \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.6,
+    "laborCostPerPortion": 2.4,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.2,
+    "totalCostPerPortion": 14.8,
+    "suggestedSalePrice": 35,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 180,
+    "proteinGrams": 7,
+    "carbGrams": 25,
+    "fatGrams": 6,
+    "allergens": [
+      "Laktoz",
+      "Gluten",
+      "Yumurta"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "A\u015Furelik bu\u011Fday (yarma) ve ha\u015Flanm\u0131\u015F nohut yo\u011Furtlu-yumurtal\u0131 terbiye ile birle\u015Ftirilir. \xDCzerine naneli k\u0131zg\u0131n tereya\u011F\u0131 d\xF6k\xFCl\xFCr.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_21_1",
+        "name": "A\u015Furelik Yarma Bu\u011Fday",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.35,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_21_2",
+        "name": "Ha\u015Flanm\u0131\u015F Nohut",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 1.63,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_21_3",
+        "name": "S\xFCzme Yo\u011Furt & Yumurta",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Yumurta"
+      },
+      {
+        "id": "ing_cor_21_4",
+        "name": "Mutfak Tereya\u011F\u0131 & Nane",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 3.12,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_22",
+    "recipeCode": "REC-COR-022",
+    "name": "Gendime \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 18.2,
+    "laborCostPerPortion": 2.5,
+    "gasEnergyCostPerPortion": 1.6,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 4.7,
+    "totalCostPerPortion": 22.9,
+    "suggestedSalePrice": 50,
+    "cookingTimeMinutes": 60,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 210,
+    "proteinGrams": 9.5,
+    "carbGrams": 28,
+    "fatGrams": 7.2,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Erzurum ve Do\u011Fu Anadolu usul\xFC gendime (yarma bu\u011Fday), kemikli et suyu, kurutulmu\u015F s\xFCzme yo\u011Furt ve nane ile pi\u015Firilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_22_1",
+        "name": "Gendime (D\xF6vme Bu\u011Fday)",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_22_2",
+        "name": "Kemikli Kuzu Suyu & Par\xE7a Et",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 250,
+        "portionCost": 10,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_22_3",
+        "name": "Yo\u011Furt & Tereya\u011F\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_22_4",
+        "name": "Kuru Nane & Da\u011F Keki\u011Fi",
+        "portionGrams": 5,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 0.4,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_23",
+    "recipeCode": "REC-COR-023",
+    "name": "Anal\u0131 K\u0131zl\u0131 \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "portionCost": 31.2,
+    "laborCostPerPortion": 4.8,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 8.3,
+    "totalCostPerPortion": 39.5,
+    "suggestedSalePrice": 85,
+    "cookingTimeMinutes": 50,
+    "prepTimeMinutes": 45,
+    "caloriePerPortion": 290,
+    "proteinGrams": 16.5,
+    "carbGrams": 30,
+    "fatGrams": 12,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "K\u0131ymal\u0131 i\xE7 har\xE7l\u0131 iri i\xE7li k\xF6fteler (analar) ile k\xFC\xE7\xFCk bulgur toplar\u0131 (k\u0131zlar), nohut ve ku\u015Fba\u015F\u0131 etli sal\xE7al\u0131 nane suyunda pi\u015Firilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_23_1",
+        "name": "\u0130\xE7li K\xF6fte (Anal\u0131)",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 12.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_23_2",
+        "name": "Bulgur Toplar\u0131 (K\u0131zl\u0131)",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_23_3",
+        "name": "Dana Ku\u015Fba\u015F\u0131 & Ha\u015Flanm\u0131\u015F Nohut",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 12.8,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_cor_23_4",
+        "name": "Sal\xE7a, Tereya\u011F\u0131 & Kuru Nane",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_24",
+    "recipeCode": "REC-COR-024",
+    "name": "Umac\u0131 \xC7orbas\u0131 (Y\xF6r\xFCk \xC7orbas\u0131)",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 9.11,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 3.9,
+    "totalCostPerPortion": 13.01,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 160,
+    "proteinGrams": 5,
+    "carbGrams": 23,
+    "fatGrams": 5.5,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Elde su ve un ile ovularak olu\u015Fturulan minik hamur taneleri (umac), tereya\u011Fl\u0131 naneli sal\xE7al\u0131 suda ha\u015Flan\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_24_1",
+        "name": "Umac Hamuru (Un & Su Ovmas\u0131)",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_24_2",
+        "name": "Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 2.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_24_3",
+        "name": "Sal\xE7a & So\u011Fan Rendesi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.13,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_cor_24_4",
+        "name": "Kemik Suyu & Nane",
+        "portionGrams": 110,
+        "unit": "ml",
+        "unitCost": 30,
+        "portionCost": 3.3,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_25",
+    "recipeCode": "REC-COR-025",
+    "name": "Araba\u015F\u0131 \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 20.3,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6,
+    "totalCostPerPortion": 26.3,
+    "suggestedSalePrice": 60,
+    "cookingTimeMinutes": 60,
+    "prepTimeMinutes": 30,
+    "caloriePerPortion": 210,
+    "proteinGrams": 15,
+    "carbGrams": 14,
+    "fatGrams": 10,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Didiklenmi\u015F tavuk/hindi eti, kavrulmu\u015F un meyanesi, bol ac\u0131 pul biber ve tavuk suyu ile pi\u015Firilir. \xD6zel so\u011Fuk araba\u015F\u0131 hamuru ile yutulur.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_25_1",
+        "name": "Didiklenmi\u015F K\xF6y Tavu\u011Fu / Hindi",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 12,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_25_2",
+        "name": "Tavuk Ya\u011Fl\u0131 Ha\u015Flama Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 30,
+        "portionCost": 3.9,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_25_3",
+        "name": "Kavrulmu\u015F Un & Tereya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_25_4",
+        "name": "Ac\u0131 Pul Biber & Sal\xE7a",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 1.2,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_26",
+    "recipeCode": "REC-COR-026",
+    "name": "Bademli Tavuk \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 28.95,
+    "laborCostPerPortion": 2.8,
+    "gasEnergyCostPerPortion": 1.4,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 4.8,
+    "totalCostPerPortion": 33.75,
+    "suggestedSalePrice": 75,
+    "cookingTimeMinutes": 35,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 205,
+    "proteinGrams": 14,
+    "carbGrams": 12,
+    "fatGrams": 11.5,
+    "allergens": [
+      "Kuruyemi\u015F (Badem)",
+      "Laktoz",
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Osmanl\u0131 saray mutfa\u011F\u0131 usul\xFC soyulmu\u015F tatl\u0131 bademler tereya\u011F\u0131nda kavrulur, tavuk eti, tavuk suyu ve s\xFCtl\xFC terbiye ile birle\u015Ftirilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_26_1",
+        "name": "Soyulmu\u015F File Badem",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 11.25,
+        "wastagePercent": 0,
+        "allergen": "Badem"
+      },
+      {
+        "id": "ing_cor_26_2",
+        "name": "Tavuk G\xF6\u011F\xFCs Eti (K\xFCp)",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 8.55,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_cor_26_3",
+        "name": "S\xFCt & Tereya\u011F\u0131",
+        "portionGrams": 50,
+        "unit": "ml",
+        "unitCost": 120,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_26_4",
+        "name": "Tavuk Suyu & Un",
+        "portionGrams": 90,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.15,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_27",
+    "recipeCode": "REC-COR-027",
+    "name": "Sar\u0131msakl\u0131 \xC7orba",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 14.1,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 1.1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.5,
+    "totalCostPerPortion": 17.6,
+    "suggestedSalePrice": 40,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 150,
+    "proteinGrams": 5.5,
+    "carbGrams": 16,
+    "fatGrams": 7.2,
+    "allergens": [
+      "Laktoz",
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Bol di\u015F sar\u0131msak tereya\u011F\u0131nda kokusu yak\u0131lmadan kavrulur, kemik suyu ve yo\u011Furtlu terbiye ile ba\u011Flan\u0131r. Do\u011Fal antibiyotik deposudur.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_27_1",
+        "name": "Ta\u015Fk\xF6pr\xFC Sar\u0131msa\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 3,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_27_2",
+        "name": "Mutfak Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_27_3",
+        "name": "Yo\u011Furtlu Terbiye & Un",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.45,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Gluten"
+      },
+      {
+        "id": "ing_cor_27_4",
+        "name": "\u0130likli Et Suyu",
+        "portionGrams": 110,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_28",
+    "recipeCode": "REC-COR-028",
+    "name": "Dutma\xE7 \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 11.02,
+    "laborCostPerPortion": 2.4,
+    "gasEnergyCostPerPortion": 1.4,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.3,
+    "totalCostPerPortion": 15.32,
+    "suggestedSalePrice": 35,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 195,
+    "proteinGrams": 8.5,
+    "carbGrams": 27,
+    "fatGrams": 6,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Eski T\xFCrk ve Sel\xE7uklu mutfa\u011F\u0131 miras\u0131; ev eri\u015Ftesi, mercimek, nohut ve yo\u011Furtlu et suyuyla harmanlan\u0131p \xFCzerine reyhan ve tereya\u011F\u0131 yak\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_28_1",
+        "name": "K\xF6y Eri\u015Ftesi (Kesme)",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 1.95,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_28_2",
+        "name": "Ye\u015Fil Mercimek & Nohut",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.45,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_28_3",
+        "name": "S\xFCzme Yo\u011Furt Terbiyesi",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_28_4",
+        "name": "Tereya\u011F\u0131 & Kuru Reyhan",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 3.12,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_29",
+    "recipeCode": "REC-COR-029",
+    "name": "Kurut \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 12.61,
+    "laborCostPerPortion": 2.3,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.1,
+    "totalCostPerPortion": 16.71,
+    "suggestedSalePrice": 40,
+    "cookingTimeMinutes": 35,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 185,
+    "proteinGrams": 9,
+    "carbGrams": 18,
+    "fatGrams": 8.5,
+    "allergens": [
+      "Laktoz",
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Geleneksel kurut (g\xFCne\u015Fte kurutulmu\u015F ek\u015Fi yo\u011Furt/ke\u015F) \u0131l\u0131k suda ezilerek \xE7\xF6z\xFCl\xFCr. Yarma ve tereya\u011Fl\u0131 so\u011Fanla kaynat\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_29_1",
+        "name": "Geleneksel Kurut (Kuru Ke\u015F)",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 7.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_29_2",
+        "name": "D\xF6vme Yarma",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.13,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_29_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & So\u011Fan",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 4,
+        "wastagePercent": 5,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_29_4",
+        "name": "Nane & Pul Biber",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 0.28,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_30",
+    "recipeCode": "REC-COR-030",
+    "name": "O\u011Fma\xE7 \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 8.74,
+    "laborCostPerPortion": 2.1,
+    "gasEnergyCostPerPortion": 1.1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.6,
+    "totalCostPerPortion": 12.34,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 170,
+    "proteinGrams": 5.8,
+    "carbGrams": 24,
+    "fatGrams": 6,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Un, s\xFCt ve tereya\u011F\u0131 ile yap\u0131lan ufak hamur tanecikleri tavuk suyunda ha\u015Flan\u0131r, naneli tereya\u011F\u0131 ile tatland\u0131r\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_30_1",
+        "name": "O\u011Fma\xE7 Hamuru (Un, S\xFCt)",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 2.48,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_30_2",
+        "name": "Tavuk Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_30_3",
+        "name": "Tereya\u011F\u0131 & Sal\xE7a",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_30_4",
+        "name": "Nane & Karabiber",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 0.26,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_31",
+    "recipeCode": "REC-COR-031",
+    "name": "Mahluta \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 11.2,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4,
+    "totalCostPerPortion": 15.2,
+    "suggestedSalePrice": 35,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 175,
+    "proteinGrams": 8,
+    "carbGrams": 25,
+    "fatGrams": 4.8,
+    "allergens": [],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Hatay mutfa\u011F\u0131na \xF6zg\xFC k\u0131rm\u0131z\u0131 mercimek ve pirin\xE7 kimyonlu et suyunda pi\u015Firilir. \xDCzerine zeytinya\u011F\u0131nda k\u0131zd\u0131r\u0131lm\u0131\u015F bol ki\u015Fni\u015F ve sar\u0131msak d\xF6k\xFCl\xFCr.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_31_1",
+        "name": "K\u0131rm\u0131z\u0131 Mercimek & Pirin\xE7",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 2.25,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_31_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 280,
+        "portionCost": 4.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_31_3",
+        "name": "Sar\u0131msak, Ki\u015Fni\u015F & Kimyon",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 0.9,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_31_4",
+        "name": "Do\u011Fal Et Suyu",
+        "portionGrams": 110,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_32",
+    "recipeCode": "REC-COR-032",
+    "name": "Efike / S\xFCtl\xFC \xC7orba",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 9.6,
+    "laborCostPerPortion": 2.1,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.7,
+    "totalCostPerPortion": 13.3,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 180,
+    "proteinGrams": 6.5,
+    "carbGrams": 21,
+    "fatGrams": 7.8,
+    "allergens": [
+      "Laktoz",
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Yarma veya bulgurun s\xFCt ve et suyu ile a\u011F\u0131r a\u011F\u0131r kaynat\u0131lmas\u0131yla elde edilen yumu\u015Fak i\xE7imli y\xF6resel s\xFCtl\xFC \xE7orba.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_32_1",
+        "name": "D\xF6vme Yarma",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.35,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_32_2",
+        "name": "Taze \xC7iftlik S\xFCt\xFC",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_32_3",
+        "name": "Mutfak Tereya\u011F\u0131",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.84,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_32_4",
+        "name": "Kaya Tuzu & Beyaz Karabiber",
+        "portionGrams": 3,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 0.21,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_33",
+    "recipeCode": "REC-COR-033",
+    "name": "Yarma \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 9.03,
+    "laborCostPerPortion": 2.1,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 3.9,
+    "totalCostPerPortion": 12.93,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 45,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 165,
+    "proteinGrams": 6,
+    "carbGrams": 26,
+    "fatGrams": 4.5,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Geleneksel a\u015Furelik d\xF6vme yarma, nohut ve kemik suyu ile k\u0131vam alana dek pi\u015Firilir; yo\u011Furt ve nane sosuyla tamamlan\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_33_1",
+        "name": "A\u015Furelik Yarma Bu\u011Fday",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.03,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_33_2",
+        "name": "Kemik Suyu & Yo\u011Furt Terbiyesi",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 40,
+        "portionCost": 4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_33_3",
+        "name": "Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 300,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_34",
+    "recipeCode": "REC-COR-034",
+    "name": "Tutma\xE7 \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 10.45,
+    "laborCostPerPortion": 2.3,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.1,
+    "totalCostPerPortion": 14.55,
+    "suggestedSalePrice": 35,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 195,
+    "proteinGrams": 8,
+    "carbGrams": 28,
+    "fatGrams": 5.8,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Ye\u015Fil mercimek ve el kesmesi eri\u015Fte kemik suyunda pi\u015Firilir. Yo\u011Furtlu terbiye ve tereya\u011F\u0131nda kavrulmu\u015F so\u011Fan-nane sosu ile ba\u011Flan\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_34_1",
+        "name": "Ye\u015Fil Mercimek",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 1.95,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_34_2",
+        "name": "Ev Eri\u015Ftesi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 1.75,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_34_3",
+        "name": "S\xFCzme Yo\u011Furt & Un",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Gluten"
+      },
+      {
+        "id": "ing_cor_34_4",
+        "name": "Tereya\u011F\u0131nda Karamelize So\u011Fan & Nane",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 3.75,
+        "wastagePercent": 5,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_35",
+    "recipeCode": "REC-COR-035",
+    "name": "Brokoli \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 11,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.4,
+    "totalCostPerPortion": 14.4,
+    "suggestedSalePrice": 35,
+    "cookingTimeMinutes": 25,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 130,
+    "proteinGrams": 4.8,
+    "carbGrams": 12,
+    "fatGrams": 7,
+    "allergens": [
+      "Laktoz",
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Taze brokoli \xE7i\xE7ekleri, patates ve p\u0131rasa sebze suyunda ha\u015Flan\u0131p p\xFCr\xFCzs\xFCzle\u015Ftirilir. Hafif krema ve tereya\u011F\u0131 eklenir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_35_1",
+        "name": "Taze Brokoli",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 4.4,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_cor_35_2",
+        "name": "Patates & Kuru So\u011Fan",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 20,
+        "portionCost": 0.7,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_35_3",
+        "name": "Yemeklik S\u0131v\u0131 Krema",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 140,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_35_4",
+        "name": "Tereya\u011F\u0131 & Tuz",
+        "portionGrams": 8,
+        "unit": "g",
+        "unitCost": 300,
+        "portionCost": 2.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_36",
+    "recipeCode": "REC-COR-036",
+    "name": "Kabak \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.45,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.4,
+    "totalCostPerPortion": 13.85,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 25,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 120,
+    "proteinGrams": 3.5,
+    "carbGrams": 11,
+    "fatGrams": 6.5,
+    "allergens": [
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Sak\u0131z kabaklar\u0131, taze dereotu ve patates tavuk suyunda ha\u015Flan\u0131r. S\xFCt ve s\u0131zma zeytinya\u011F\u0131 ile kadifemsi k\u0131vama getirilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_36_1",
+        "name": "Sak\u0131z Kaba\u011F\u0131",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.15,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_36_2",
+        "name": "Taze Dereotu & So\u011Fan",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_cor_36_3",
+        "name": "S\xFCt & Tavuk Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_36_4",
+        "name": "Zeytinya\u011F\u0131 & Karabiber",
+        "portionGrams": 10,
+        "unit": "ml",
+        "unitCost": 280,
+        "portionCost": 2.8,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_37",
+    "recipeCode": "REC-COR-037",
+    "name": "Ispanak \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 10.88,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.4,
+    "totalCostPerPortion": 14.28,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 25,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 135,
+    "proteinGrams": 4.5,
+    "carbGrams": 13,
+    "fatGrams": 7.2,
+    "allergens": [
+      "Laktoz",
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Taze \u0131spanak yapraklar\u0131 so\u011Fanla sotelenir, un meyanesi ve kemik suyu ile pi\u015Firilip s\xFCt/krema ile tatland\u0131r\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_37_1",
+        "name": "Taze Ispanak Yapra\u011F\u0131",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 3.83,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_cor_37_2",
+        "name": "Un & Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_cor_37_3",
+        "name": "Kemik Suyu & S\xFCt",
+        "portionGrams": 110,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_37_4",
+        "name": "Muskat Rendesi & Tuz",
+        "portionGrams": 2,
+        "unit": "g",
+        "unitCost": 100,
+        "portionCost": 0.2,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_38",
+    "recipeCode": "REC-COR-038",
+    "name": "Karnabahar \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 9.06,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 1.1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.5,
+    "totalCostPerPortion": 12.56,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 140,
+    "proteinGrams": 4.2,
+    "carbGrams": 14,
+    "fatGrams": 7.5,
+    "allergens": [
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "F\u0131r\u0131nlanm\u0131\u015F karnabahar ve p\u0131rasa tavuk suyunda pi\u015Firilir, zeytinya\u011F\u0131 ve hafif s\xFCt ile blenderdan ge\xE7irilerek sunulur.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_38_1",
+        "name": "Taze Karnabahar",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 38,
+        "portionCost": 3.42,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_cor_38_2",
+        "name": "Patates & So\u011Fan",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 20,
+        "portionCost": 0.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_38_3",
+        "name": "S\xFCt & Tereya\u011F\u0131",
+        "portionGrams": 60,
+        "unit": "ml",
+        "unitCost": 80,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_38_4",
+        "name": "Zerde\xE7al & Karabiber",
+        "portionGrams": 3,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 0.24,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_39",
+    "recipeCode": "REC-COR-039",
+    "name": "Ek\u015Fili \xC7orba",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 8.12,
+    "laborCostPerPortion": 2.2,
+    "gasEnergyCostPerPortion": 1.3,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4,
+    "totalCostPerPortion": 12.12,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 175,
+    "proteinGrams": 7.5,
+    "carbGrams": 25,
+    "fatGrams": 5.2,
+    "allergens": [
+      "Gluten"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Malatya ve Gaziantep usul\xFC d\xF6vme bu\u011Fday, nohut, semizotu veya paz\u0131 ek\u015Fi erik/sumak suyu ve nane ile kaynat\u0131l\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_39_1",
+        "name": "Yarma Bu\u011Fday & Nohut",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 2.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_39_2",
+        "name": "Semizotu / Paz\u0131 Yapra\u011F\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_cor_39_3",
+        "name": "Do\u011Fal Sumak Ek\u015Fisi",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 80,
+        "portionCost": 1.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_39_4",
+        "name": "Zeytinya\u011F\u0131 & Nane",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 3.12,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_40",
+    "recipeCode": "REC-COR-040",
+    "name": "Gelin \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 7.64,
+    "laborCostPerPortion": 2.1,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 3.8,
+    "totalCostPerPortion": 11.44,
+    "suggestedSalePrice": 25,
+    "cookingTimeMinutes": 35,
+    "prepTimeMinutes": 15,
+    "caloriePerPortion": 170,
+    "proteinGrams": 6.5,
+    "carbGrams": 24,
+    "fatGrams": 5.5,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "K\u0131rm\u0131z\u0131 mercimek, bulgur ve tel \u015Fehriyenin zengin et suyu ve tereya\u011Fl\u0131 sal\xE7a meyanesi ile harmanland\u0131\u011F\u0131 lezzetli Anadolu \xE7orbas\u0131.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_40_1",
+        "name": "K\u0131rm\u0131z\u0131 Mercimek & Bulgur",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.58,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_40_2",
+        "name": "Tel \u015Eehriye",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 0.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_40_3",
+        "name": "Et Suyu & Tereya\u011F\u0131",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 45,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_cor_40_4",
+        "name": "Sal\xE7a, Nane & Pul Biber",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 0.96,
+        "wastagePercent": 0
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_41",
+    "recipeCode": "REC-COR-041",
+    "name": "Kavurma \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "portionCost": 37.95,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6,
+    "totalCostPerPortion": 43.95,
+    "suggestedSalePrice": 95,
+    "cookingTimeMinutes": 40,
+    "prepTimeMinutes": 20,
+    "caloriePerPortion": 260,
+    "proteinGrams": 18,
+    "carbGrams": 14,
+    "fatGrams": 15,
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Kendi ya\u011F\u0131nda kavrulmu\u015F dana kavurma par\xE7alar\u0131, sar\u0131msakl\u0131 et suyu, arpa \u015Fehriye ve tereya\u011Fl\u0131 sos ile doyurucu \u015Fekilde haz\u0131rlan\u0131r.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_41_1",
+        "name": "Rize Tipi Dana Kavurma",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 550,
+        "portionCost": 30.25,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_41_2",
+        "name": "Arpa \u015Eehriye",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 0.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_cor_41_3",
+        "name": "Kemik Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_41_4",
+        "name": "Sar\u0131msak, Sal\xE7a & Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  },
+  {
+    "id": "rec_cor_42",
+    "recipeCode": "REC-COR-042",
+    "name": "Pirin\xE7 \xC7orbas\u0131",
+    "category": "soup",
+    "categoryLabel": "\xC7orbalar",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "portionCost": 8.73,
+    "laborCostPerPortion": 1.8,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 3.2,
+    "totalCostPerPortion": 11.93,
+    "suggestedSalePrice": 30,
+    "cookingTimeMinutes": 30,
+    "prepTimeMinutes": 10,
+    "caloriePerPortion": 140,
+    "proteinGrams": 3.8,
+    "carbGrams": 25,
+    "fatGrams": 3.5,
+    "allergens": [
+      "Laktoz"
+    ],
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & Kalite G\xFCvence M\xFChendisi",
+    "cookingInstructions": "Baldo k\u0131r\u0131k pirin\xE7 leziz tavuk suyunda ha\u015Flan\u0131r; rendelenmi\u015F domates, tereya\u011F\u0131 ve k\u0131y\u0131lm\u0131\u015F maydanoz ile servis edilir.",
+    "createdAt": "2026-08-20T08:00:00Z",
+    "updatedAt": "2026-09-18T10:00:00Z",
+    "ingredients": [
+      {
+        "id": "ing_cor_42_1",
+        "name": "Baldo K\u0131r\u0131k Pirin\xE7",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 2.28,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_42_2",
+        "name": "Tavuk Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3.25,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_42_3",
+        "name": "Domates Rendesi & Sal\xE7a",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_cor_42_4",
+        "name": "Tereya\u011F\u0131 & Maydanoz",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 2.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ]
+  }
+];
+
+// src/data/recipes/meatRecipes.ts
+var meatRecipes = [
+  {
+    "id": "rec_etl_01",
+    "recipeCode": "REC-ETL-001",
+    "code": "REC-ETL-001",
+    "name": "\u0130skender Kebap",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 620,
+    "proteinGrams": 38,
+    "carbGrams": 35,
+    "fatGrams": 36,
+    "nutritionalValues": {
+      "calories": 620,
+      "protein": 38,
+      "carbs": 35,
+      "fat": 36
+    },
+    "allergens": [
+      "Gluten (Pide)",
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "T\u0131rnak pide k\xFCp do\u011Fran\u0131p f\u0131r\u0131nlan\u0131r. \xDCzerine ince kesilmi\u015F dana d\xF6ner eti dizilir, domates sosu gezdirilir. Yan\u0131na tava yo\u011Furdu, k\xF6z biber-domates konup \xFCzerine k\u0131zg\u0131n tereya\u011F\u0131 d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "T\u0131rnak pide k\xFCp do\u011Fran\u0131p f\u0131r\u0131nlan\u0131r. \xDCzerine ince kesilmi\u015F dana d\xF6ner eti dizilir, domates sosu gezdirilir. Yan\u0131na tava yo\u011Furdu, k\xF6z biber-domates konup \xFCzerine k\u0131zg\u0131n tereya\u011F\u0131 d\xF6k\xFCl\xFCr.",
+    "portionCost": 84.7,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 15,
+    "totalCostPerPortion": 99.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 155,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_01_1",
+        "name": "Dana D\xF6ner Eti (Kuzu D\xF6\u015F Kar\u0131\u015F\u0131ml\u0131)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 67.2,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_01_2",
+        "name": "T\u0131rnak Pide",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.45,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_01_3",
+        "name": "K\xF6y Tereya\u011F\u0131 (K\u0131zg\u0131n)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 340,
+        "portionCost": 8.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_01_4",
+        "name": "Koyun / Tava Yo\u011Furdu",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_01_5",
+        "name": "Tereya\u011Fl\u0131 Domates Sosu & K\xF6z Biber",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.03,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_02",
+    "recipeCode": "REC-ETL-002",
+    "code": "REC-ETL-002",
+    "name": "Ali Nazik Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 480,
+    "proteinGrams": 32,
+    "carbGrams": 14,
+    "fatGrams": 28,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 32,
+      "carbs": 14,
+      "fat": 28
+    },
+    "allergens": [
+      "Laktoz (S\xFCzme Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6zlenmi\u015F patl\u0131canlar ince k\u0131y\u0131l\u0131p sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ile kar\u0131\u015Ft\u0131r\u0131larak be\u011Fendi taban\u0131 haz\u0131rlan\u0131r. \xDCzerine tereya\u011F\u0131nda kekik ve pul biberle sotelenmi\u015F kuzu veya dana ku\u015Fba\u015F\u0131 eklenir.",
+    "cookingInstructions": "K\xF6zlenmi\u015F patl\u0131canlar ince k\u0131y\u0131l\u0131p sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ile kar\u0131\u015Ft\u0131r\u0131larak be\u011Fendi taban\u0131 haz\u0131rlan\u0131r. \xDCzerine tereya\u011F\u0131nda kekik ve pul biberle sotelenmi\u015F kuzu veya dana ku\u015Fba\u015F\u0131 eklenir.",
+    "portionCost": 76.4,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.7,
+    "totalCostPerPortion": 89.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 140,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_02_1",
+        "name": "Kuzu & Dana Lokum Ku\u015Fba\u015F\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 59.8,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_etl_02_2",
+        "name": "K\xF6zlenmi\u015F Patl\u0131can",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 6.5,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_02_3",
+        "name": "S\xFCzme Yo\u011Furt & Sar\u0131msak",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 5.25,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_02_4",
+        "name": "Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_03",
+    "recipeCode": "REC-ETL-003",
+    "code": "REC-ETL-003",
+    "name": "H\xFCnkar Be\u011Fendi",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 65,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 520,
+    "proteinGrams": 34,
+    "carbGrams": 18,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 520,
+      "protein": 34,
+      "carbs": 18,
+      "fat": 32
+    },
+    "allergens": [
+      "Gluten (Un)",
+      "Laktoz (S\xFCt, Ka\u015Far, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6z patl\u0131can un, tereya\u011F\u0131, s\xFCt ve eski ka\u015Farla be\u015Famel k\u0131vam\u0131nda be\u011Fendiye d\xF6n\xFC\u015Ft\xFCr\xFCl\xFCr. \xDCzerine lokum gibi pi\u015Fmi\u015F domatesli tas kebab\u0131 konur.",
+    "cookingInstructions": "K\xF6z patl\u0131can un, tereya\u011F\u0131, s\xFCt ve eski ka\u015Farla be\u015Famel k\u0131vam\u0131nda be\u011Fendiye d\xF6n\xFC\u015Ft\xFCr\xFCl\xFCr. \xDCzerine lokum gibi pi\u015Fmi\u015F domatesli tas kebab\u0131 konur.",
+    "portionCost": 79.4,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 14,
+    "totalCostPerPortion": 93.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 145,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_03_1",
+        "name": "Dana Ku\u015Fba\u015F\u0131 (But/Kol)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 61.6,
+        "wastagePercent": 22
+      },
+      {
+        "id": "ing_etl_03_2",
+        "name": "K\xF6zlenmi\u015F Patl\u0131can",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.85,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_03_3",
+        "name": "S\xFCt, Un & Tereya\u011F\u0131 (Be\u015Famel)",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 5.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_etl_03_4",
+        "name": "Rendelenmi\u015F Ka\u015Far Peyniri",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_03_5",
+        "name": "Sal\xE7a, Arpac\u0131k So\u011Fan & Baharat",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 1.3,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_04",
+    "recipeCode": "REC-ETL-004",
+    "code": "REC-ETL-004",
+    "name": "Tas Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 70,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 33,
+    "carbGrams": 16,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 33,
+      "carbs": 16,
+      "fat": 22
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dana ku\u015Fba\u015F\u0131 etler arpac\u0131k so\u011Fan, sar\u0131msak, havu\xE7, patates k\xFCpleri ve sal\xE7al\u0131 s\u0131cak et suyu ile a\u011F\u0131r ate\u015Fte helmelenene kadar pi\u015Firilir.",
+    "cookingInstructions": "Dana ku\u015Fba\u015F\u0131 etler arpac\u0131k so\u011Fan, sar\u0131msak, havu\xE7, patates k\xFCpleri ve sal\xE7al\u0131 s\u0131cak et suyu ile a\u011F\u0131r ate\u015Fte helmelenene kadar pi\u015Firilir.",
+    "portionCost": 66.6,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 4.2,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.4,
+    "totalCostPerPortion": 79,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 120,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_etl_04_1",
+        "name": "Dana Ku\u015Fba\u015F\u0131",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 61.6,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_etl_04_2",
+        "name": "Patates & Havu\xE7 K\xFCpleri",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 25,
+        "portionCost": 1.25,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_04_3",
+        "name": "Arpac\u0131k So\u011Fan & Sar\u0131msak",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.05,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_04_4",
+        "name": "Mutfak Tereya\u011F\u0131 & Sal\xE7a",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_05",
+    "recipeCode": "REC-ETL-005",
+    "code": "REC-ETL-005",
+    "name": "Kuzu Tand\u0131r",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 180,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 540,
+    "proteinGrams": 42,
+    "carbGrams": 6,
+    "fatGrams": 38,
+    "nutritionalValues": {
+      "calories": 540,
+      "protein": 42,
+      "carbs": 6,
+      "fat": 38
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuzu kol veya but eti taze kekik, defne yapra\u011F\u0131 ve tane karabiberle marine edilip d\xF6k\xFCm f\u0131r\u0131nda 3 saat a\u011F\u0131r a\u011F\u0131r tand\u0131r k\u0131vam\u0131nda pi\u015Firilir.",
+    "cookingInstructions": "Kuzu kol veya but eti taze kekik, defne yapra\u011F\u0131 ve tane karabiberle marine edilip d\xF6k\xFCm f\u0131r\u0131nda 3 saat a\u011F\u0131r a\u011F\u0131r tand\u0131r k\u0131vam\u0131nda pi\u015Firilir.",
+    "portionCost": 105.9,
+    "laborCostPerPortion": 9,
+    "gasEnergyCostPerPortion": 6.5,
+    "overheadCostPerPortion": 2,
+    "laborAndOverheadPerPortion": 17.5,
+    "totalCostPerPortion": 123.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 190,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_05_1",
+        "name": "Kuzu Kol / But (Kemikli Marine)",
+        "portionGrams": 220,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 101.2,
+        "wastagePercent": 35
+      },
+      {
+        "id": "ing_etl_05_2",
+        "name": "Arpac\u0131k So\u011Fan & Sar\u0131msak Ba\u015Flar\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.05,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_05_3",
+        "name": "Zeytinya\u011F\u0131, Da\u011F Keki\u011Fi & Tane Karabiber",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_06",
+    "recipeCode": "REC-ETL-006",
+    "code": "REC-ETL-006",
+    "name": "Adana Kebap",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 510,
+    "proteinGrams": 35,
+    "carbGrams": 22,
+    "fatGrams": 34,
+    "nutritionalValues": {
+      "calories": 510,
+      "protein": 35,
+      "carbs": 22,
+      "fat": 34
+    },
+    "allergens": [
+      "Gluten (Lava\u015F)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Z\u0131rhla \xE7ekilmi\u015F kuzu eti, kuyruk ya\u011F\u0131, pul biber ve tuz yo\u011Frulup geni\u015F \u015Fi\u015Fe saplan\u0131r. Me\u015Fe k\xF6m\xFCr\xFCnde pi\u015Firilip sumakl\u0131 so\u011Fan ve lava\u015F ile sunulur.",
+    "cookingInstructions": "Z\u0131rhla \xE7ekilmi\u015F kuzu eti, kuyruk ya\u011F\u0131, pul biber ve tuz yo\u011Frulup geni\u015F \u015Fi\u015Fe saplan\u0131r. Me\u015Fe k\xF6m\xFCr\xFCnde pi\u015Firilip sumakl\u0131 so\u011Fan ve lava\u015F ile sunulur.",
+    "portionCost": 75,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 87.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 135,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_06_1",
+        "name": "Z\u0131rh K\u0131yma (Kuzu D\xF6\u015F & Bo\u015Fluk)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 63,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_06_2",
+        "name": "Kuzu Kuyruk Ya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 8.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_06_3",
+        "name": "Kapya Biber & Antep Pul Biber",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 1.2,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_06_4",
+        "name": "T\u0131rnak Lava\u015F & Sumakl\u0131 Maydanozlu So\u011Fan",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.4,
+        "wastagePercent": 5,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_07",
+    "recipeCode": "REC-ETL-007",
+    "code": "REC-ETL-007",
+    "name": "Urfa Kebap",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 490,
+    "proteinGrams": 36,
+    "carbGrams": 22,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 490,
+      "protein": 36,
+      "carbs": 22,
+      "fat": 32
+    },
+    "allergens": [
+      "Gluten (Lava\u015F)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Z\u0131rh k\u0131ymas\u0131 kuyruk ya\u011F\u0131 ve tuz ile sade olarak yo\u011Frulur; ac\u0131s\u0131z ve yumu\u015Fak lezzetiyle \u0131zgarada pi\u015Firilir, k\xF6zlenmi\u015F sebzelerle sunulur.",
+    "cookingInstructions": "Z\u0131rh k\u0131ymas\u0131 kuyruk ya\u011F\u0131 ve tuz ile sade olarak yo\u011Frulur; ac\u0131s\u0131z ve yumu\u015Fak lezzetiyle \u0131zgarada pi\u015Firilir, k\xF6zlenmi\u015F sebzelerle sunulur.",
+    "portionCost": 71,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 11.7,
+    "totalCostPerPortion": 82.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 130,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_07_1",
+        "name": "Kuzu D\xF6\u015F & Dana Bo\u015Fluk Z\u0131rh K\u0131yma",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 61.6,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_07_2",
+        "name": "Kuyruk Ya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 7,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_07_3",
+        "name": "Lava\u015F & K\xF6z Domates Biber",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.4,
+        "wastagePercent": 5,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_08",
+    "recipeCode": "REC-ETL-008",
+    "code": "REC-ETL-008",
+    "name": "Ca\u011F Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 520,
+    "proteinGrams": 40,
+    "carbGrams": 12,
+    "fatGrams": 35,
+    "nutritionalValues": {
+      "calories": 520,
+      "protein": 40,
+      "carbs": 12,
+      "fat": 35
+    },
+    "allergens": [
+      "Gluten (Lava\u015F)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Erzurum usul\xFC kuzu budu so\u011Fan, yo\u011Furt, karabiber ve reyhanla marine edilip yat\u0131k \u015Fi\u015Fte odun ate\u015Finde pi\u015Firilir; ca\u011F \u015Fi\u015Fleriyle kesilip s\u0131cak lava\u015Fta sunulur.",
+    "cookingInstructions": "Erzurum usul\xFC kuzu budu so\u011Fan, yo\u011Furt, karabiber ve reyhanla marine edilip yat\u0131k \u015Fi\u015Fte odun ate\u015Finde pi\u015Firilir; ca\u011F \u015Fi\u015Fleriyle kesilip s\u0131cak lava\u015Fta sunulur.",
+    "portionCost": 80.9,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 15,
+    "totalCostPerPortion": 95.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 150,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_08_1",
+        "name": "Kuzu But & S\u0131rt Eti",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 76.8,
+        "wastagePercent": 22
+      },
+      {
+        "id": "ing_etl_08_2",
+        "name": "Marinasyon (So\u011Fan Suyu, Yo\u011Furt, Reyhan)",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 1.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_08_3",
+        "name": "Tand\u0131r Lava\u015F & K\xF6z Biber",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.25,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_09",
+    "recipeCode": "REC-ETL-009",
+    "code": "REC-ETL-009",
+    "name": "Kuru Fasulye (Etli)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 85,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 26,
+    "carbGrams": 38,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 26,
+      "carbs": 38,
+      "fat": 16
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130spir fasulyesi ak\u015Famdan \u0131slat\u0131l\u0131r. Ku\u015Fba\u015F\u0131 dana eti tereya\u011F\u0131 ve sal\xE7a ile kavrulup g\xFCve\xE7te fasulye ile a\u011F\u0131r ate\u015Fte pi\u015Firilir.",
+    "cookingInstructions": "\u0130spir fasulyesi ak\u015Famdan \u0131slat\u0131l\u0131r. Ku\u015Fba\u015F\u0131 dana eti tereya\u011F\u0131 ve sal\xE7a ile kavrulup g\xFCve\xE7te fasulye ile a\u011F\u0131r ate\u015Fte pi\u015Firilir.",
+    "portionCost": 41.9,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 54.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 85,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_09_1",
+        "name": "\u0130spir Kuru Fasulye",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 9.35,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_09_2",
+        "name": "Dana Ku\u015Fba\u015F\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 26.4,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_09_3",
+        "name": "Kuru So\u011Fan & Biber Sal\xE7as\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_etl_09_4",
+        "name": "Trabzon K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_10",
+    "recipeCode": "REC-ETL-010",
+    "code": "REC-ETL-010",
+    "name": "Etli Yaprak Sarmas\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 22,
+    "carbGrams": 26,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 22,
+      "carbs": 26,
+      "fat": 18
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt Garnit\xFCr)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tokat asma yapra\u011F\u0131na k\u0131ymal\u0131, pirin\xE7li, bol so\u011Fan ve dereotlu har\xE7 incecik sar\u0131l\u0131r; tereya\u011Fl\u0131 sal\xE7al\u0131 suda k\u0131s\u0131k ate\u015Fte pi\u015Firilip sarm\u0131sakl\u0131 yo\u011Furtla servis edilir.",
+    "cookingInstructions": "Tokat asma yapra\u011F\u0131na k\u0131ymal\u0131, pirin\xE7li, bol so\u011Fan ve dereotlu har\xE7 incecik sar\u0131l\u0131r; tereya\u011Fl\u0131 sal\xE7al\u0131 suda k\u0131s\u0131k ate\u015Fte pi\u015Firilip sarm\u0131sakl\u0131 yo\u011Furtla servis edilir.",
+    "portionCost": 46.1,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.2,
+    "totalCostPerPortion": 59.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 90,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_etl_10_1",
+        "name": "Tokat Asma Yapra\u011F\u0131 (Salamura)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 130,
+        "portionCost": 6.5,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_10_2",
+        "name": "Dana & Kuzu K\u0131yma Harc\u0131",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 31.5,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_10_3",
+        "name": "Baldo Pirin\xE7 & Kuru So\u011Fan",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 2.1,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_10_4",
+        "name": "S\xFCzme Yo\u011Furt (Garnit\xFCr) & Tereya\u011F\u0131",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_11",
+    "recipeCode": "REC-ETL-011",
+    "code": "REC-ETL-011",
+    "name": "Kilerci G\xFCveci / \xC7\xF6mlek Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 120,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 35,
+    "carbGrams": 20,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 35,
+      "carbs": 20,
+      "fat": 26
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Toprak \xE7\xF6mle\u011Fe kuzu ku\u015Fba\u015F\u0131, sar\u0131msak, arpac\u0131k so\u011Fan, patl\u0131can, domates ve biber dizilir; kapa\u011F\u0131 hamurla s\u0131van\u0131p f\u0131r\u0131nda 2 saat demlendirilir.",
+    "cookingInstructions": "Toprak \xE7\xF6mle\u011Fe kuzu ku\u015Fba\u015F\u0131, sar\u0131msak, arpac\u0131k so\u011Fan, patl\u0131can, domates ve biber dizilir; kapa\u011F\u0131 hamurla s\u0131van\u0131p f\u0131r\u0131nda 2 saat demlendirilir.",
+    "portionCost": 72,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 5.5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 15,
+    "totalCostPerPortion": 87,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 135,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_11_1",
+        "name": "Kuzu Ku\u015Fba\u015F\u0131",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 64.4,
+        "wastagePercent": 22
+      },
+      {
+        "id": "ing_etl_11_2",
+        "name": "Kemer Patl\u0131can & K\xF6y Biberi",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.45,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_11_3",
+        "name": "Arpac\u0131k So\u011Fan & Bol Di\u015F Sar\u0131msak",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_11_4",
+        "name": "Kuyruk Ya\u011F\u0131 & Domates",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 100,
+        "portionCost": 3.5,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_12",
+    "recipeCode": "REC-ETL-012",
+    "code": "REC-ETL-012",
+    "name": "Kuru Patl\u0131can Dolmas\u0131 (Etli)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 55,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 390,
+    "proteinGrams": 21,
+    "carbGrams": 34,
+    "fatGrams": 19,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 21,
+      "carbs": 34,
+      "fat": 19
+    },
+    "allergens": [
+      "Laktoz (Garnit\xFCr)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Gaziantep kuru patl\u0131canlar\u0131 ha\u015Flan\u0131r. Z\u0131rh k\u0131yma, pirin\xE7, sumak ek\u015Fisi, nar ek\u015Fisi, sar\u0131msak ve sal\xE7al\u0131 har\xE7la doldurulup k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "cookingInstructions": "Gaziantep kuru patl\u0131canlar\u0131 ha\u015Flan\u0131r. Z\u0131rh k\u0131yma, pirin\xE7, sumak ek\u015Fisi, nar ek\u015Fisi, sar\u0131msak ve sal\xE7al\u0131 har\xE7la doldurulup k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "portionCost": 42.5,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 54.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 85,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_12_1",
+        "name": "Kurutulmu\u015F Antep Patl\u0131can\u0131 (4 adet)",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 8.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_12_2",
+        "name": "Kuzu & Dana K\u0131yma",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 29.4,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_12_3",
+        "name": "Baldo Pirin\xE7 & Kuru So\u011Fan",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 2.28,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_12_4",
+        "name": "Sumak Ek\u015Fisi, Nar Ek\u015Fisi & Sal\xE7a",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_13",
+    "recipeCode": "REC-ETL-013",
+    "code": "REC-ETL-013",
+    "name": "Etli Biber Dolmas\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 340,
+    "proteinGrams": 20,
+    "carbGrams": 28,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 340,
+      "protein": 20,
+      "carbs": 28,
+      "fat": 16
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze dolmal\u0131k biberler k\u0131ymal\u0131 pirin\xE7li har\xE7la doldurulup domates kapak kapat\u0131l\u0131r; sal\xE7al\u0131 et suyunda pi\u015Firilir.",
+    "cookingInstructions": "Taze dolmal\u0131k biberler k\u0131ymal\u0131 pirin\xE7li har\xE7la doldurulup domates kapak kapat\u0131l\u0131r; sal\xE7al\u0131 et suyunda pi\u015Firilir.",
+    "portionCost": 36.3,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 46.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_etl_13_1",
+        "name": "Dolmal\u0131k Biber (3 adet)",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 4,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_13_2",
+        "name": "Dana K\u0131yma",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 27.3,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_13_3",
+        "name": "Pirin\xE7, So\u011Fan, Sal\xE7a",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 2.2,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_13_4",
+        "name": "S\xFCzme Yo\u011Furt Garnit\xFCr",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_14",
+    "recipeCode": "REC-ETL-014",
+    "code": "REC-ETL-014",
+    "name": "\u0130neg\xF6l K\xF6fte",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 35,
+    "carbGrams": 6,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 35,
+      "carbs": 6,
+      "fat": 32
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dana d\xF6\u015F ve kuzu eti harmanlan\u0131p karbonat ve kaya tuzu ile yo\u011Frulur; bir gece dinlendirildikten sonra parmak \u015Feklinde \u0131zgarada m\xFCh\xFCrlenir.",
+    "cookingInstructions": "Dana d\xF6\u015F ve kuzu eti harmanlan\u0131p karbonat ve kaya tuzu ile yo\u011Frulur; bir gece dinlendirildikten sonra parmak \u015Feklinde \u0131zgarada m\xFCh\xFCrlenir.",
+    "portionCost": 73.4,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 83.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 130,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_14_1",
+        "name": "Dana D\xF6\u015F & Kuzu Eti K\u0131yma",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 70.4,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_14_2",
+        "name": "Karbonat, Kaya Tuzu & So\u011Fan Suyu",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 0.6,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_14_3",
+        "name": "Garnit\xFCr Piyaz & K\xF6z Biber",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_15",
+    "recipeCode": "REC-ETL-015",
+    "code": "REC-ETL-015",
+    "name": "Ak\xE7aabat K\xF6fte",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 480,
+    "proteinGrams": 36,
+    "carbGrams": 8,
+    "fatGrams": 34,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 36,
+      "carbs": 8,
+      "fat": 34
+    },
+    "allergens": [
+      "Gluten (Ekmek \u0130\xE7i)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Trabzon Ak\xE7aabat usul\xFC dana eti, bol sar\u0131msak, bayat ekmek i\xE7i ve i\xE7 ya\u011F\u0131 yo\u011Frulur. Yass\u0131 k\xF6fteler harl\u0131 \u0131zgarada d\u0131\u015F\u0131 \xE7\u0131t\u0131r i\xE7i sulu pi\u015Firilir.",
+    "cookingInstructions": "Trabzon Ak\xE7aabat usul\xFC dana eti, bol sar\u0131msak, bayat ekmek i\xE7i ve i\xE7 ya\u011F\u0131 yo\u011Frulur. Yass\u0131 k\xF6fteler harl\u0131 \u0131zgarada d\u0131\u015F\u0131 \xE7\u0131t\u0131r i\xE7i sulu pi\u015Firilir.",
+    "portionCost": 73.8,
+    "laborCostPerPortion": 6.8,
+    "gasEnergyCostPerPortion": 3.2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 84.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 130,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_15_1",
+        "name": "Dana K\u0131yma (D\xF6\u015F) & B\xF6brek Ya\u011F\u0131",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 70.4,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_15_2",
+        "name": "Ta\u015Fk\xF6pr\xFC Sar\u0131msa\u011F\u0131 & Bayat Ekmek",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1.25,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_15_3",
+        "name": "K\xF6zlenmi\u015F Domates & Biber Garnit\xFCr",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.1,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_16",
+    "recipeCode": "REC-ETL-016",
+    "code": "REC-ETL-016",
+    "name": "Tekirda\u011F K\xF6fte",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 450,
+    "proteinGrams": 34,
+    "carbGrams": 10,
+    "fatGrams": 30,
+    "nutritionalValues": {
+      "calories": 450,
+      "protein": 34,
+      "carbs": 10,
+      "fat": 30
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dana ve kuzu k\u0131yma irmik/ekmek, so\u011Fan ve sar\u0131msakla elastik olana dek yo\u011Frulur; \xF6zel ac\u0131 sosu ile servis edilir.",
+    "cookingInstructions": "Dana ve kuzu k\u0131yma irmik/ekmek, so\u011Fan ve sar\u0131msakla elastik olana dek yo\u011Frulur; \xF6zel ac\u0131 sosu ile servis edilir.",
+    "portionCost": 71.6,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 82.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 125,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_etl_16_1",
+        "name": "Dana & Kuzu K\xF6ftelik K\u0131yma",
+        "portionGrams": 155,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 68.2,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_16_2",
+        "name": "\u0130rmik, So\u011Fan & Baharat",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_16_3",
+        "name": "Tekirda\u011F Ac\u0131 Sosu & Garnit\xFCr",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_17",
+    "recipeCode": "REC-ETL-017",
+    "code": "REC-ETL-017",
+    "name": "\u0130zmir K\xF6fte",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 440,
+    "proteinGrams": 28,
+    "carbGrams": 26,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 440,
+      "protein": 28,
+      "carbs": 26,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Oval \u015Fekilli k\xF6fteler ve elma dilim patatesler hafif k\u0131zart\u0131l\u0131p f\u0131r\u0131n tepsisine dizilir; domates sal\xE7al\u0131 sos ve sivri biberle f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "Oval \u015Fekilli k\xF6fteler ve elma dilim patatesler hafif k\u0131zart\u0131l\u0131p f\u0131r\u0131n tepsisine dizilir; domates sal\xE7al\u0131 sos ve sivri biberle f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 55.1,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 66.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 100,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_etl_17_1",
+        "name": "Dana K\u0131yma Harc\u0131 (K\xF6fte)",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 50.4,
+        "wastagePercent": 15,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_etl_17_2",
+        "name": "Patates (Elma Dilim)",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 22,
+        "portionCost": 1.76,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_17_3",
+        "name": "K\xF6y Biberi & Domates",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_17_4",
+        "name": "F\u0131r\u0131n Sal\xE7a Sosu & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_18",
+    "recipeCode": "REC-ETL-018",
+    "code": "REC-ETL-018",
+    "name": "Kad\u0131nbudu K\xF6fte",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 26,
+    "carbGrams": 24,
+    "fatGrams": 28,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 26,
+      "carbs": 24,
+      "fat": 28
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\u0131yman\u0131n yar\u0131s\u0131 so\u011Fanla kavrulur, ha\u015Flanm\u0131\u015F pirin\xE7 ve \xE7i\u011F k\u0131yma ile yo\u011Frulur. \u0130ri oval k\xF6fteler un ve yumurtaya bulan\u0131p alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "K\u0131yman\u0131n yar\u0131s\u0131 so\u011Fanla kavrulur, ha\u015Flanm\u0131\u015F pirin\xE7 ve \xE7i\u011F k\u0131yma ile yo\u011Frulur. \u0130ri oval k\xF6fteler un ve yumurtaya bulan\u0131p alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131r.",
+    "portionCost": 56.4,
+    "laborCostPerPortion": 6.8,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.8,
+    "totalCostPerPortion": 67.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 105,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_18_1",
+        "name": "Dana K\u0131yma (Az Ya\u011Fl\u0131)",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 50.4,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_18_2",
+        "name": "Ha\u015Flanm\u0131\u015F K\u0131r\u0131k Pirin\xE7",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_18_3",
+        "name": "Panelik Un & Yumurta",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_etl_18_4",
+        "name": "K\u0131zartma Ya\u011F\u0131 & Baharatlar",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 80,
+        "portionCost": 1.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_19",
+    "recipeCode": "REC-ETL-019",
+    "code": "REC-ETL-019",
+    "name": "Elbasan Tava",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 70,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 530,
+    "proteinGrams": 36,
+    "carbGrams": 14,
+    "fatGrams": 36,
+    "nutritionalValues": {
+      "calories": 530,
+      "protein": 36,
+      "carbs": 14,
+      "fat": 36
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)",
+      "Yumurta",
+      "Gluten (Un)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Lokum gibi ha\u015Flanm\u0131\u015F kuzu eti f\u0131r\u0131n tepsisine dizilir. Yo\u011Furt, yumurta, un ve sar\u0131msakla haz\u0131rlanan \xF6zel sos etlerin \xFCzerine yay\u0131l\u0131p f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Lokum gibi ha\u015Flanm\u0131\u015F kuzu eti f\u0131r\u0131n tepsisine dizilir. Yo\u011Furt, yumurta, un ve sar\u0131msakla haz\u0131rlanan \xF6zel sos etlerin \xFCzerine yay\u0131l\u0131p f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "portionCost": 79.7,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.7,
+    "totalCostPerPortion": 93.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 145,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_19_1",
+        "name": "Kuzu Kol / Gerdan Eti",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 69,
+        "wastagePercent": 22
+      },
+      {
+        "id": "ing_etl_19_2",
+        "name": "S\xFCzme Yo\u011Furt Terbiyesi",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_19_3",
+        "name": "Yumurta & Un",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2,
+        "wastagePercent": 0,
+        "allergen": "Yumurta, Gluten"
+      },
+      {
+        "id": "ing_etl_19_4",
+        "name": "Tereya\u011F\u0131 & Sar\u0131msak",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 4.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_20",
+    "recipeCode": "REC-ETL-020",
+    "code": "REC-ETL-020",
+    "name": "Beyti Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 290,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 580,
+    "proteinGrams": 35,
+    "carbGrams": 38,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 580,
+      "protein": 35,
+      "carbs": 38,
+      "fat": 32
+    },
+    "allergens": [
+      "Gluten (Lava\u015F)",
+      "Laktoz (Yo\u011Furt, Ka\u015Far, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Z\u0131rh k\u0131ymas\u0131 \u015Fi\u015Fte pi\u015Firilir, ka\u015Farl\u0131 ince lava\u015Fa sar\u0131l\u0131p dilimlenir. F\u0131r\u0131nda k\u0131zart\u0131l\u0131p \xFCzerine domates sosu ve eritilmi\u015F tereya\u011F\u0131 d\xF6k\xFCl\xFCr; s\xFCzme yo\u011Furt ile servis edilir.",
+    "cookingInstructions": "Z\u0131rh k\u0131ymas\u0131 \u015Fi\u015Fte pi\u015Firilir, ka\u015Farl\u0131 ince lava\u015Fa sar\u0131l\u0131p dilimlenir. F\u0131r\u0131nda k\u0131zart\u0131l\u0131p \xFCzerine domates sosu ve eritilmi\u015F tereya\u011F\u0131 d\xF6k\xFCl\xFCr; s\xFCzme yo\u011Furt ile servis edilir.",
+    "portionCost": 78.5,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 14.5,
+    "totalCostPerPortion": 93,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 145,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_20_1",
+        "name": "Kuzu & Dana Z\u0131rh K\u0131yma",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 61.6,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_20_2",
+        "name": "\xD6zel \u0130nce D\xFCr\xFCm Lava\u015F",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_20_3",
+        "name": "Rendelenmi\u015F Ka\u015Far Peyniri",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_20_4",
+        "name": "S\xFCzme Yo\u011Furt & Tereya\u011Fl\u0131 Sos",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_21",
+    "recipeCode": "REC-ETL-021",
+    "code": "REC-ETL-021",
+    "name": "\xC7\xF6kertme Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 540,
+    "proteinGrams": 36,
+    "carbGrams": 32,
+    "fatGrams": 30,
+    "nutritionalValues": {
+      "calories": 540,
+      "protein": 36,
+      "carbs": 32,
+      "fat": 30
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kibrit \xE7\xF6p\xFC inceli\u011Finde \xE7\u0131t\u0131r patatesler taba\u011Fa yay\u0131l\u0131r. \xDCzerine sar\u0131msakl\u0131 yo\u011Furt, j\xFClyen marine dana bonfile/kontrfile ve tereya\u011Fl\u0131 domates sos d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "Kibrit \xE7\xF6p\xFC inceli\u011Finde \xE7\u0131t\u0131r patatesler taba\u011Fa yay\u0131l\u0131r. \xDCzerine sar\u0131msakl\u0131 yo\u011Furt, j\xFClyen marine dana bonfile/kontrfile ve tereya\u011Fl\u0131 domates sos d\xF6k\xFCl\xFCr.",
+    "portionCost": 88,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.2,
+    "totalCostPerPortion": 101.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 155,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_21_1",
+        "name": "Dana Kontrfile / Bonfile (J\xFClyen)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 550,
+        "portionCost": 77,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_21_2",
+        "name": "Kibrit Patates (K\u0131zarm\u0131\u015F)",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.45,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_21_3",
+        "name": "Sar\u0131msakl\u0131 S\xFCzme Yo\u011Furt",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_21_4",
+        "name": "K\u0131zg\u0131n Tereya\u011Fl\u0131 Sal\xE7a Sosu",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_22",
+    "recipeCode": "REC-ETL-022",
+    "code": "REC-ETL-022",
+    "name": "Kestaneli Et Yahni",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 75,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 32,
+    "carbGrams": 28,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 32,
+      "carbs": 28,
+      "fat": 22
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dana ku\u015Fba\u015F\u0131 etler arpac\u0131k so\u011Fan ve havu\xE7la karamelize edilir. \xD6nceden ha\u015Flan\u0131p soyulmu\u015F kestaneler ve et suyu eklenerek k\u0131s\u0131k ate\u015Fte demlendirilir.",
+    "cookingInstructions": "Dana ku\u015Fba\u015F\u0131 etler arpac\u0131k so\u011Fan ve havu\xE7la karamelize edilir. \xD6nceden ha\u015Flan\u0131p soyulmu\u015F kestaneler ve et suyu eklenerek k\u0131s\u0131k ate\u015Fte demlendirilir.",
+    "portionCost": 73.6,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.2,
+    "totalCostPerPortion": 86.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 135,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_22_1",
+        "name": "Dana Ku\u015Fba\u015F\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 57.2,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_etl_22_2",
+        "name": "Bursa Kestanesi (Ay\u0131klanm\u0131\u015F)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 12,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_22_3",
+        "name": "Arpac\u0131k So\u011Fan & Sar\u0131msak",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_22_4",
+        "name": "Tereya\u011F\u0131, Sal\xE7a & Et Suyu",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_23",
+    "recipeCode": "REC-ETL-023",
+    "code": "REC-ETL-023",
+    "name": "Ci\u011Fer Tava (Arnavut Ci\u011Feri)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 430,
+    "proteinGrams": 32,
+    "carbGrams": 20,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 430,
+      "protein": 32,
+      "carbs": 20,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten (Un)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Zar\u0131 soyulup k\xFCp do\u011Franm\u0131\u015F dana ci\u011Feri unlan\u0131p k\u0131zg\u0131n ya\u011Fda 3-4 dakika \xE7\u0131t\u0131r pi\u015Firilir. Kimyon, pul biber ve sumakl\u0131 piyaz so\u011Fanla harmanlan\u0131r.",
+    "cookingInstructions": "Zar\u0131 soyulup k\xFCp do\u011Franm\u0131\u015F dana ci\u011Feri unlan\u0131p k\u0131zg\u0131n ya\u011Fda 3-4 dakika \xE7\u0131t\u0131r pi\u015Firilir. Kimyon, pul biber ve sumakl\u0131 piyaz so\u011Fanla harmanlan\u0131r.",
+    "portionCost": 59.1,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 69.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 110,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_etl_23_1",
+        "name": "Zar\u0131 Soyulmu\u015F Taze Dana Ci\u011Feri",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 54,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_23_2",
+        "name": "Un & Baharat (Kimyon, Pul Biber)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 1.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_23_3",
+        "name": "Sumakl\u0131 & Maydanozlu K\u0131rm\u0131z\u0131 So\u011Fan Piyaz\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.1,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_23_4",
+        "name": "K\u0131zartma Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_24",
+    "recipeCode": "REC-ETL-024",
+    "code": "REC-ETL-024",
+    "name": "Sini Kebab\u0131 (Tepsi Kebab\u0131)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 510,
+    "proteinGrams": 36,
+    "carbGrams": 14,
+    "fatGrams": 34,
+    "nutritionalValues": {
+      "calories": 510,
+      "protein": 36,
+      "carbs": 14,
+      "fat": 34
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Hatay/Antakya usul\xFC z\u0131rh k\u0131ymas\u0131 sar\u0131msak, biber ve maydanozla yo\u011Frulup tepsiye bast\u0131r\u0131larak yay\u0131l\u0131r; sal\xE7al\u0131 su, domates ve biber dilimleriyle f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "Hatay/Antakya usul\xFC z\u0131rh k\u0131ymas\u0131 sar\u0131msak, biber ve maydanozla yo\u011Frulup tepsiye bast\u0131r\u0131larak yay\u0131l\u0131r; sal\xE7al\u0131 su, domates ve biber dilimleriyle f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 74,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 86.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 135,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_24_1",
+        "name": "Dana & Kuzu Z\u0131rh K\u0131yma",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 70.4,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_24_2",
+        "name": "Kapya Biber, Maydanoz & Sar\u0131msak",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.58,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_24_3",
+        "name": "Biber Sal\xE7as\u0131 Sosu & Domates Dilimi",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 2,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_25",
+    "recipeCode": "REC-ETL-025",
+    "code": "REC-ETL-025",
+    "name": "Etli Ekmek",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 560,
+    "proteinGrams": 32,
+    "carbGrams": 58,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 560,
+      "protein": 32,
+      "carbs": 58,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Konya usul\xFC ince a\xE7\u0131lm\u0131\u015F mayal\u0131 hamur \xFCzerine b\u0131\xE7akaras\u0131 dana eti, domates, biber ve maydanozlu sulu har\xE7 yay\u0131l\u0131p ta\u015F f\u0131r\u0131nda \xE7\u0131t\u0131r \xE7\u0131t\u0131r pi\u015Firilir.",
+    "cookingInstructions": "Konya usul\xFC ince a\xE7\u0131lm\u0131\u015F mayal\u0131 hamur \xFCzerine b\u0131\xE7akaras\u0131 dana eti, domates, biber ve maydanozlu sulu har\xE7 yay\u0131l\u0131p ta\u015F f\u0131r\u0131nda \xE7\u0131t\u0131r \xE7\u0131t\u0131r pi\u015Firilir.",
+    "portionCost": 54.4,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.7,
+    "totalCostPerPortion": 67.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 105,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_25_1",
+        "name": "\xD6zel B\u0131\xE7akaras\u0131 Dana Eti (K\u0131yma Kar\u0131\u015F\u0131ml\u0131)",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 48.4,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_25_2",
+        "name": "Konya Unu Mayal\u0131 Hamur",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_25_3",
+        "name": "Domates, Ye\u015Fil Biber & Maydanoz Harc\u0131",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_26",
+    "recipeCode": "REC-ETL-026",
+    "code": "REC-ETL-026",
+    "name": "F\u0131r\u0131n Kebab\u0131 (Kuzu)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 240,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 580,
+    "proteinGrams": 44,
+    "carbGrams": 4,
+    "fatGrams": 42,
+    "nutritionalValues": {
+      "calories": 580,
+      "protein": 44,
+      "carbs": 4,
+      "fat": 42
+    },
+    "allergens": [
+      "Gluten (T\u0131rnak Pide)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Konya f\u0131r\u0131n kebab\u0131 gelene\u011Fiyle kuzu eti sadece me\u015Fe odunu ate\u015Finde kendi ya\u011F\u0131 ve suyuyla 4 saatte lokum haline getirilir; t\u0131rnak pide \xFCst\xFCnde verilir.",
+    "cookingInstructions": "Konya f\u0131r\u0131n kebab\u0131 gelene\u011Fiyle kuzu eti sadece me\u015Fe odunu ate\u015Finde kendi ya\u011F\u0131 ve suyuyla 4 saatte lokum haline getirilir; t\u0131rnak pide \xFCst\xFCnde verilir.",
+    "portionCost": 107.8,
+    "laborCostPerPortion": 9.5,
+    "gasEnergyCostPerPortion": 7,
+    "overheadCostPerPortion": 2,
+    "laborAndOverheadPerPortion": 18.5,
+    "totalCostPerPortion": 126.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 195,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_26_1",
+        "name": "Kuzu Kaburga & Gerdan (Ya\u011Fl\u0131)",
+        "portionGrams": 230,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 105.8,
+        "wastagePercent": 38
+      },
+      {
+        "id": "ing_etl_26_2",
+        "name": "T\u0131rnak Pide Taban\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_26_3",
+        "name": "Kaya Tuzu & K\xF6z Biber",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 0.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_27",
+    "recipeCode": "REC-ETL-027",
+    "code": "REC-ETL-027",
+    "name": "Tirit",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 290,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 60,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 510,
+    "proteinGrams": 34,
+    "carbGrams": 40,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 510,
+      "protein": 34,
+      "carbs": 40,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten (Pide)",
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bayat t\u0131rnak pideler kemik suyu ile \u0131slat\u0131l\u0131r. \xDCzerine sar\u0131msakl\u0131 yo\u011Furt, didilmi\u015F dana/kuzu eti, tereya\u011Fl\u0131 biber sos ve maydanoz serpilir.",
+    "cookingInstructions": "Bayat t\u0131rnak pideler kemik suyu ile \u0131slat\u0131l\u0131r. \xDCzerine sar\u0131msakl\u0131 yo\u011Furt, didilmi\u015F dana/kuzu eti, tereya\u011Fl\u0131 biber sos ve maydanoz serpilir.",
+    "portionCost": 68.2,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 11.7,
+    "totalCostPerPortion": 79.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 125,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_27_1",
+        "name": "Ha\u015Flanm\u0131\u015F Didik Kuzu / Dana Eti",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 54,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_27_2",
+        "name": "K\xFCp Do\u011Franm\u0131\u015F Bayat Pide",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 2.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_27_3",
+        "name": "\u0130likli Kemik Suyu",
+        "portionGrams": 80,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 2.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_27_4",
+        "name": "S\xFCzme Yo\u011Furt & K\u0131zg\u0131n Tereya\u011F\u0131",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_28",
+    "recipeCode": "REC-ETL-028",
+    "code": "REC-ETL-028",
+    "name": "Kavurma",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 90,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 540,
+    "proteinGrams": 42,
+    "carbGrams": 2,
+    "fatGrams": 40,
+    "nutritionalValues": {
+      "calories": 540,
+      "protein": 42,
+      "carbs": 2,
+      "fat": 40
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ku\u015Fba\u015F\u0131 dana eti kendi ya\u011F\u0131nda suyunu \xE7ekene kadar kavrulur, i\xE7 ya\u011F\u0131 ilave edilip k\u0131s\u0131k ate\u015Fte lokum gibi pi\u015Firilir.",
+    "cookingInstructions": "Ku\u015Fba\u015F\u0131 dana eti kendi ya\u011F\u0131nda suyunu \xE7ekene kadar kavrulur, i\xE7 ya\u011F\u0131 ilave edilip k\u0131s\u0131k ate\u015Fte lokum gibi pi\u015Firilir.",
+    "portionCost": 83.9,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 13.5,
+    "totalCostPerPortion": 97.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 150,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_28_1",
+        "name": "Dana But & Kol Ku\u015Fba\u015F\u0131",
+        "portionGrams": 180,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 79.2,
+        "wastagePercent": 28
+      },
+      {
+        "id": "ing_etl_28_2",
+        "name": "Kavurmal\u0131k Dana \u0130\xE7 Ya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 4.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_28_3",
+        "name": "Kaya Tuzu & Tane Karabiber",
+        "portionGrams": 4,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.24,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_29",
+    "recipeCode": "REC-ETL-029",
+    "code": "REC-ETL-029",
+    "name": "Sa\xE7 Kavurma",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 35,
+    "carbGrams": 10,
+    "fatGrams": 30,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 35,
+      "carbs": 10,
+      "fat": 30
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuzu eti i\xE7 ya\u011F\u0131 ile sa\xE7 tavada harl\u0131 ate\u015Fte \xE7evrilir; arpac\u0131k so\u011Fan, sar\u0131msak, sivri biber ve soyulmu\u015F k\xFCp domates eklenip suyunu \xE7ektirmeden pi\u015Firilir.",
+    "cookingInstructions": "Kuzu eti i\xE7 ya\u011F\u0131 ile sa\xE7 tavada harl\u0131 ate\u015Fte \xE7evrilir; arpac\u0131k so\u011Fan, sar\u0131msak, sivri biber ve soyulmu\u015F k\xFCp domates eklenip suyunu \xE7ektirmeden pi\u015Firilir.",
+    "portionCost": 71.9,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 84.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 130,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_29_1",
+        "name": "Kuzu Ku\u015Fba\u015F\u0131 (K\xFC\xE7\xFCk Do\u011Franm\u0131\u015F)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 64.4,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_etl_29_2",
+        "name": "Kuyruk / \u0130\xE7 Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_29_3",
+        "name": "K\xF6y Biberi & Salk\u0131m Domates",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.1,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_29_4",
+        "name": "Sar\u0131msak, Kekik & Pul Biber",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 0.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_30",
+    "recipeCode": "REC-ETL-030",
+    "code": "REC-ETL-030",
+    "name": "Kuzu Kapama",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 90,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 470,
+    "proteinGrams": 38,
+    "carbGrams": 12,
+    "fatGrams": 30,
+    "nutritionalValues": {
+      "calories": 470,
+      "protein": 38,
+      "carbs": 12,
+      "fat": 30
+    },
+    "allergens": [
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuzu kol etleri taze taze marul, taze so\u011Fan ve dereotu ile kapama tenceresine dizilip kendi buhar\u0131nda a\u011F\u0131r a\u011F\u0131r pi\u015Firilir.",
+    "cookingInstructions": "Kuzu kol etleri taze taze marul, taze so\u011Fan ve dereotu ile kapama tenceresine dizilip kendi buhar\u0131nda a\u011F\u0131r a\u011F\u0131r pi\u015Firilir.",
+    "portionCost": 80.3,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.7,
+    "totalCostPerPortion": 94,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 145,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_30_1",
+        "name": "Kuzu Kol Par\xE7a Et",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 73.6,
+        "wastagePercent": 25
+      },
+      {
+        "id": "ing_etl_30_2",
+        "name": "K\u0131v\u0131rc\u0131k Marul & Taze So\u011Fan",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.7,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_30_3",
+        "name": "Taze Dereotu & Tereya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_31",
+    "recipeCode": "REC-ETL-031",
+    "code": "REC-ETL-031",
+    "name": "Karn\u0131yar\u0131k",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 380,
+    "proteinGrams": 22,
+    "carbGrams": 18,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 22,
+      "carbs": 18,
+      "fat": 24
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Alacal\u0131 soyulup k\u0131zart\u0131lan kemer patl\u0131canlar\u0131n ortas\u0131 a\xE7\u0131l\u0131r, k\u0131ymal\u0131 so\u011Fanl\u0131 domatesli har\xE7 doldurulup sal\xE7al\u0131 f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "Alacal\u0131 soyulup k\u0131zart\u0131lan kemer patl\u0131canlar\u0131n ortas\u0131 a\xE7\u0131l\u0131r, k\u0131ymal\u0131 so\u011Fanl\u0131 domatesli har\xE7 doldurulup sal\xE7al\u0131 f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 35.7,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 46.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_etl_31_1",
+        "name": "Kemer Patl\u0131can",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 5.2,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_31_2",
+        "name": "Dana K\u0131yma (Karn\u0131yar\u0131k Harc\u0131)",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 27.3,
+        "wastagePercent": 14
+      },
+      {
+        "id": "ing_etl_31_3",
+        "name": "So\u011Fan, Domates, Biber & Sal\xE7a",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.58,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_31_4",
+        "name": "K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 80,
+        "portionCost": 1.6,
+        "wastagePercent": 10
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_32",
+    "recipeCode": "REC-ETL-032",
+    "code": "REC-ETL-032",
+    "name": "Patl\u0131can Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 490,
+    "proteinGrams": 34,
+    "carbGrams": 18,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 490,
+      "protein": 34,
+      "carbs": 18,
+      "fat": 32
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Gaziantep ve Birecik usul\xFC yuvarlak patl\u0131can dilimleri aras\u0131na z\u0131rh k\u0131yma k\xF6fteleri dizilip \u015Fi\u015Fte veya f\u0131r\u0131nda k\xF6z tad\u0131nda pi\u015Firilir.",
+    "cookingInstructions": "Gaziantep ve Birecik usul\xFC yuvarlak patl\u0131can dilimleri aras\u0131na z\u0131rh k\u0131yma k\xF6fteleri dizilip \u015Fi\u015Fte veya f\u0131r\u0131nda k\xF6z tad\u0131nda pi\u015Firilir.",
+    "portionCost": 68.4,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.7,
+    "totalCostPerPortion": 81.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 125,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_32_1",
+        "name": "Kuzu & Dana Z\u0131rh K\u0131yma",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 61.6,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_32_2",
+        "name": "Birecik Patl\u0131can\u0131 (Dilim)",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 5.4,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_32_3",
+        "name": "K\xF6z Biber & Domates Garnit\xFCr",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_33",
+    "recipeCode": "REC-ETL-033",
+    "code": "REC-ETL-033",
+    "name": "Kuzu G\xFCve\xE7",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 90,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 470,
+    "proteinGrams": 35,
+    "carbGrams": 18,
+    "fatGrams": 28,
+    "nutritionalValues": {
+      "calories": 470,
+      "protein": 35,
+      "carbs": 18,
+      "fat": 28
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Toprak g\xFCve\xE7te kuzu eti, patl\u0131can, arpac\u0131k so\u011Fan, taze fasulye, domates ve sar\u0131msak k\u0131s\u0131k ate\u015Fte kendi suyunda pi\u015Firilir.",
+    "cookingInstructions": "Toprak g\xFCve\xE7te kuzu eti, patl\u0131can, arpac\u0131k so\u011Fan, taze fasulye, domates ve sar\u0131msak k\u0131s\u0131k ate\u015Fte kendi suyunda pi\u015Firilir.",
+    "portionCost": 68.4,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.2,
+    "totalCostPerPortion": 81.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 125,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_33_1",
+        "name": "Kuzu Ku\u015Fba\u015F\u0131",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 64.4,
+        "wastagePercent": 22
+      },
+      {
+        "id": "ing_etl_33_2",
+        "name": "Patl\u0131can, Taze Fasulye & Domates",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.63,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_33_3",
+        "name": "Arpac\u0131k So\u011Fan & Sar\u0131msak",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 8
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_34",
+    "recipeCode": "REC-ETL-034",
+    "code": "REC-ETL-034",
+    "name": "Ek\u015Fili Ba\u015Fl\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 80,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 430,
+    "proteinGrams": 32,
+    "carbGrams": 22,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 430,
+      "protein": 32,
+      "carbs": 22,
+      "fat": 24
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kahramanmara\u015F ve Antep y\xF6resi usul\xFC kuzu ba\u015F eti, nohut, sumak ek\u015Fisi, kurutulmu\u015F biber ve nane ile ek\u015Fili g\xFCve\xE7 k\u0131vam\u0131nda pi\u015Firilir.",
+    "cookingInstructions": "Kahramanmara\u015F ve Antep y\xF6resi usul\xFC kuzu ba\u015F eti, nohut, sumak ek\u015Fisi, kurutulmu\u015F biber ve nane ile ek\u015Fili g\xFCve\xE7 k\u0131vam\u0131nda pi\u015Firilir.",
+    "portionCost": 58.1,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.2,
+    "totalCostPerPortion": 71.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 110,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_34_1",
+        "name": "Kuzu Ba\u015F / Gerdan Eti",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 53.2,
+        "wastagePercent": 25
+      },
+      {
+        "id": "ing_etl_34_2",
+        "name": "Ha\u015Flanm\u0131\u015F Ko\xE7ba\u015F\u0131 Nohut",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 2.93,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_34_3",
+        "name": "Do\u011Fal Sumak Ek\u015Fisi & Sar\u0131msak",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_35",
+    "recipeCode": "REC-ETL-035",
+    "code": "REC-ETL-035",
+    "name": "Anal\u0131 K\u0131zl\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 290,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 480,
+    "proteinGrams": 28,
+    "carbGrams": 42,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 28,
+      "carbs": 42,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\u0131ymal\u0131 i\xE7li k\xF6fteler ve minik bulgur k\xF6fteleri kuzu ku\u015Fba\u015F\u0131 eti ve nohutlu sal\xE7al\u0131 nane sosuyla pi\u015Firilen ana yemek \u015Faheseridir.",
+    "cookingInstructions": "K\u0131ymal\u0131 i\xE7li k\xF6fteler ve minik bulgur k\xF6fteleri kuzu ku\u015Fba\u015F\u0131 eti ve nohutlu sal\xE7al\u0131 nane sosuyla pi\u015Firilen ana yemek \u015Faheseridir.",
+    "portionCost": 44.8,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 13.5,
+    "totalCostPerPortion": 58.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 90,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_35_1",
+        "name": "\u0130\xE7li K\xF6fteler (Anal\u0131 Har\xE7)",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 16.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_35_2",
+        "name": "Bulgur Yuvalamas\u0131 (K\u0131zl\u0131)",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_35_3",
+        "name": "Kuzu Ku\u015Fba\u015F\u0131 & Ha\u015Flanm\u0131\u015F Nohut",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 21.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_35_4",
+        "name": "Tereya\u011F\u0131, Sal\xE7a & Kuru Nane",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 3.2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_36",
+    "recipeCode": "REC-ETL-036",
+    "code": "REC-ETL-036",
+    "name": "Kuzu \u0130ncik F\u0131r\u0131n",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 320,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 140,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 590,
+    "proteinGrams": 44,
+    "carbGrams": 14,
+    "fatGrams": 38,
+    "nutritionalValues": {
+      "calories": 590,
+      "protein": 44,
+      "carbs": 14,
+      "fat": 38
+    },
+    "allergens": [
+      "Gluten (Sos)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuzu incikler arpac\u0131k so\u011Fan, taze biberiye ve tane karabiberle m\xFCh\xFCrlenir. F\u0131r\u0131n po\u015Fetinde kemi\u011Finden ayr\u0131lacak yumu\u015Fakl\u0131\u011Fa gelene dek f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "Kuzu incikler arpac\u0131k so\u011Fan, taze biberiye ve tane karabiberle m\xFCh\xFCrlenir. F\u0131r\u0131n po\u015Fetinde kemi\u011Finden ayr\u0131lacak yumu\u015Fakl\u0131\u011Fa gelene dek f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 121.5,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 6,
+    "overheadCostPerPortion": 1.8,
+    "laborAndOverheadPerPortion": 16.3,
+    "totalCostPerPortion": 137.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 215,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_36_1",
+        "name": "Taze Kuzu \u0130ncik (Kemikli)",
+        "portionGrams": 260,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 117,
+        "wastagePercent": 40
+      },
+      {
+        "id": "ing_etl_36_2",
+        "name": "Bebek Patates & Arpac\u0131k So\u011Fan",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.1,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_36_3",
+        "name": "Taze Biberiye & Zeytinya\u011Fl\u0131 Sos",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_37",
+    "recipeCode": "REC-ETL-037",
+    "code": "REC-ETL-037",
+    "name": "Ci\u011Fer \u015Ei\u015F",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 440,
+    "proteinGrams": 35,
+    "carbGrams": 16,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 440,
+      "protein": 35,
+      "carbs": 16,
+      "fat": 26
+    },
+    "allergens": [
+      "Gluten (Lava\u015F)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuzu ci\u011Feri ve aralar\u0131na kuyruk ya\u011F\u0131 dizilerek mangal ate\u015Finde nar gibi k\u0131zart\u0131l\u0131r; kimyon ve sumakl\u0131 so\u011Fanla s\u0131cak lava\u015Fta servis edilir.",
+    "cookingInstructions": "Kuzu ci\u011Feri ve aralar\u0131na kuyruk ya\u011F\u0131 dizilerek mangal ate\u015Finde nar gibi k\u0131zart\u0131l\u0131r; kimyon ve sumakl\u0131 so\u011Fanla s\u0131cak lava\u015Fta servis edilir.",
+    "portionCost": 69.2,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11.5,
+    "totalCostPerPortion": 80.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 125,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_37_1",
+        "name": "Taze Kuzu Ci\u011Feri",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 58.8,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_37_2",
+        "name": "Kuzu Kuyruk Ya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 8.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_37_3",
+        "name": "Tand\u0131r Lava\u015F & Sumakl\u0131 Piyaz",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_38",
+    "recipeCode": "REC-ETL-038",
+    "code": "REC-ETL-038",
+    "name": "Kuzu S\u0131rt\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 520,
+    "proteinGrams": 42,
+    "carbGrams": 4,
+    "fatGrams": 38,
+    "nutritionalValues": {
+      "calories": 520,
+      "protein": 42,
+      "carbs": 4,
+      "fat": 38
+    },
+    "allergens": [
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuzu s\u0131rt eti taze kekik ve zeytinya\u011F\u0131 ile marine edilir, d\xF6k\xFCm \u0131zgarada d\u0131\u015F\u0131 m\xFCh\xFCrlenip i\xE7i sulu ve pembe \u015Fekilde dinlendirilir.",
+    "cookingInstructions": "Kuzu s\u0131rt eti taze kekik ve zeytinya\u011F\u0131 ile marine edilir, d\xF6k\xFCm \u0131zgarada d\u0131\u015F\u0131 m\xFCh\xFCrlenip i\xE7i sulu ve pembe \u015Fekilde dinlendirilir.",
+    "portionCost": 121.8,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 14,
+    "totalCostPerPortion": 135.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 210,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_38_1",
+        "name": "Taze Kuzu S\u0131rt\u0131 (K\xFC\u015Fleme/Karski)",
+        "portionGrams": 180,
+        "unit": "g",
+        "unitCost": 650,
+        "portionCost": 117,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_etl_38_2",
+        "name": "Taze Kekik, Sar\u0131msak & Tereya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_39",
+    "recipeCode": "REC-ETL-039",
+    "code": "REC-ETL-039",
+    "name": "B\xFCryan Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 150,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 560,
+    "proteinGrams": 42,
+    "carbGrams": 8,
+    "fatGrams": 40,
+    "nutritionalValues": {
+      "calories": 560,
+      "protein": 42,
+      "carbs": 8,
+      "fat": 40
+    },
+    "allergens": [
+      "Gluten (Pide)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Siirt ve Bitlis usul\xFC kuzu eti derin kuyu tand\u0131r\u0131nda hava almadan 2.5 saat kendi buhar\u0131nda pi\u015Firilir; s\u0131cak pide \xFCzerinde servis edilir.",
+    "cookingInstructions": "Siirt ve Bitlis usul\xFC kuzu eti derin kuyu tand\u0131r\u0131nda hava almadan 2.5 saat kendi buhar\u0131nda pi\u015Firilir; s\u0131cak pide \xFCzerinde servis edilir.",
+    "portionCost": 102.6,
+    "laborCostPerPortion": 9,
+    "gasEnergyCostPerPortion": 6,
+    "overheadCostPerPortion": 2,
+    "laborAndOverheadPerPortion": 17,
+    "totalCostPerPortion": 119.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 185,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_39_1",
+        "name": "Kuzu But & Kaburga (Kuyu Tand\u0131r)",
+        "portionGrams": 210,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 100.8,
+        "wastagePercent": 35
+      },
+      {
+        "id": "ing_etl_39_2",
+        "name": "T\u0131rnak Pide Taban\u0131",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_40",
+    "recipeCode": "REC-ETL-040",
+    "code": "REC-ETL-040",
+    "name": "Orman Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 65,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 30,
+    "carbGrams": 22,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 30,
+      "carbs": 22,
+      "fat": 22
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bolu orman kebab\u0131 klasi\u011Fi; dana ku\u015Fba\u015F\u0131 arpac\u0131k so\u011Fan, patates, havu\xE7, bezelye ve da\u011F keki\u011Fi ile a\u011F\u0131r ate\u015Fte g\xFCve\xE7te pi\u015Firilir.",
+    "cookingInstructions": "Bolu orman kebab\u0131 klasi\u011Fi; dana ku\u015Fba\u015F\u0131 arpac\u0131k so\u011Fan, patates, havu\xE7, bezelye ve da\u011F keki\u011Fi ile a\u011F\u0131r ate\u015Fte g\xFCve\xE7te pi\u015Firilir.",
+    "portionCost": 60.1,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 72.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 110,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_etl_40_1",
+        "name": "Dana Ku\u015Fba\u015F\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 57.2,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_etl_40_2",
+        "name": "Havu\xE7, Patates & Taze Bezelye",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 1.8,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_40_3",
+        "name": "Arpac\u0131k So\u011Fan & Da\u011F Keki\u011Fi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.13,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_41",
+    "recipeCode": "REC-ETL-041",
+    "code": "REC-ETL-041",
+    "name": "P\xF6\xE7 Kebab\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 300,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 210,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 580,
+    "proteinGrams": 45,
+    "carbGrams": 8,
+    "fatGrams": 40,
+    "nutritionalValues": {
+      "calories": 580,
+      "protein": 45,
+      "carbs": 8,
+      "fat": 40
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kayseri klasi\u011Fi dana kuyruk sokumu (p\xF6\xE7) g\xFCve\xE7te sar\u0131msak, arpac\u0131k so\u011Fan ve defne yapra\u011F\u0131yla f\u0131r\u0131nda 3.5 saatte kemi\u011Finden tel tel d\xF6k\xFClene dek pi\u015Firilir.",
+    "cookingInstructions": "Kayseri klasi\u011Fi dana kuyruk sokumu (p\xF6\xE7) g\xFCve\xE7te sar\u0131msak, arpac\u0131k so\u011Fan ve defne yapra\u011F\u0131yla f\u0131r\u0131nda 3.5 saatte kemi\u011Finden tel tel d\xF6k\xFClene dek pi\u015Firilir.",
+    "portionCost": 100.4,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 6.5,
+    "overheadCostPerPortion": 1.8,
+    "laborAndOverheadPerPortion": 16.8,
+    "totalCostPerPortion": 117.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 180,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_41_1",
+        "name": "Dana P\xF6\xE7 (Kuyruk Sokumu Eti)",
+        "portionGrams": 260,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 98.8,
+        "wastagePercent": 40
+      },
+      {
+        "id": "ing_etl_41_2",
+        "name": "Sar\u0131msak, Arpac\u0131k So\u011Fan & Defne",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.6,
+        "wastagePercent": 10
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_42",
+    "recipeCode": "REC-ETL-042",
+    "code": "REC-ETL-042",
+    "name": "Kiremitte K\xF6fte / Et",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 520,
+    "proteinGrams": 35,
+    "carbGrams": 14,
+    "fatGrams": 36,
+    "nutritionalValues": {
+      "calories": 520,
+      "protein": 35,
+      "carbs": 14,
+      "fat": 36
+    },
+    "allergens": [
+      "Laktoz (Ka\u015Far)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xD6zel kiremit tabakta pi\u015Firilen k\xF6fte ve dana etleri mantar, domates, biber ve bol ka\u015Far peyniriyle f\u0131r\u0131nlan\u0131p c\u0131z\u0131rdayarak servis edilir.",
+    "cookingInstructions": "\xD6zel kiremit tabakta pi\u015Firilen k\xF6fte ve dana etleri mantar, domates, biber ve bol ka\u015Far peyniriyle f\u0131r\u0131nlan\u0131p c\u0131z\u0131rdayarak servis edilir.",
+    "portionCost": 70.5,
+    "laborCostPerPortion": 7.2,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 11.9,
+    "totalCostPerPortion": 82.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 130,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_etl_42_1",
+        "name": "Dana Izgara K\xF6fte / Ku\u015Fba\u015F\u0131",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 430,
+        "portionCost": 60.2,
+        "wastagePercent": 16
+      },
+      {
+        "id": "ing_etl_42_2",
+        "name": "K\xFClt\xFCr Mantar\u0131 & Domates Biber",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 2.5,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_etl_42_3",
+        "name": "Rendelenmi\u015F Taze Ka\u015Far Peyniri",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 7.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_43",
+    "recipeCode": "REC-ETL-043",
+    "code": "REC-ETL-043",
+    "name": "Kuru Et (Bo\u015Fnak Usul\xFC)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 390,
+    "proteinGrams": 42,
+    "carbGrams": 2,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 42,
+      "carbs": 2,
+      "fat": 24
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130sli me\u015Fe duman\u0131nda kurutulmu\u015F dana but eti ince ince dilimlenip hafif tereya\u011F\u0131nda \xE7evrilerek veya so\u011Fuk \u015Fark\xFCteri mezesi olarak sunulur.",
+    "cookingInstructions": "\u0130sli me\u015Fe duman\u0131nda kurutulmu\u015F dana but eti ince ince dilimlenip hafif tereya\u011F\u0131nda \xE7evrilerek veya so\u011Fuk \u015Fark\xFCteri mezesi olarak sunulur.",
+    "portionCost": 115.3,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 124.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 195,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_43_1",
+        "name": "\u0130sli Kuru Et (Dana Nuar)",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 850,
+        "portionCost": 110.5,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_43_2",
+        "name": "K\xF6y Tereya\u011F\u0131 & Kekik",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_44",
+    "recipeCode": "REC-ETL-044",
+    "code": "REC-ETL-044",
+    "name": "Abdig\xF6r K\xF6ftesi",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 50,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 380,
+    "proteinGrams": 36,
+    "carbGrams": 18,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 36,
+      "carbs": 18,
+      "fat": 18
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Do\u011Fubayaz\u0131t saray mutfa\u011F\u0131n\u0131n 400 y\u0131ll\u0131k lezzeti; ya\u011Fs\u0131z dana eti ta\u015F \xFCzerinde tokmakla macun k\u0131vam\u0131na gelene kadar d\xF6v\xFCl\xFCr, so\u011Fan ve az pirin\xE7le yo\u011Frulup et suyunda ha\u015Flan\u0131r.",
+    "cookingInstructions": "Do\u011Fubayaz\u0131t saray mutfa\u011F\u0131n\u0131n 400 y\u0131ll\u0131k lezzeti; ya\u011Fs\u0131z dana eti ta\u015F \xFCzerinde tokmakla macun k\u0131vam\u0131na gelene kadar d\xF6v\xFCl\xFCr, so\u011Fan ve az pirin\xE7le yo\u011Frulup et suyunda ha\u015Flan\u0131r.",
+    "portionCost": 81.6,
+    "laborCostPerPortion": 9,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 14,
+    "totalCostPerPortion": 95.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 150,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_44_1",
+        "name": "Ta\u015Fta D\xF6v\xFClm\xFC\u015F Ya\u011Fs\u0131z Dana Eti",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 76.8,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_44_2",
+        "name": "K\u0131r\u0131k Pirin\xE7 & Kuru So\u011Fan P\xFCresi",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_44_3",
+        "name": "Kemik Suyu & Tereya\u011Fl\u0131 Pilav Taban\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 3.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_45",
+    "recipeCode": "REC-ETL-045",
+    "code": "REC-ETL-045",
+    "name": "Oruk (\u0130\xE7li K\xF6fte)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 25,
+    "carbGrams": 38,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 25,
+      "carbs": 38,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Antakya usul\xFC bulgur, et ve baharatla yo\u011Frulan d\u0131\u015F kabuk incecik oyulur; i\xE7ine cevizli, k\u0131ymal\u0131, bol so\u011Fanl\u0131 har\xE7 doldurulup f\u0131r\u0131nda veya k\u0131zg\u0131n ya\u011Fda pi\u015Firilir.",
+    "cookingInstructions": "Antakya usul\xFC bulgur, et ve baharatla yo\u011Frulan d\u0131\u015F kabuk incecik oyulur; i\xE7ine cevizli, k\u0131ymal\u0131, bol so\u011Fanl\u0131 har\xE7 doldurulup f\u0131r\u0131nda veya k\u0131zg\u0131n ya\u011Fda pi\u015Firilir.",
+    "portionCost": 51.8,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.7,
+    "totalCostPerPortion": 64.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 100,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_45_1",
+        "name": "Dana & Kuzu K\u0131yma Harc\u0131",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 430,
+        "portionCost": 38.7,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_45_2",
+        "name": "K\xF6ftelik \u0130nce Esmer Bulgur",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_45_3",
+        "name": "K\u0131r\u0131k Ceviz \u0130\xE7i",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 8,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_etl_45_4",
+        "name": "Kuru So\u011Fan, Tereya\u011F\u0131 & Baharatlar",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_46",
+    "recipeCode": "REC-ETL-046",
+    "code": "REC-ETL-046",
+    "name": "\xC7i\u011F K\xF6fte (Etli Geleneksel)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 50,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 380,
+    "proteinGrams": 26,
+    "carbGrams": 36,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 26,
+      "carbs": 36,
+      "fat": 14
+    },
+    "allergens": [
+      "Gluten (Bulgur)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u015Eanl\u0131urfa usul\xFC sinirleri tamamen temizlenmi\u015F kara et (dana/kuzu nuar) ta\u015Fta d\xF6v\xFCl\xFCr; isot, sar\u0131msak, sal\xE7a ve esmer bulgurla buz ile uzun s\xFCre yo\u011Frulur.",
+    "cookingInstructions": "\u015Eanl\u0131urfa usul\xFC sinirleri tamamen temizlenmi\u015F kara et (dana/kuzu nuar) ta\u015Fta d\xF6v\xFCl\xFCr; isot, sar\u0131msak, sal\xE7a ve esmer bulgurla buz ile uzun s\xFCre yo\u011Frulur.",
+    "portionCost": 50.9,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 0.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 60.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 95,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_46_1",
+        "name": "Ya\u011Fs\u0131z Sinirsiz Dana/Kuzu Eti (D\xF6v\xFClm\xFC\u015F)",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 520,
+        "portionCost": 41.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_46_2",
+        "name": "\xD6zel \xC7i\u011F K\xF6ftelik Esmer Bulgur",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.93,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_46_3",
+        "name": "Urfa Hakiki \u0130pek \u0130sot & Sal\xE7a",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_46_4",
+        "name": "Taze Nane, Maydanoz, Sar\u0131msak & Marul",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.6,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_47",
+    "recipeCode": "REC-ETL-047",
+    "code": "REC-ETL-047",
+    "name": "Tavuk Sote",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 320,
+    "proteinGrams": 32,
+    "carbGrams": 10,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 320,
+      "protein": 32,
+      "carbs": 10,
+      "fat": 16
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ku\u015Fba\u015F\u0131 tavuk g\xF6\u011Fs\xFC harl\u0131 tavada m\xFCh\xFCrlenir; so\u011Fan, renkli biberler, domates ve kekik ile sulu sulu sotelenir.",
+    "cookingInstructions": "Ku\u015Fba\u015F\u0131 tavuk g\xF6\u011Fs\xFC harl\u0131 tavada m\xFCh\xFCrlenir; so\u011Fan, renkli biberler, domates ve kekik ile sulu sulu sotelenir.",
+    "portionCost": 32.2,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 40.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_etl_47_1",
+        "name": "Tavuk G\xF6\u011F\xFCs Ku\u015Fba\u015F\u0131",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 28.5,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_47_2",
+        "name": "K\xF6y Biberi & Kapya Biber",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_47_3",
+        "name": "Domates, So\u011Fan, Sal\xE7a & Kekik",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_etl_47_4",
+        "name": "S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 0.9,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_48",
+    "recipeCode": "REC-ETL-048",
+    "code": "REC-ETL-048",
+    "name": "F\u0131r\u0131nda B\xFCt\xFCn Tavuk",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 300,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 75,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 40,
+    "carbGrams": 8,
+    "fatGrams": 30,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 40,
+      "carbs": 8,
+      "fat": 30
+    },
+    "allergens": [
+      "Laktoz (Tereya\u011Fl\u0131 Sos)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "B\xFCt\xFCn pili\xE7 yo\u011Furt, sal\xE7a, sar\u0131msak ve tereya\u011Fl\u0131 \xF6zel sosla ovulup f\u0131r\u0131nda nar gibi k\u0131zarana kadar nar f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "B\xFCt\xFCn pili\xE7 yo\u011Furt, sal\xE7a, sar\u0131msak ve tereya\u011Fl\u0131 \xF6zel sosla ovulup f\u0131r\u0131nda nar gibi k\u0131zarana kadar nar f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 33.3,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 11.7,
+    "totalCostPerPortion": 45,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_48_1",
+        "name": "K\xF6y Tipi B\xFCt\xFCn Pili\xE7 (Porsiyon)",
+        "portionGrams": 240,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 28.8,
+        "wastagePercent": 30
+      },
+      {
+        "id": "ing_etl_48_2",
+        "name": "Marine Sos (Yo\u011Furt, Sal\xE7a, Tereya\u011F\u0131)",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 100,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_48_3",
+        "name": "F\u0131r\u0131n Bebek Patates & Biber",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 1.5,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_49",
+    "recipeCode": "REC-ETL-049",
+    "code": "REC-ETL-049",
+    "name": "\xC7erkez Tavu\u011Fu",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 28,
+    "carbGrams": 14,
+    "fatGrams": 28,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 28,
+      "carbs": 14,
+      "fat": 28
+    },
+    "allergens": [
+      "Ceviz",
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ha\u015Flanm\u0131\u015F tavuk g\xF6\u011Fs\xFC ince tiftiklenir. \xC7ekilmi\u015F ceviz i\xE7i, sar\u0131msak, bayat ekmek i\xE7i ve tavuk suyu ile macun k\u0131vam\u0131na getirilip \xFCzerine ceviz ya\u011F\u0131 gezdirilir.",
+    "cookingInstructions": "Ha\u015Flanm\u0131\u015F tavuk g\xF6\u011Fs\xFC ince tiftiklenir. \xC7ekilmi\u015F ceviz i\xE7i, sar\u0131msak, bayat ekmek i\xE7i ve tavuk suyu ile macun k\u0131vam\u0131na getirilip \xFCzerine ceviz ya\u011F\u0131 gezdirilir.",
+    "portionCost": 44.8,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 54.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 85,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_49_1",
+        "name": "Tavuk G\xF6\u011F\xFCs Eti (Tiftik)",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 20.9,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_49_2",
+        "name": "Yerli Ceviz \u0130\xE7i (\xC7ekilmi\u015F)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 20,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_etl_49_3",
+        "name": "Ekmek \u0130\xE7i, Sar\u0131msak & Tavuk Suyu",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_49_4",
+        "name": "K\u0131rm\u0131z\u0131 Pul Biberli Ceviz Ya\u011F\u0131",
+        "portionGrams": 10,
+        "unit": "ml",
+        "unitCost": 250,
+        "portionCost": 2.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_50",
+    "recipeCode": "REC-ETL-050",
+    "code": "REC-ETL-050",
+    "name": "Tavuklu Pilav (Pilav \xDCst\xFC Tavuk)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 450,
+    "proteinGrams": 26,
+    "carbGrams": 55,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 450,
+      "protein": 26,
+      "carbs": 55,
+      "fat": 14
+    },
+    "allergens": [
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tavuk suyuyla demlenmi\u015F nohutlu tereya\u011Fl\u0131 tane baldo pirin\xE7 pilav\u0131n\u0131n \xFCzerine ha\u015Flan\u0131p didilmi\u015F tavuk eti yerle\u015Ftirilir; karabiber serpilerek servis edilir.",
+    "cookingInstructions": "Tavuk suyuyla demlenmi\u015F nohutlu tereya\u011Fl\u0131 tane baldo pirin\xE7 pilav\u0131n\u0131n \xFCzerine ha\u015Flan\u0131p didilmi\u015F tavuk eti yerle\u015Ftirilir; karabiber serpilerek servis edilir.",
+    "portionCost": 27.1,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 36.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 55,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_etl_50_1",
+        "name": "Baldo Pirin\xE7 & Tavuk Suyu",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_50_2",
+        "name": "Didiklenmi\u015F Tavuk G\xF6\u011F\xFCs/But Eti",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 17.1,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_50_3",
+        "name": "Ha\u015Flanm\u0131\u015F Nohut & Tereya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_51",
+    "recipeCode": "REC-ETL-051",
+    "code": "REC-ETL-051",
+    "name": "Ali Nazik Tavuklu",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 390,
+    "proteinGrams": 30,
+    "carbGrams": 12,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 30,
+      "carbs": 12,
+      "fat": 24
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Sar\u0131msakl\u0131 k\xF6z patl\u0131can yo\u011Furt yata\u011F\u0131n\u0131n \xFCzerine tereya\u011F\u0131nda kekikli ve toz k\u0131rm\u0131z\u0131 biberli sotelenmi\u015F tavuk fileto par\xE7alar\u0131 eklenir.",
+    "cookingInstructions": "Sar\u0131msakl\u0131 k\xF6z patl\u0131can yo\u011Furt yata\u011F\u0131n\u0131n \xFCzerine tereya\u011F\u0131nda kekikli ve toz k\u0131rm\u0131z\u0131 biberli sotelenmi\u015F tavuk fileto par\xE7alar\u0131 eklenir.",
+    "portionCost": 37.9,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 48.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_51_1",
+        "name": "Tavuk Bonfile Ku\u015Fba\u015F\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 195,
+        "portionCost": 25.35,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_etl_51_2",
+        "name": "K\xF6z Patl\u0131can & S\xFCzme Yo\u011Furt",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 7.7,
+        "wastagePercent": 5,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_51_3",
+        "name": "Mutfak Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_52",
+    "recipeCode": "REC-ETL-052",
+    "code": "REC-ETL-052",
+    "name": "Tavuk G\xFCve\xE7",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 28,
+    "carbGrams": 16,
+    "fatGrams": 20,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 28,
+      "carbs": 16,
+      "fat": 20
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ku\u015Fba\u015F\u0131 tavuk but eti, mantar, biber, arpac\u0131k so\u011Fan ve domates toprak g\xFCve\xE7te k\u0131s\u0131k ate\u015Fte f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "Ku\u015Fba\u015F\u0131 tavuk but eti, mantar, biber, arpac\u0131k so\u011Fan ve domates toprak g\xFCve\xE7te k\u0131s\u0131k ate\u015Fte f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 30.1,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 40.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_etl_52_1",
+        "name": "Tavuk But Ku\u015Fba\u015F\u0131 (Derisiz)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 185,
+        "portionCost": 25.9,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_52_2",
+        "name": "K\xFClt\xFCr Mantar\u0131 & K\xF6y Biberi",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 2.75,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_etl_52_3",
+        "name": "Arpac\u0131k So\u011Fan, Sar\u0131msak & Sal\xE7a",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_53",
+    "recipeCode": "REC-ETL-053",
+    "code": "REC-ETL-053",
+    "name": "Mantarl\u0131 Tavuk Sote",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 30,
+    "carbGrams": 9,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 30,
+      "carbs": 9,
+      "fat": 18
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tavuk g\xF6\u011Fs\xFC j\xFClyen do\u011Fran\u0131p k\xFClt\xFCr mantarlar\u0131, renkli kapya biber ve arpac\u0131k so\u011Fanla wok tavada sotelenir.",
+    "cookingInstructions": "Tavuk g\xF6\u011Fs\xFC j\xFClyen do\u011Fran\u0131p k\xFClt\xFCr mantarlar\u0131, renkli kapya biber ve arpac\u0131k so\u011Fanla wok tavada sotelenir.",
+    "portionCost": 33.2,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 42.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_53_1",
+        "name": "Tavuk G\xF6\u011F\xFCs Eti (Ku\u015Fba\u015F\u0131)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 26.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_53_2",
+        "name": "Taze K\xFClt\xFCr Mantar\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 4.8,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_53_3",
+        "name": "Kapya Biber, Sivri Biber & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1.75,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_54",
+    "recipeCode": "REC-ETL-054",
+    "code": "REC-ETL-054",
+    "name": "Tavuk \u015Ei\u015F",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 370,
+    "proteinGrams": 36,
+    "carbGrams": 14,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 370,
+      "protein": 36,
+      "carbs": 14,
+      "fat": 18
+    },
+    "allergens": [
+      "Gluten (Lava\u015F)",
+      "Laktoz (Marine)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ku\u015Fba\u015F\u0131 tavuk but/g\xF6\u011F\xFCs yo\u011Furt, sal\xE7a, sar\u0131msak ve zeytinya\u011F\u0131yla marine edilir; \u015Fi\u015Flere dizilip \u0131zgarada yumu\u015Fac\u0131k pi\u015Firilir.",
+    "cookingInstructions": "Ku\u015Fba\u015F\u0131 tavuk but/g\xF6\u011F\xFCs yo\u011Furt, sal\xE7a, sar\u0131msak ve zeytinya\u011F\u0131yla marine edilir; \u015Fi\u015Flere dizilip \u0131zgarada yumu\u015Fac\u0131k pi\u015Firilir.",
+    "portionCost": 34.1,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 43.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_etl_54_1",
+        "name": "Tavuk But & G\xF6\u011F\xFCs Ku\u015Fba\u015F\u0131",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 30.4,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_54_2",
+        "name": "Yo\u011Furtlu Marine Sos",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 1.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_etl_54_3",
+        "name": "Lava\u015F & K\xF6zlenmi\u015F Biber",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_55",
+    "recipeCode": "REC-ETL-055",
+    "code": "REC-ETL-055",
+    "name": "Tavuk Kanat (Izgara/F\u0131r\u0131n)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 480,
+    "proteinGrams": 32,
+    "carbGrams": 6,
+    "fatGrams": 36,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 32,
+      "carbs": 6,
+      "fat": 36
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze tavuk kanatlar\u0131 zeytinya\u011F\u0131, pul biber, kekik ve sar\u0131msakl\u0131 marine ile harmanlan\u0131p \u0131zgara veya f\u0131r\u0131nda \xE7\u0131t\u0131r \xE7\u0131t\u0131r k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Taze tavuk kanatlar\u0131 zeytinya\u011F\u0131, pul biber, kekik ve sar\u0131msakl\u0131 marine ile harmanlan\u0131p \u0131zgara veya f\u0131r\u0131nda \xE7\u0131t\u0131r \xE7\u0131t\u0131r k\u0131zart\u0131l\u0131r.",
+    "portionCost": 40.4,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 49.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_etl_55_1",
+        "name": "Taze Tavuk Kanat",
+        "portionGrams": 240,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 38.4,
+        "wastagePercent": 35
+      },
+      {
+        "id": "ing_etl_55_2",
+        "name": "\xD6zel Baharatl\u0131 Kanat Sosu",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_56",
+    "recipeCode": "REC-ETL-056",
+    "code": "REC-ETL-056",
+    "name": "Firikli Tavuk Dolmas\u0131",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 300,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 70,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 520,
+    "proteinGrams": 35,
+    "carbGrams": 45,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 520,
+      "protein": 35,
+      "carbs": 45,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "T\xFCts\xFCl\xFC firik bu\u011Fday\u0131 ve bademli pilavla doldurulan tavuk but/b\xFCt\xFCn pili\xE7 f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "T\xFCts\xFCl\xFC firik bu\u011Fday\u0131 ve bademli pilavla doldurulan tavuk but/b\xFCt\xFCn pili\xE7 f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "portionCost": 38.7,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 13.2,
+    "totalCostPerPortion": 51.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 80,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_56_1",
+        "name": "Tavuk But Dolmal\u0131k",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 28.8,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_etl_56_2",
+        "name": "Firik Bulguru & Tereya\u011F\u0131",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 4.68,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_etl_56_3",
+        "name": "Badem & Baharat Kar\u0131\u015F\u0131m\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 350,
+        "portionCost": 5.25,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_57",
+    "recipeCode": "REC-ETL-057",
+    "code": "REC-ETL-057",
+    "name": "Tavuk K\xF6ftesi",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 32,
+    "carbGrams": 14,
+    "fatGrams": 19,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 32,
+      "carbs": 14,
+      "fat": 19
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xC7ekilmi\u015F tavuk k\u0131ymas\u0131 maydanoz, so\u011Fan, bayat ekmek i\xE7i ve baharatlarla yo\u011Frulup \u0131zgarada sulu sulu pi\u015Firilir.",
+    "cookingInstructions": "\xC7ekilmi\u015F tavuk k\u0131ymas\u0131 maydanoz, so\u011Fan, bayat ekmek i\xE7i ve baharatlarla yo\u011Frulup \u0131zgarada sulu sulu pi\u015Firilir.",
+    "portionCost": 31.2,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 40.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_etl_57_1",
+        "name": "Taze Tavuk K\u0131ymas\u0131 (But+G\xF6\u011F\xFCs)",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 175,
+        "portionCost": 28,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_57_2",
+        "name": "Ekmek \u0130\xE7i, Yumurta & So\u011Fan",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 1.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_etl_57_3",
+        "name": "Garnit\xFCr Piyaz & K\xF6z Domates",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_58",
+    "recipeCode": "REC-ETL-058",
+    "code": "REC-ETL-058",
+    "name": "Kremal\u0131 Tavuk Makarna / Sote",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 510,
+    "proteinGrams": 30,
+    "carbGrams": 48,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 510,
+      "protein": 30,
+      "carbs": 48,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "J\xFClyen tavuk par\xE7alar\u0131 mantar ile sotelenir, ha\u015Flanm\u0131\u015F penne makarna ve taze krema-fesle\u011Fen sosuyla birle\u015Ftirilir.",
+    "cookingInstructions": "J\xFClyen tavuk par\xE7alar\u0131 mantar ile sotelenir, ha\u015Flanm\u0131\u015F penne makarna ve taze krema-fesle\u011Fen sosuyla birle\u015Ftirilir.",
+    "portionCost": 29.3,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 38.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_58_1",
+        "name": "Tavuk G\xF6\u011F\xFCs Eti",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 20.9,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_etl_58_2",
+        "name": "Durum Bu\u011Fday\u0131 Penne Makarna",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_58_3",
+        "name": "Yemeklik S\u0131v\u0131 Krema & Mantar",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 5.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_59",
+    "recipeCode": "REC-ETL-059",
+    "code": "REC-ETL-059",
+    "name": "Tavuk D\xF6ner",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 440,
+    "proteinGrams": 35,
+    "carbGrams": 26,
+    "fatGrams": 21,
+    "nutritionalValues": {
+      "calories": 440,
+      "protein": 35,
+      "carbs": 26,
+      "fat": 21
+    },
+    "allergens": [
+      "Gluten (Pide/Lava\u015F)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xD6zel yo\u011Furtlu sar\u0131msakl\u0131 marine ile dinlendirilmi\u015F tavuk but yapraklar\u0131 d\xF6ner oca\u011F\u0131nda pi\u015Firilip ince yapraklar halinde kesilir.",
+    "cookingInstructions": "\xD6zel yo\u011Furtlu sar\u0131msakl\u0131 marine ile dinlendirilmi\u015F tavuk but yapraklar\u0131 d\xF6ner oca\u011F\u0131nda pi\u015Firilip ince yapraklar halinde kesilir.",
+    "portionCost": 32.1,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 11.2,
+    "totalCostPerPortion": 43.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_etl_59_1",
+        "name": "Marine Tavuk But D\xF6ner Eti",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 28.5,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_etl_59_2",
+        "name": "Lava\u015F / T\u0131rnak Pide",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_etl_59_3",
+        "name": "Tur\u015Fu, Domates & \xD6zel Sos",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.58,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_60",
+    "recipeCode": "REC-ETL-060",
+    "code": "REC-ETL-060",
+    "name": "Kaz Eti Tiriti",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 290,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 120,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 580,
+    "proteinGrams": 38,
+    "carbGrams": 42,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 580,
+      "protein": 38,
+      "carbs": 42,
+      "fat": 32
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kars usul\xFC tuzlan\u0131p ayazda kurutulmu\u015F kaz eti ha\u015Flan\u0131r; kaz ya\u011Fl\u0131 suyuyla bulgur pilav\u0131 ve yufka ekme\u011Fi \u0131slat\u0131l\u0131p didilmi\u015F kaz eti ile sunulur.",
+    "cookingInstructions": "Kars usul\xFC tuzlan\u0131p ayazda kurutulmu\u015F kaz eti ha\u015Flan\u0131r; kaz ya\u011Fl\u0131 suyuyla bulgur pilav\u0131 ve yufka ekme\u011Fi \u0131slat\u0131l\u0131p didilmi\u015F kaz eti ile sunulur.",
+    "portionCost": 88.7,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 5.5,
+    "overheadCostPerPortion": 1.8,
+    "laborAndOverheadPerPortion": 15.8,
+    "totalCostPerPortion": 104.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 160,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_etl_60_1",
+        "name": "Do\u011Fal Kars Kaz Eti",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 520,
+        "portionCost": 83.2,
+        "wastagePercent": 28
+      },
+      {
+        "id": "ing_etl_60_2",
+        "name": "Kaz Ya\u011Fl\u0131 Bulgur Pilav\u0131 & Yufka",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 5.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_61",
+    "recipeCode": "REC-ETL-061",
+    "code": "REC-ETL-061",
+    "name": "\xD6rdek Dolmas\u0131 / Eti",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 290,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 110,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 560,
+    "proteinGrams": 36,
+    "carbGrams": 35,
+    "fatGrams": 32,
+    "nutritionalValues": {
+      "calories": 560,
+      "protein": 36,
+      "carbs": 35,
+      "fat": 32
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "F\u0131r\u0131nda nar gibi k\u0131zart\u0131lan \xF6rdek eti portakal aromal\u0131 i\xE7 pilav ile doldurularak geleneksel y\xF6ntemle pi\u015Firilir.",
+    "cookingInstructions": "F\u0131r\u0131nda nar gibi k\u0131zart\u0131lan \xF6rdek eti portakal aromal\u0131 i\xE7 pilav ile doldurularak geleneksel y\xF6ntemle pi\u015Firilir.",
+    "portionCost": 87.6,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 5,
+    "overheadCostPerPortion": 1.8,
+    "laborAndOverheadPerPortion": 15.3,
+    "totalCostPerPortion": 102.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 160,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_61_1",
+        "name": "\xD6rdek Eti (Porsiyon)",
+        "portionGrams": 170,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 81.6,
+        "wastagePercent": 30
+      },
+      {
+        "id": "ing_etl_61_2",
+        "name": "Ku\u015F \xDCz\xFCml\xFC & F\u0131st\u0131kl\u0131 \u0130\xE7 Pilav",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_62",
+    "recipeCode": "REC-ETL-062",
+    "code": "REC-ETL-062",
+    "name": "K\xF6y Tavu\u011Fu Ha\u015Flama",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 90,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 380,
+    "proteinGrams": 36,
+    "carbGrams": 14,
+    "fatGrams": 20,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 36,
+      "carbs": 14,
+      "fat": 20
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Do\u011Fal gezen k\xF6y tavu\u011Fu havu\xE7, patates, arpac\u0131k so\u011Fan ve tane karabiberle k\u0131s\u0131k ate\u015Fte bol \u015Fifal\u0131 suyuyla ha\u015Flan\u0131r.",
+    "cookingInstructions": "Do\u011Fal gezen k\xF6y tavu\u011Fu havu\xE7, patates, arpac\u0131k so\u011Fan ve tane karabiberle k\u0131s\u0131k ate\u015Fte bol \u015Fifal\u0131 suyuyla ha\u015Flan\u0131r.",
+    "portionCost": 41.4,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 4.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11.5,
+    "totalCostPerPortion": 52.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 80,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_etl_62_1",
+        "name": "K\xF6y Tavu\u011Fu Par\xE7a But & G\xF6\u011F\xFCs",
+        "portionGrams": 180,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 39.6,
+        "wastagePercent": 25
+      },
+      {
+        "id": "ing_etl_62_2",
+        "name": "Havu\xE7, Patates & Arpac\u0131k So\u011Fan",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 25,
+        "portionCost": 1.75,
+        "wastagePercent": 10
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_etl_63",
+    "recipeCode": "REC-ETL-063",
+    "code": "REC-ETL-063",
+    "name": "Tavuk Pane / Schnitzel (T\xFCrk Usul\xFC)",
+    "category": "main_meat",
+    "categoryLabel": "Et / Tavuk Yemekleri",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 34,
+    "carbGrams": 28,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 34,
+      "carbs": 28,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "D\xF6v\xFClerek inceltilmi\u015F tavuk g\xF6\u011F\xFCs fileto un, \xE7\u0131rp\u0131lm\u0131\u015F yumurta ve galeta ununa bulan\u0131p k\u0131zg\u0131n ya\u011Fda alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131r; limon dilimi ile servis edilir.",
+    "cookingInstructions": "D\xF6v\xFClerek inceltilmi\u015F tavuk g\xF6\u011F\xFCs fileto un, \xE7\u0131rp\u0131lm\u0131\u015F yumurta ve galeta ununa bulan\u0131p k\u0131zg\u0131n ya\u011Fda alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131r; limon dilimi ile servis edilir.",
+    "portionCost": 35.9,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 44.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_etl_63_1",
+        "name": "Tavuk G\xF6\u011F\xFCs Fileto (D\xF6v\xFClm\xFC\u015F)",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 195,
+        "portionCost": 31.2,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_etl_63_2",
+        "name": "Galeta Unu, Un & Yumurta",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_etl_63_3",
+        "name": "K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131 & Limon",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  }
+];
+
+// src/data/recipes/vegRecipes.ts
+var vegRecipes = [
+  {
+    "id": "rec_seb_01",
+    "recipeCode": "REC-SEB-001",
+    "code": "REC-SEB-001",
+    "name": "Zeytinya\u011Fl\u0131 Enginar",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 210,
+    "proteinGrams": 5,
+    "carbGrams": 22,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 210,
+      "protein": 5,
+      "carbs": 22,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xC7anak enginarlar limonlu suda bekletilir. Havu\xE7, patates ve bezelyeli garnit\xFCr limon suyu, s\u0131zma zeytinya\u011F\u0131 ve dereotu ile k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "cookingInstructions": "\xC7anak enginarlar limonlu suda bekletilir. Havu\xE7, patates ve bezelyeli garnit\xFCr limon suyu, s\u0131zma zeytinya\u011F\u0131 ve dereotu ile k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "portionCost": 25.2,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 33.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_seb_01_1",
+        "name": "\xC7anak Enginar (Urla Sak\u0131z)",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 16.8,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_01_2",
+        "name": "Havu\xE7, Patates & Taze Bezelye Garnit\xFCr\xFC",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_01_3",
+        "name": "Ege Erken Hasat S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_etl_01_4",
+        "name": "Taze Limon Suyu & \u0130nce K\u0131y\u0131m Dereotu",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_02",
+    "recipeCode": "REC-SEB-002",
+    "code": "REC-SEB-002",
+    "name": "Zeytinya\u011Fl\u0131 Yaprak Sarma",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 50,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 310,
+    "proteinGrams": 6,
+    "carbGrams": 42,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 310,
+      "protein": 6,
+      "carbs": 42,
+      "fat": 14
+    },
+    "allergens": [
+      "F\u0131st\u0131k (Dolmal\u0131k F\u0131st\u0131k)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tokat Erbaa yapraklar\u0131na pirin\xE7, dolmal\u0131k f\u0131st\u0131k, ku\u015F \xFCz\xFCm\xFC, nane, tar\xE7\u0131n ve bol karamelize so\u011Fanl\u0131 i\xE7 sar\u0131l\u0131p zeytinya\u011F\u0131 ve limon dilimleriyle pi\u015Firilir.",
+    "cookingInstructions": "Tokat Erbaa yapraklar\u0131na pirin\xE7, dolmal\u0131k f\u0131st\u0131k, ku\u015F \xFCz\xFCm\xFC, nane, tar\xE7\u0131n ve bol karamelize so\u011Fanl\u0131 i\xE7 sar\u0131l\u0131p zeytinya\u011F\u0131 ve limon dilimleriyle pi\u015Firilir.",
+    "portionCost": 23.3,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 34.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 55,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_seb_02_1",
+        "name": "Tokat Asma Yapra\u011F\u0131",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 130,
+        "portionCost": 5.85,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_02_2",
+        "name": "Baldo Pirin\xE7 & Karamelize So\u011Fan",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.53,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_02_3",
+        "name": "Dolmal\u0131k F\u0131st\u0131k & Ku\u015F \xDCz\xFCm\xFC",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 6.75,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_seb_02_4",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Baharatlar",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_03",
+    "recipeCode": "REC-SEB-003",
+    "code": "REC-SEB-003",
+    "name": "\u0130mam Bay\u0131ld\u0131",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 260,
+    "proteinGrams": 4,
+    "carbGrams": 20,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 260,
+      "protein": 4,
+      "carbs": 20,
+      "fat": 18
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kemer patl\u0131canlar alacal\u0131 soyulup zeytinya\u011F\u0131nda hafifletilir. \u0130\xE7ine bol piyazl\u0131k so\u011Fan, sar\u0131msak ve domates harc\u0131 doldurularak f\u0131r\u0131nda demlendirilir.",
+    "cookingInstructions": "Kemer patl\u0131canlar alacal\u0131 soyulup zeytinya\u011F\u0131nda hafifletilir. \u0130\xE7ine bol piyazl\u0131k so\u011Fan, sar\u0131msak ve domates harc\u0131 doldurularak f\u0131r\u0131nda demlendirilir.",
+    "portionCost": 14.5,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 9.3,
+    "totalCostPerPortion": 23.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_seb_03_1",
+        "name": "Kemer Patl\u0131can",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 5.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_03_2",
+        "name": "Piyazl\u0131k So\u011Fan, Sar\u0131msak & Domates",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.15,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_03_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Maydanoz",
+        "portionGrams": 22,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 5.72,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_04",
+    "recipeCode": "REC-SEB-004",
+    "code": "REC-SEB-004",
+    "name": "Zeytinya\u011Fl\u0131 Taze Fasulye",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 180,
+    "proteinGrams": 4.5,
+    "carbGrams": 18,
+    "fatGrams": 10,
+    "nutritionalValues": {
+      "calories": 180,
+      "protein": 4.5,
+      "carbs": 18,
+      "fat": 10
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ay\u0131klanm\u0131\u015F taze \xE7al\u0131 fasulyesi so\u011Fan, bol domates ve s\u0131zma zeytinya\u011F\u0131 ile kendi suyunda k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "cookingInstructions": "Ay\u0131klanm\u0131\u015F taze \xE7al\u0131 fasulyesi so\u011Fan, bol domates ve s\u0131zma zeytinya\u011F\u0131 ile kendi suyunda k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "portionCost": 15,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8,
+    "totalCostPerPortion": 23,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_seb_04_1",
+        "name": "Taze \xC7al\u0131 / Ay\u015Fekad\u0131n Fasulye",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 8.25,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_04_2",
+        "name": "Rende Domates & Yemeklik Kuru So\u011Fan",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 2.1,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_04_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Kesme \u015Eeker",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 4.68,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_05",
+    "recipeCode": "REC-SEB-005",
+    "code": "REC-SEB-005",
+    "name": "Zeytinya\u011Fl\u0131 Kereviz",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 195,
+    "proteinGrams": 3.5,
+    "carbGrams": 20,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 195,
+      "protein": 3.5,
+      "carbs": 20,
+      "fat": 11
+    },
+    "allergens": [
+      "Kereviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xFCp do\u011Franm\u0131\u015F kereviz yumrusu, havu\xE7, patates ve taze s\u0131k\u0131lm\u0131\u015F portakal suyu ile s\u0131zma zeytinya\u011F\u0131nda yapraklar\u0131yla pi\u015Firilir.",
+    "cookingInstructions": "K\xFCp do\u011Franm\u0131\u015F kereviz yumrusu, havu\xE7, patates ve taze s\u0131k\u0131lm\u0131\u015F portakal suyu ile s\u0131zma zeytinya\u011F\u0131nda yapraklar\u0131yla pi\u015Firilir.",
+    "portionCost": 11.6,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8,
+    "totalCostPerPortion": 19.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_05_1",
+        "name": "K\xF6k Kereviz & Taze Yapraklar\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 5.85,
+        "wastagePercent": 18,
+        "allergen": "Kereviz"
+      },
+      {
+        "id": "ing_seb_05_2",
+        "name": "Havu\xE7 & Patates K\xFCpleri",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 25,
+        "portionCost": 1.25,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_seb_05_3",
+        "name": "Taze S\u0131kma Portakal Suyu & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "ml",
+        "unitCost": 150,
+        "portionCost": 4.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_06",
+    "recipeCode": "REC-SEB-006",
+    "code": "REC-SEB-006",
+    "name": "\u015Eak\u015Fuka",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 250,
+    "proteinGrams": 4,
+    "carbGrams": 22,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 250,
+      "protein": 4,
+      "carbs": 22,
+      "fat": 16
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xFCp k\xFCp do\u011Fran\u0131p k\u0131zart\u0131lm\u0131\u015F patl\u0131can, kabak ve biberlerin \xFCzerine sar\u0131msakl\u0131 zengin domates sosu gezdirilir.",
+    "cookingInstructions": "K\xFCp k\xFCp do\u011Fran\u0131p k\u0131zart\u0131lm\u0131\u015F patl\u0131can, kabak ve biberlerin \xFCzerine sar\u0131msakl\u0131 zengin domates sosu gezdirilir.",
+    "portionCost": 9,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.8,
+    "totalCostPerPortion": 17.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 41,
+    "ingredients": [
+      {
+        "id": "ing_seb_06_1",
+        "name": "Kemer Patl\u0131can & Sak\u0131z Kabak",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 4.8,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_etl_06_2",
+        "name": "K\xF6y Biberi & Kapya",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.23,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_etl_06_3",
+        "name": "Sar\u0131msakl\u0131 Domates Sosu & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_07",
+    "recipeCode": "REC-SEB-07",
+    "code": "REC-SEB-07",
+    "name": "Kabak \xC7i\xE7e\u011Fi Dolmas\u0131",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 280,
+    "proteinGrams": 5,
+    "carbGrams": 36,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 280,
+      "protein": 5,
+      "carbs": 36,
+      "fat": 12
+    },
+    "allergens": [
+      "F\u0131st\u0131k (Dolmal\u0131k F\u0131st\u0131k)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Sabah\u0131n ilk \u0131\u015F\u0131klar\u0131nda toplanan taze kabak \xE7i\xE7ekleri nane, dereotu, f\u0131st\u0131kl\u0131 zeytinya\u011Fl\u0131 har\xE7la narince doldurulup hafif ate\u015Fte demlendirilir.",
+    "cookingInstructions": "Sabah\u0131n ilk \u0131\u015F\u0131klar\u0131nda toplanan taze kabak \xE7i\xE7ekleri nane, dereotu, f\u0131st\u0131kl\u0131 zeytinya\u011Fl\u0131 har\xE7la narince doldurulup hafif ate\u015Fte demlendirilir.",
+    "portionCost": 22.8,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.5,
+    "totalCostPerPortion": 33.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_seb_07_1",
+        "name": "Taze Kabak \xC7i\xE7e\u011Fi (6 adet)",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 12,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_07_2",
+        "name": "Pirin\xE7li Dolma Harc\u0131 & Otlar",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_07_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Dolmal\u0131k F\u0131st\u0131k",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 5.6,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_08",
+    "recipeCode": "REC-SEB-008",
+    "code": "REC-SEB-008",
+    "name": "M\xFCcver",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 10,
+    "carbGrams": 22,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 10,
+      "carbs": 22,
+      "fat": 18
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz (Beyaz Peynir)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Rendelenip suyu s\u0131k\u0131lan taze kabaklar yumurta, un, beyaz peynir, taze so\u011Fan, dereotu ve nane ile harmanlan\u0131p alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Rendelenip suyu s\u0131k\u0131lan taze kabaklar yumurta, un, beyaz peynir, taze so\u011Fan, dereotu ve nane ile harmanlan\u0131p alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131r.",
+    "portionCost": 14.3,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 22.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_08_1",
+        "name": "Taze Sak\u0131z Kaba\u011F\u0131 (Suyu S\u0131k\u0131lm\u0131\u015F)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.9,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_08_2",
+        "name": "K\xF6y Yumurtas\u0131 & Bu\u011Fday Unu",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.45,
+        "wastagePercent": 0,
+        "allergen": "Yumurta, Gluten"
+      },
+      {
+        "id": "ing_seb_08_3",
+        "name": "Ezine Beyaz Peynir & Ye\u015Fillikler",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 5.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_seb_08_4",
+        "name": "K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_09",
+    "recipeCode": "REC-SEB-009",
+    "code": "REC-SEB-009",
+    "name": "T\xFCrl\xFC (Sebze G\xFCve\xE7)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 210,
+    "proteinGrams": 6,
+    "carbGrams": 26,
+    "fatGrams": 10,
+    "nutritionalValues": {
+      "calories": 210,
+      "protein": 6,
+      "carbs": 26,
+      "fat": 10
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Toprak g\xFCve\xE7te patl\u0131can, kabak, patates, taze fasulye, bamya, sar\u0131msak ve domates s\u0131zma zeytinya\u011F\u0131 ile k\u0131s\u0131k ate\u015Fte g\xFCve\xE7lenir.",
+    "cookingInstructions": "Toprak g\xFCve\xE7te patl\u0131can, kabak, patates, taze fasulye, bamya, sar\u0131msak ve domates s\u0131zma zeytinya\u011F\u0131 ile k\u0131s\u0131k ate\u015Fte g\xFCve\xE7lenir.",
+    "portionCost": 10.8,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 9.3,
+    "totalCostPerPortion": 20.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_seb_09_1",
+        "name": "Mevsim Sebzeleri Kar\u0131\u015F\u0131m\u0131 (Patl\u0131can, Kabak, Fasulye, Patates)",
+        "portionGrams": 180,
+        "unit": "g",
+        "unitCost": 38,
+        "portionCost": 6.84,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_09_2",
+        "name": "Domates, Sar\u0131msak & Biber",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_09_3",
+        "name": "Zeytinya\u011F\u0131 & Domates Sal\xE7as\u0131",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 2.16,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_10",
+    "recipeCode": "REC-SEB-010",
+    "code": "REC-SEB-010",
+    "name": "Zeytinya\u011Fl\u0131 P\u0131rasa",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 190,
+    "proteinGrams": 3.5,
+    "carbGrams": 26,
+    "fatGrams": 8.5,
+    "nutritionalValues": {
+      "calories": 190,
+      "protein": 3.5,
+      "carbs": 26,
+      "fat": 8.5
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Verev do\u011Franm\u0131\u015F p\u0131rasa, havu\xE7, az pirin\xE7 ve taze limon/portakal suyu ile s\u0131zma zeytinya\u011F\u0131nda pi\u015Firilir.",
+    "cookingInstructions": "Verev do\u011Franm\u0131\u015F p\u0131rasa, havu\xE7, az pirin\xE7 ve taze limon/portakal suyu ile s\u0131zma zeytinya\u011F\u0131nda pi\u015Firilir.",
+    "portionCost": 11.4,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.8,
+    "totalCostPerPortion": 19.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_seb_10_1",
+        "name": "Taze P\u0131rasa (Verev Do\u011Franm\u0131\u015F)",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.25,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_10_2",
+        "name": "Havu\xE7 Dilimleri & Baldo Pirin\xE7",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.8,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_10_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Taze Limon Suyu",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 4.32,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_11",
+    "recipeCode": "REC-SEB-011",
+    "code": "REC-SEB-011",
+    "name": "Zeytinya\u011Fl\u0131 Bakla (Dereotlu)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 200,
+    "proteinGrams": 7,
+    "carbGrams": 24,
+    "fatGrams": 9,
+    "nutritionalValues": {
+      "calories": 200,
+      "protein": 7,
+      "carbs": 24,
+      "fat": 9
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze ye\u015Fil baklalar unlu limonlu suda bekletilip zeytinya\u011F\u0131nda pi\u015Firilir; bol taze dereotu ve sar\u0131msakl\u0131 yo\u011Furtla servis edilir.",
+    "cookingInstructions": "Taze ye\u015Fil baklalar unlu limonlu suda bekletilip zeytinya\u011F\u0131nda pi\u015Firilir; bol taze dereotu ve sar\u0131msakl\u0131 yo\u011Furtla servis edilir.",
+    "portionCost": 17.3,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8,
+    "totalCostPerPortion": 25.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_seb_11_1",
+        "name": "Taze Sak\u0131z Baklas\u0131",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 9.75,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_11_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Bol Dereotu",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 4.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_11_3",
+        "name": "S\xFCzme Yo\u011Furt Garnit\xFCr\xFC",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_12",
+    "recipeCode": "REC-SEB-012",
+    "code": "REC-SEB-012",
+    "name": "Zeytinya\u011Fl\u0131 Bamya",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 175,
+    "proteinGrams": 4,
+    "carbGrams": 18,
+    "fatGrams": 9.5,
+    "nutritionalValues": {
+      "calories": 175,
+      "protein": 4,
+      "carbs": 18,
+      "fat": 9.5
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Konik soyulmu\u015F taze k\u0131nal\u0131 bamya domates, limon suyu, arpac\u0131k so\u011Fan ve s\u0131zma zeytinya\u011F\u0131 ile salyalanmadan pi\u015Firilir.",
+    "cookingInstructions": "Konik soyulmu\u015F taze k\u0131nal\u0131 bamya domates, limon suyu, arpac\u0131k so\u011Fan ve s\u0131zma zeytinya\u011F\u0131 ile salyalanmadan pi\u015Firilir.",
+    "portionCost": 19.1,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 27.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 45,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_seb_12_1",
+        "name": "Taze K\u0131nal\u0131 Bamya",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 12.35,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_12_2",
+        "name": "Rende Domates & Arpac\u0131k So\u011Fan",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.93,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_12_3",
+        "name": "Taze Limon Suyu & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_13",
+    "recipeCode": "REC-SEB-013",
+    "code": "REC-SEB-013",
+    "name": "Ispanak Yeme\u011Fi (Yo\u011Furtlu / Yumurtal\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 220,
+    "proteinGrams": 8,
+    "carbGrams": 18,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 220,
+      "protein": 8,
+      "carbs": 18,
+      "fat": 12
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ay\u0131klan\u0131p y\u0131kanm\u0131\u015F k\xF6rpe \u0131spanaklar so\u011Fan, az pirin\xE7 ve zeytinya\u011F\u0131nda sotelenip pi\u015Firilir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ile servis edilir.",
+    "cookingInstructions": "Ay\u0131klan\u0131p y\u0131kanm\u0131\u015F k\xF6rpe \u0131spanaklar so\u011Fan, az pirin\xE7 ve zeytinya\u011F\u0131nda sotelenip pi\u015Firilir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ile servis edilir.",
+    "portionCost": 14.8,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.8,
+    "totalCostPerPortion": 22.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_13_1",
+        "name": "K\xF6rpe K\xF6k Ispanak",
+        "portionGrams": 170,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.95,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_seb_13_2",
+        "name": "Baldo Pirin\xE7 & Kuru So\u011Fan",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1.5,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_13_3",
+        "name": "S\xFCzme Tava Yo\u011Furdu",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3.75,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_seb_13_4",
+        "name": "S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_14",
+    "recipeCode": "REC-SEB-014",
+    "code": "REC-SEB-014",
+    "name": "Zeytinya\u011Fl\u0131 Barbunya Pilaki",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 12,
+    "carbGrams": 38,
+    "fatGrams": 10,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 12,
+      "carbs": 38,
+      "fat": 10
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze barbunya havu\xE7, patates, sar\u0131msak, so\u011Fan ve s\u0131zma zeytinya\u011F\u0131 ile pilaki k\u0131vam\u0131nda pi\u015Firilip bol maydanoz ve limonla servis edilir.",
+    "cookingInstructions": "Taze barbunya havu\xE7, patates, sar\u0131msak, so\u011Fan ve s\u0131zma zeytinya\u011F\u0131 ile pilaki k\u0131vam\u0131nda pi\u015Firilip bol maydanoz ve limonla servis edilir.",
+    "portionCost": 17.4,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.3,
+    "totalCostPerPortion": 25.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_seb_14_1",
+        "name": "Taze Ay\u0131klanm\u0131\u015F Barbunya",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 10.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_14_2",
+        "name": "Havu\xE7, Patates & Kuru So\u011Fan K\xFCpleri",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 1.95,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_seb_14_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131, Sar\u0131msak & Maydanoz",
+        "portionGrams": 22,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 5.28,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_15",
+    "recipeCode": "REC-SEB-015",
+    "code": "REC-SEB-015",
+    "name": "Etli Taze Fasulye",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 310,
+    "proteinGrams": 18,
+    "carbGrams": 16,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 310,
+      "protein": 18,
+      "carbs": 16,
+      "fat": 18
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dana ku\u015Fba\u015F\u0131 etler hafif kavrulup taze ay\u015Fekad\u0131n fasulye, so\u011Fan, domates ve tereya\u011F\u0131 ile helmelenerek pi\u015Firilir.",
+    "cookingInstructions": "Dana ku\u015Fba\u015F\u0131 etler hafif kavrulup taze ay\u015Fekad\u0131n fasulye, so\u011Fan, domates ve tereya\u011F\u0131 ile helmelenerek pi\u015Firilir.",
+    "portionCost": 36.9,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 3.2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.2,
+    "totalCostPerPortion": 47.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_seb_15_1",
+        "name": "Dana Ku\u015Fba\u015F\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 26.4,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_seb_15_2",
+        "name": "Taze Ay\u015Fekad\u0131n Fasulye",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 7.7,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_15_3",
+        "name": "Domates, So\u011Fan & Tereya\u011F\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.8,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_16",
+    "recipeCode": "REC-SEB-016",
+    "code": "REC-SEB-016",
+    "name": "Etli Bezelye",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 20,
+    "carbGrams": 24,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 20,
+      "carbs": 24,
+      "fat": 16
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ku\u015Fba\u015F\u0131 dana eti havu\xE7, patates ve tatl\u0131 taze bezelye ile sal\xE7al\u0131 et suyunda pi\u015Firilir.",
+    "cookingInstructions": "Ku\u015Fba\u015F\u0131 dana eti havu\xE7, patates ve tatl\u0131 taze bezelye ile sal\xE7al\u0131 et suyunda pi\u015Firilir.",
+    "portionCost": 35.1,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 44.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_seb_16_1",
+        "name": "Dana Ku\u015Fba\u015F\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 440,
+        "portionCost": 26.4,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_seb_16_2",
+        "name": "Taze \u0130\xE7 Bezelye",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 6.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_16_3",
+        "name": "Havu\xE7, Patates & Sal\xE7al\u0131 Sos",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.2,
+        "wastagePercent": 8
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_17",
+    "recipeCode": "REC-SEB-017",
+    "code": "REC-SEB-017",
+    "name": "Karnabahar Yeme\u011Fi (K\u0131ymal\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 280,
+    "proteinGrams": 16,
+    "carbGrams": 16,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 280,
+      "protein": 16,
+      "carbs": 16,
+      "fat": 17
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xC7i\xE7eklerine ayr\u0131lm\u0131\u015F karnabahar dana k\u0131yma, havu\xE7, so\u011Fan ve sal\xE7al\u0131 s\u0131cak suda k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "cookingInstructions": "\xC7i\xE7eklerine ayr\u0131lm\u0131\u015F karnabahar dana k\u0131yma, havu\xE7, so\u011Fan ve sal\xE7al\u0131 s\u0131cak suda k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "portionCost": 27.5,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.8,
+    "totalCostPerPortion": 36.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 55,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_seb_17_1",
+        "name": "Karnabahar (\xC7i\xE7ek)",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.25,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_17_2",
+        "name": "Dana K\u0131yma",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 21,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_17_3",
+        "name": "Havu\xE7, Kuru So\u011Fan & Sal\xE7a",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.23,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_18",
+    "recipeCode": "REC-SEB-018",
+    "code": "REC-SEB-018",
+    "name": "Kapuska (K\u0131ymal\u0131 Lahana)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 16,
+    "carbGrams": 18,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 16,
+      "carbs": 18,
+      "fat": 17
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130nce do\u011Franm\u0131\u015F beyaz lahana k\u0131yma, so\u011Fan, biber sal\xE7as\u0131 ve ac\u0131 pul biberle kavrulup suyunu \xE7ekene kadar pi\u015Firilir.",
+    "cookingInstructions": "\u0130nce do\u011Franm\u0131\u015F beyaz lahana k\u0131yma, so\u011Fan, biber sal\xE7as\u0131 ve ac\u0131 pul biberle kavrulup suyunu \xE7ekene kadar pi\u015Firilir.",
+    "portionCost": 26.9,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.8,
+    "totalCostPerPortion": 35.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 55,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_18_1",
+        "name": "Beyaz Lahana (\u0130nce Do\u011Franm\u0131\u015F)",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 22,
+        "portionCost": 3.52,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_18_2",
+        "name": "Dana K\u0131yma",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 21,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_18_3",
+        "name": "Biber Sal\xE7as\u0131, So\u011Fan & Tereya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_19",
+    "recipeCode": "REC-SEB-019",
+    "code": "REC-SEB-019",
+    "name": "Paz\u0131 Sarmas\u0131",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 18,
+    "carbGrams": 25,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 18,
+      "carbs": 25,
+      "fat": 17
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Geni\u015F paz\u0131 yapraklar\u0131na k\u0131ymal\u0131 pirin\xE7li har\xE7 sar\u0131l\u0131r; tencerede k\u0131s\u0131k ate\u015Fte pi\u015Firilip sar\u0131msakl\u0131 yo\u011Furt sosuyla servis edilir.",
+    "cookingInstructions": "Geni\u015F paz\u0131 yapraklar\u0131na k\u0131ymal\u0131 pirin\xE7li har\xE7 sar\u0131l\u0131r; tencerede k\u0131s\u0131k ate\u015Fte pi\u015Firilip sar\u0131msakl\u0131 yo\u011Furt sosuyla servis edilir.",
+    "portionCost": 30,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 40,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_seb_19_1",
+        "name": "Taze Paz\u0131 Yapraklar\u0131",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.8,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_19_2",
+        "name": "K\u0131ymal\u0131 Pirin\xE7 Dolma Harc\u0131",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 23.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_19_3",
+        "name": "Sar\u0131msakl\u0131 S\xFCzme Yo\u011Furt",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3.75,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_20",
+    "recipeCode": "REC-SEB-020",
+    "code": "REC-SEB-020",
+    "name": "Biber Dolmas\u0131 (Zeytinya\u011Fl\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 4.5,
+    "carbGrams": 40,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 4.5,
+      "carbs": 40,
+      "fat": 12
+    },
+    "allergens": [
+      "F\u0131st\u0131k (Dolmal\u0131k F\u0131st\u0131k)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dolmal\u0131k biberler f\u0131st\u0131kl\u0131, \xFCz\xFCml\xFC, naneli zeytinya\u011Fl\u0131 pirin\xE7 harc\u0131yla doldurulur; domates kapakla k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "cookingInstructions": "Dolmal\u0131k biberler f\u0131st\u0131kl\u0131, \xFCz\xFCml\xFC, naneli zeytinya\u011Fl\u0131 pirin\xE7 harc\u0131yla doldurulur; domates kapakla k\u0131s\u0131k ate\u015Fte pi\u015Firilir.",
+    "portionCost": 17.3,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 25.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_seb_20_1",
+        "name": "Dolmal\u0131k Biber (3 adet)",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 3.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_20_2",
+        "name": "Zeytinya\u011Fl\u0131 Dolma \u0130\xE7i (Pirin\xE7, F\u0131st\u0131k, \xDCz\xFCm)",
+        "portionGrams": 95,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 10.45,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_seb_20_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Domates Kapak",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 3.2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_21",
+    "recipeCode": "REC-SEB-021",
+    "code": "REC-SEB-021",
+    "name": "Lahana Sarmas\u0131 (Zeytinya\u011Fl\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 300,
+    "proteinGrams": 5,
+    "carbGrams": 42,
+    "fatGrams": 13,
+    "nutritionalValues": {
+      "calories": 300,
+      "protein": 5,
+      "carbs": 42,
+      "fat": 13
+    },
+    "allergens": [
+      "F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ha\u015Flanm\u0131\u015F sarmal\u0131k beyaz lahana yapraklar\u0131na f\u0131st\u0131kl\u0131 baharatl\u0131 zeytinya\u011Fl\u0131 pirin\xE7 sar\u0131l\u0131r; zeytinya\u011F\u0131 gezdirilerek pi\u015Firilir.",
+    "cookingInstructions": "Ha\u015Flanm\u0131\u015F sarmal\u0131k beyaz lahana yapraklar\u0131na f\u0131st\u0131kl\u0131 baharatl\u0131 zeytinya\u011Fl\u0131 pirin\xE7 sar\u0131l\u0131r; zeytinya\u011F\u0131 gezdirilerek pi\u015Firilir.",
+    "portionCost": 16.1,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 26.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_21_1",
+        "name": "Sarmal\u0131k Beyaz Lahana",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 22,
+        "portionCost": 1.76,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_seb_21_2",
+        "name": "Zeytinya\u011Fl\u0131 Pirin\xE7 Dolma Harc\u0131",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 9.5,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_seb_21_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Limon",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_22",
+    "recipeCode": "REC-SEB-022",
+    "code": "REC-SEB-022",
+    "name": "Kuru Patl\u0131can Dolmas\u0131 (Zeytinya\u011Fl\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 310,
+    "proteinGrams": 5.5,
+    "carbGrams": 44,
+    "fatGrams": 13,
+    "nutritionalValues": {
+      "calories": 310,
+      "protein": 5.5,
+      "carbs": 44,
+      "fat": 13
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Gaziantep kuru patl\u0131canlar\u0131 nar ek\u015Fisi, sumak ek\u015Fisi, bol so\u011Fan ve zeytinya\u011Fl\u0131 pirin\xE7 harc\u0131yla doldurulup so\u011Fuk servis edilir.",
+    "cookingInstructions": "Gaziantep kuru patl\u0131canlar\u0131 nar ek\u015Fisi, sumak ek\u015Fisi, bol so\u011Fan ve zeytinya\u011Fl\u0131 pirin\xE7 harc\u0131yla doldurulup so\u011Fuk servis edilir.",
+    "portionCost": 21.3,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 31.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_seb_22_1",
+        "name": "Kurutulmu\u015F Antep Patl\u0131can\u0131 (4 adet)",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 8.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_22_2",
+        "name": "Ek\u015Fili Zeytinya\u011Fl\u0131 Pirin\xE7 Harc\u0131",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 8.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_22_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Nar Ek\u015Fisi",
+        "portionGrams": 22,
+        "unit": "ml",
+        "unitCost": 200,
+        "portionCost": 4.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_23",
+    "recipeCode": "REC-SEB-023",
+    "code": "REC-SEB-023",
+    "name": "Semizotu Yeme\u011Fi (Pirin\xE7li)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 170,
+    "proteinGrams": 4.5,
+    "carbGrams": 16,
+    "fatGrams": 9,
+    "nutritionalValues": {
+      "calories": 170,
+      "protein": 4.5,
+      "carbs": 16,
+      "fat": 9
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ay\u0131klanm\u0131\u015F taze semizotu so\u011Fan, domates ve az pirin\xE7le hafif ate\u015Fte pi\u015Firilir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furtla servis edilir.",
+    "cookingInstructions": "Ay\u0131klanm\u0131\u015F taze semizotu so\u011Fan, domates ve az pirin\xE7le hafif ate\u015Fte pi\u015Firilir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furtla servis edilir.",
+    "portionCost": 11.1,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.1,
+    "totalCostPerPortion": 18.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_seb_23_1",
+        "name": "Taze Semizotu",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.6,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_23_2",
+        "name": "Baldo Pirin\xE7 & Kuru So\u011Fan",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1.25,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_23_3",
+        "name": "S\xFCzme Yo\u011Furt Garnit\xFCr & Zeytinya\u011F\u0131",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 4.28,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_24",
+    "recipeCode": "REC-SEB-024",
+    "code": "REC-SEB-024",
+    "name": "Borani (Ispanakl\u0131 / Paz\u0131l\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 8,
+    "carbGrams": 14,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 8,
+      "carbs": 14,
+      "fat": 16
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ha\u015Flan\u0131p suyu s\u0131k\u0131lan \u0131spanak/paz\u0131 sar\u0131msakl\u0131 s\xFCzme yo\u011Furtla kar\u0131\u015Ft\u0131r\u0131l\u0131r; \xFCzerine tereya\u011F\u0131nda kavrulmu\u015F pul biber ve ceviz gezdirilir.",
+    "cookingInstructions": "Ha\u015Flan\u0131p suyu s\u0131k\u0131lan \u0131spanak/paz\u0131 sar\u0131msakl\u0131 s\xFCzme yo\u011Furtla kar\u0131\u015Ft\u0131r\u0131l\u0131r; \xFCzerine tereya\u011F\u0131nda kavrulmu\u015F pul biber ve ceviz gezdirilir.",
+    "portionCost": 15.4,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 22.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_24_1",
+        "name": "Ha\u015Flanm\u0131\u015F Ispanak / Paz\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.55,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_seb_24_2",
+        "name": "Sar\u0131msakl\u0131 S\xFCzme Tava Yo\u011Furdu",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_seb_24_3",
+        "name": "Tereya\u011F\u0131 & Pul Biber",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_25",
+    "recipeCode": "REC-SEB-025",
+    "code": "REC-SEB-025",
+    "name": "Kabak Kalye",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 195,
+    "proteinGrams": 4,
+    "carbGrams": 18,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 195,
+      "protein": 4,
+      "carbs": 18,
+      "fat": 12
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Osmanl\u0131 saray mutfa\u011F\u0131 usul\xFC halka kabaklar zeytinya\u011F\u0131nda sar\u0131msak ve koruk/limon ek\u015Fisiyle pi\u015Firilir; dereotu ile s\xFCslenir.",
+    "cookingInstructions": "Osmanl\u0131 saray mutfa\u011F\u0131 usul\xFC halka kabaklar zeytinya\u011F\u0131nda sar\u0131msak ve koruk/limon ek\u015Fisiyle pi\u015Firilir; dereotu ile s\xFCslenir.",
+    "portionCost": 11.2,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.8,
+    "totalCostPerPortion": 19,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_seb_25_1",
+        "name": "Sak\u0131z Kaba\u011F\u0131 (Halka)",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.6,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_25_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Koruk Ek\u015Fisi",
+        "portionGrams": 22,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 4.84,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_25_3",
+        "name": "Taze Dereotu & Sar\u0131msak",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_26",
+    "recipeCode": "REC-SEB-026",
+    "code": "REC-SEB-026",
+    "name": "Karalahana Sarmas\u0131",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 350,
+    "proteinGrams": 18,
+    "carbGrams": 28,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 350,
+      "protein": 18,
+      "carbs": 28,
+      "fat": 18
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Karadeniz usul\xFC k\xF6rpe karalahana yapraklar\u0131na k\u0131ymal\u0131 veya m\u0131s\u0131r yarmal\u0131 pirin\xE7li har\xE7 sar\u0131l\u0131r; kemik suyu ve tereya\u011F\u0131 ile pi\u015Firilir.",
+    "cookingInstructions": "Karadeniz usul\xFC k\xF6rpe karalahana yapraklar\u0131na k\u0131ymal\u0131 veya m\u0131s\u0131r yarmal\u0131 pirin\xE7li har\xE7 sar\u0131l\u0131r; kemik suyu ve tereya\u011F\u0131 ile pi\u015Firilir.",
+    "portionCost": 35.8,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 45.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_26_1",
+        "name": "Taze Karalahana Yapra\u011F\u0131",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.98,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_26_2",
+        "name": "Dana K\u0131yma & Pirin\xE7 Harc\u0131",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 28,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_26_3",
+        "name": "Tereya\u011F\u0131 & K\u0131rm\u0131z\u0131 Pul Biber",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_27",
+    "recipeCode": "REC-SEB-027",
+    "code": "REC-SEB-027",
+    "name": "\xC7\u0131\u011F\u0131rtma (Bergama Usul\xFC)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 4,
+    "carbGrams": 18,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 4,
+      "carbs": 18,
+      "fat": 17
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bergama gelene\u011Fiyle spiral \xE7izilmi\u015F b\xFCt\xFCn patl\u0131canlar ve k\xF6y biberleri bol s\u0131zma zeytinya\u011F\u0131nda k\u0131zart\u0131l\u0131r; bol sar\u0131msakl\u0131 domatesle demlendirilir.",
+    "cookingInstructions": "Bergama gelene\u011Fiyle spiral \xE7izilmi\u015F b\xFCt\xFCn patl\u0131canlar ve k\xF6y biberleri bol s\u0131zma zeytinya\u011F\u0131nda k\u0131zart\u0131l\u0131r; bol sar\u0131msakl\u0131 domatesle demlendirilir.",
+    "portionCost": 12.5,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.8,
+    "totalCostPerPortion": 21.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_seb_27_1",
+        "name": "\u0130nce Kemer Patl\u0131can (Spiral Kesim)",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 4.8,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_27_2",
+        "name": "Tatl\u0131 K\xF6y Biberi & Sar\u0131msak",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_27_3",
+        "name": "Do\u011Franm\u0131\u015F Domates & Ege Zeytinya\u011F\u0131",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 6.3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_28",
+    "recipeCode": "REC-SEB-028",
+    "code": "REC-SEB-028",
+    "name": "Melendiz / \u015Eevketi Bostan",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 16,
+    "carbGrams": 14,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 16,
+      "carbs": 14,
+      "fat": 18
+    },
+    "allergens": [
+      "Yumurta (Terbiye)",
+      "Gluten (Un)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ege'nin \u015Fifal\u0131 dikeni \u015Fevketi bostan kuzu eti veya zeytinya\u011Fl\u0131 olarak unlu yumurtal\u0131 limon terbiyesiyle pi\u015Firilir.",
+    "cookingInstructions": "Ege'nin \u015Fifal\u0131 dikeni \u015Fevketi bostan kuzu eti veya zeytinya\u011Fl\u0131 olarak unlu yumurtal\u0131 limon terbiyesiyle pi\u015Firilir.",
+    "portionCost": 45.6,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 55.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 85,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_28_1",
+        "name": "Taze \u015Eevketi Bostan (Ay\u0131klanm\u0131\u015F)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 19.6,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_28_2",
+        "name": "Kuzu Ku\u015Fba\u015F\u0131 (Garnit\xFCr)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 23,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_28_3",
+        "name": "Limonlu Unlu Terbiye & Zeytinya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Yumurta, Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_29",
+    "recipeCode": "REC-SEB-029",
+    "code": "REC-SEB-029",
+    "name": "Deniz B\xF6r\xFClcesi",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+4\xB0C (So\u011Fuk Meze)",
+    "servingTemp": "+4\xB0C (So\u011Fuk Meze)",
+    "caloriePerPortion": 160,
+    "proteinGrams": 3,
+    "carbGrams": 8,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 160,
+      "protein": 3,
+      "carbs": 8,
+      "fat": 14
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Deniz b\xF6r\xFClceleri kaynar suda ha\u015Flan\u0131p k\u0131l\xE7\u0131klar\u0131ndan s\u0131yr\u0131larak ay\u0131klan\u0131r; bol sar\u0131msak, taze limon suyu ve s\u0131zma zeytinya\u011F\u0131 ile harmanlan\u0131r.",
+    "cookingInstructions": "Deniz b\xF6r\xFClceleri kaynar suda ha\u015Flan\u0131p k\u0131l\xE7\u0131klar\u0131ndan s\u0131yr\u0131larak ay\u0131klan\u0131r; bol sar\u0131msak, taze limon suyu ve s\u0131zma zeytinya\u011F\u0131 ile harmanlan\u0131r.",
+    "portionCost": 18,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.8,
+    "totalCostPerPortion": 25.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_seb_29_1",
+        "name": "Taze Deniz B\xF6r\xFClcesi",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 12,
+        "wastagePercent": 35
+      },
+      {
+        "id": "ing_seb_29_2",
+        "name": "Ezilmi\u015F Sar\u0131msak & Limon Suyu",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_29_3",
+        "name": "Erken Hasat S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_30",
+    "recipeCode": "REC-SEB-030",
+    "code": "REC-SEB-030",
+    "name": "Kabak S\u0131y\u0131rma",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 170,
+    "proteinGrams": 3.5,
+    "carbGrams": 14,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 170,
+      "protein": 3.5,
+      "carbs": 14,
+      "fat": 11
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Sak\u0131z kabaklar\u0131 soyacakla \u015Feritler halinde s\u0131yr\u0131l\u0131r; sar\u0131msak, taze nane ve s\u0131zma zeytinya\u011F\u0131nda 5 dakika hafif di\u015Fe gelir k\u0131vamda sotelenir.",
+    "cookingInstructions": "Sak\u0131z kabaklar\u0131 soyacakla \u015Feritler halinde s\u0131yr\u0131l\u0131r; sar\u0131msak, taze nane ve s\u0131zma zeytinya\u011F\u0131nda 5 dakika hafif di\u015Fe gelir k\u0131vamda sotelenir.",
+    "portionCost": 11.2,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 18,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 40,
+    "ingredients": [
+      {
+        "id": "ing_seb_30_1",
+        "name": "Taze Sak\u0131z Kaba\u011F\u0131 (S\u0131y\u0131rma \u015Eerit)",
+        "portionGrams": 170,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.95,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_seb_30_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Sar\u0131msak",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_30_3",
+        "name": "Taze Nane & Dereotu",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 0.48,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_31",
+    "recipeCode": "REC-SEB-031",
+    "code": "REC-SEB-031",
+    "name": "Mantar Yeme\u011Fi / Sote",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 180,
+    "proteinGrams": 6,
+    "carbGrams": 12,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 180,
+      "protein": 6,
+      "carbs": 12,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dilimlenmi\u015F k\xFClt\xFCr ve istiridye mantarlar\u0131 harl\u0131 ate\u015Fte renkli biberler, so\u011Fan, sar\u0131msak ve zeytinya\u011F\u0131 ile karamelize edilir.",
+    "cookingInstructions": "Dilimlenmi\u015F k\xFClt\xFCr ve istiridye mantarlar\u0131 harl\u0131 ate\u015Fte renkli biberler, so\u011Fan, sar\u0131msak ve zeytinya\u011F\u0131 ile karamelize edilir.",
+    "portionCost": 17,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 24.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_seb_31_1",
+        "name": "Taze K\xFClt\xFCr & \u0130stiridye Mantar\u0131",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 12,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_31_2",
+        "name": "Kapya Biber & Kuru So\u011Fan",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_31_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Da\u011F Keki\u011Fi",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_32",
+    "recipeCode": "REC-SEB-032",
+    "code": "REC-SEB-032",
+    "name": "Domates Dolmas\u0131",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 270,
+    "proteinGrams": 5,
+    "carbGrams": 38,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 270,
+      "protein": 5,
+      "carbs": 38,
+      "fat": 11
+    },
+    "allergens": [
+      "F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130\xE7i oyulmu\u015F etli domatesler f\u0131st\u0131kl\u0131, ku\u015F \xFCz\xFCml\xFC ve naneli zeytinya\u011Fl\u0131 pirin\xE7 harc\u0131 ile doldurulup f\u0131r\u0131nda kendi suyunda pi\u015Firilir.",
+    "cookingInstructions": "\u0130\xE7i oyulmu\u015F etli domatesler f\u0131st\u0131kl\u0131, ku\u015F \xFCz\xFCml\xFC ve naneli zeytinya\u011Fl\u0131 pirin\xE7 harc\u0131 ile doldurulup f\u0131r\u0131nda kendi suyunda pi\u015Firilir.",
+    "portionCost": 15.9,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 24.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_seb_32_1",
+        "name": "Sert Tarla Domatesi (Oyulmu\u015F)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 4.2,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_seb_32_2",
+        "name": "Zeytinya\u011Fl\u0131 Dolma \u0130\xE7i",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 8.08,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_seb_32_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Nane",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_33",
+    "recipeCode": "REC-SEB-033",
+    "code": "REC-SEB-033",
+    "name": "Enginar Kalbi Salatas\u0131 / Yeme\u011Fi",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 190,
+    "proteinGrams": 4,
+    "carbGrams": 16,
+    "fatGrams": 12.5,
+    "nutritionalValues": {
+      "calories": 190,
+      "protein": 4,
+      "carbs": 16,
+      "fat": 12.5
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6rpe enginar kalpleri hafif limonlu suda ha\u015Flan\u0131p s\u0131zma zeytinya\u011F\u0131, kapari, taze dereotu ve hardal em\xFClsiyonu ile harmanlan\u0131r.",
+    "cookingInstructions": "K\xF6rpe enginar kalpleri hafif limonlu suda ha\u015Flan\u0131p s\u0131zma zeytinya\u011F\u0131, kapari, taze dereotu ve hardal em\xFClsiyonu ile harmanlan\u0131r.",
+    "portionCost": 26.6,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 33.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 55,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_seb_33_1",
+        "name": "K\xF6rpe Enginar Kalbi",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 21,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_seb_33_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Kapari",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_seb_33_3",
+        "name": "Taze Limon Suyu & \u0130nce Dereotu",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_34",
+    "recipeCode": "REC-SEB-034",
+    "code": "REC-SEB-034",
+    "name": "Ot Kavurmas\u0131 (Ege Otlar\u0131)",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 180,
+    "proteinGrams": 5,
+    "carbGrams": 12,
+    "fatGrams": 13,
+    "nutritionalValues": {
+      "calories": 180,
+      "protein": 5,
+      "carbs": 12,
+      "fat": 13
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ebeg\xFCmeci, \u0131s\u0131rgan, arapsa\xE7\u0131 ve radika so\u011Fanla zeytinya\u011F\u0131nda sotelenir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ile servis edilir.",
+    "cookingInstructions": "Ebeg\xFCmeci, \u0131s\u0131rgan, arapsa\xE7\u0131 ve radika so\u011Fanla zeytinya\u011F\u0131nda sotelenir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ile servis edilir.",
+    "portionCost": 18.5,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 25.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_seb_34_1",
+        "name": "Ege Yabani Otlar Kar\u0131\u015F\u0131m\u0131 (Is\u0131rgan, Ebeg\xFCmeci vb.)",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 11.25,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_34_2",
+        "name": "Piyazl\u0131k Kuru So\u011Fan & Zeytinya\u011F\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 4.2,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_seb_34_3",
+        "name": "Sar\u0131msakl\u0131 Yo\u011Furt Garnit\xFCr",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_35",
+    "recipeCode": "REC-SEB-035",
+    "code": "REC-SEB-035",
+    "name": "Cibez Otu Yeme\u011Fi",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 150,
+    "proteinGrams": 4,
+    "carbGrams": 10,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 150,
+      "protein": 4,
+      "carbs": 10,
+      "fat": 11
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Lahana ve karnabahar k\xF6klerinden filizlenen cibez otu hafif diri ha\u015Flan\u0131p \xFCzerine bol sar\u0131msakl\u0131 s\u0131zma zeytinya\u011F\u0131 ve limon gezdirilir.",
+    "cookingInstructions": "Lahana ve karnabahar k\xF6klerinden filizlenen cibez otu hafif diri ha\u015Flan\u0131p \xFCzerine bol sar\u0131msakl\u0131 s\u0131zma zeytinya\u011F\u0131 ve limon gezdirilir.",
+    "portionCost": 15.9,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 22.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_seb_35_1",
+        "name": "Taze Cibez Otu",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 10.4,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_seb_35_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131, Sar\u0131msak & Limon",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 5.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_seb_36",
+    "recipeCode": "REC-SEB-036",
+    "code": "REC-SEB-036",
+    "name": "Turp Otu Salatas\u0131 / Yeme\u011Fi",
+    "category": "main_veg",
+    "categoryLabel": "Sebze & Bakliyat",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 145,
+    "proteinGrams": 3.5,
+    "carbGrams": 9,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 145,
+      "protein": 3.5,
+      "carbs": 9,
+      "fat": 11
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze tarladan toplanan turp otu ye\u015Filli\u011Fini koruyarak ha\u015Flan\u0131r; zeytinya\u011F\u0131, ezilmi\u015F di\u015F sar\u0131msak ve bol taze limonla \u0131l\u0131k sunulur.",
+    "cookingInstructions": "Taze tarladan toplanan turp otu ye\u015Filli\u011Fini koruyarak ha\u015Flan\u0131r; zeytinya\u011F\u0131, ezilmi\u015F di\u015F sar\u0131msak ve bol taze limonla \u0131l\u0131k sunulur.",
+    "portionCost": 15.1,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.5,
+    "totalCostPerPortion": 21.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_seb_36_1",
+        "name": "Taze Turp Otu",
+        "portionGrams": 160,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 9.6,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_seb_36_2",
+        "name": "S\u0131zma Zeytinya\u011F\u0131, Sar\u0131msak & Taze Limon",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 5.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  }
+];
+
+// src/data/recipes/sideRecipes.ts
+var sideRecipes = [
+  {
+    "id": "rec_pil_01",
+    "recipeCode": "REC-PIL-001",
+    "code": "REC-PIL-001",
+    "name": "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 310,
+    "proteinGrams": 5.5,
+    "carbGrams": 52,
+    "fatGrams": 9.5,
+    "nutritionalValues": {
+      "calories": 310,
+      "protein": 5.5,
+      "carbs": 52,
+      "fat": 9.5
+    },
+    "allergens": [
+      "Gluten (\u015Eehriye)",
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Baldo pirin\xE7 \u0131l\u0131k tuzlu suda dinlendirilir. Tel \u015Fehriye tereya\u011F\u0131nda alt\u0131n rengi kavrulur, s\xFCz\xFClen pirin\xE7 eklenip \u015Feffafla\u015Fana dek kavrulur; s\u0131cak tavuk/et suyu eklenip demlendirilir.",
+    "cookingInstructions": "Baldo pirin\xE7 \u0131l\u0131k tuzlu suda dinlendirilir. Tel \u015Fehriye tereya\u011F\u0131nda alt\u0131n rengi kavrulur, s\xFCz\xFClen pirin\xE7 eklenip \u015Feffafla\u015Fana dek kavrulur; s\u0131cak tavuk/et suyu eklenip demlendirilir.",
+    "portionCost": 14.1,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 20,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_pil_01_1",
+        "name": "G\xF6nen Baldo Pirin\xE7",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.53,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_01_2",
+        "name": "Tel \u015Eehriye",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 0.53,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_01_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 5.04,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_01_4",
+        "name": "Do\u011Fal Tavuk/Et Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_02",
+    "recipeCode": "REC-PIL-002",
+    "code": "REC-PIL-002",
+    "name": "Meyhane Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 280,
+    "proteinGrams": 7,
+    "carbGrams": 48,
+    "fatGrams": 7.5,
+    "nutritionalValues": {
+      "calories": 280,
+      "protein": 7,
+      "carbs": 48,
+      "fat": 7.5
+    },
+    "allergens": [
+      "Gluten (Bulgur)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kaba pilavl\u0131k bulgur so\u011Fan, sar\u0131msak, kapya biber, sivri biber, domates ve biber sal\xE7as\u0131 ile zeytinya\u011F\u0131nda kavrulup et suyu ile demlendirilir.",
+    "cookingInstructions": "Kaba pilavl\u0131k bulgur so\u011Fan, sar\u0131msak, kapya biber, sivri biber, domates ve biber sal\xE7as\u0131 ile zeytinya\u011F\u0131nda kavrulup et suyu ile demlendirilir.",
+    "portionCost": 8.8,
+    "laborCostPerPortion": 3.8,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.2,
+    "totalCostPerPortion": 15,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 40,
+    "ingredients": [
+      {
+        "id": "ing_pil_02_1",
+        "name": "Kaba Pilavl\u0131k \u0130ri Bulgur",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 38,
+        "portionCost": 3.42,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_02_2",
+        "name": "K\xF6y Biberi & Kapya Biber K\xFCpleri",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.23,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_02_3",
+        "name": "Rende Domates, So\u011Fan & Biber Sal\xE7as\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.6,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_02_4",
+        "name": "S\u0131v\u0131 Ya\u011F & Tereya\u011F\u0131",
+        "portionGrams": 14,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 2.52,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_03",
+    "recipeCode": "REC-PIL-003",
+    "code": "REC-PIL-003",
+    "name": "Bulgur Pilav\u0131 (Sade)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 10,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 260,
+    "proteinGrams": 6.5,
+    "carbGrams": 46,
+    "fatGrams": 6.5,
+    "nutritionalValues": {
+      "calories": 260,
+      "protein": 6.5,
+      "carbs": 46,
+      "fat": 6.5
+    },
+    "allergens": [
+      "Gluten (Bulgur)",
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Do\u011Fal ba\u015Fba\u015F\u0131 bulgur k\xF6y tereya\u011F\u0131nda tane tane kavrulur, s\u0131cak kemik suyu ile pi\u015Firilip havlu ka\u011F\u0131t alt\u0131nda demlendirilir.",
+    "cookingInstructions": "Do\u011Fal ba\u015Fba\u015F\u0131 bulgur k\xF6y tereya\u011F\u0131nda tane tane kavrulur, s\u0131cak kemik suyu ile pi\u015Firilip havlu ka\u011F\u0131t alt\u0131nda demlendirilir.",
+    "portionCost": 11.2,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5,
+    "totalCostPerPortion": 16.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_pil_03_1",
+        "name": "Ba\u015Fba\u015F\u0131 Sar\u0131 Bulgur",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 36,
+        "portionCost": 3.06,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_03_2",
+        "name": "Trabzon K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 16,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 5.12,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_03_3",
+        "name": "\u0130likli Kemik Suyu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_04",
+    "recipeCode": "REC-PIL-004",
+    "code": "REC-PIL-004",
+    "name": "Domatesli Bulgur Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 270,
+    "proteinGrams": 6.8,
+    "carbGrams": 48,
+    "fatGrams": 7,
+    "nutritionalValues": {
+      "calories": 270,
+      "protein": 6.8,
+      "carbs": 48,
+      "fat": 7
+    },
+    "allergens": [
+      "Gluten (Bulgur)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bol rendelenmi\u015F yaz domatesi ve sivri biber tereya\u011F\u0131nda sotelenir; bulgur ilave edilip k\u0131s\u0131k ate\u015Fte demlendirilir.",
+    "cookingInstructions": "Bol rendelenmi\u015F yaz domatesi ve sivri biber tereya\u011F\u0131nda sotelenir; bulgur ilave edilip k\u0131s\u0131k ate\u015Fte demlendirilir.",
+    "portionCost": 7.9,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 13.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 31,
+    "ingredients": [
+      {
+        "id": "ing_pil_04_1",
+        "name": "Pilavl\u0131k Sar\u0131 Bulgur",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 36,
+        "portionCost": 3.06,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_04_2",
+        "name": "Rende Domates & Sivri Biber",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 1.8,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_04_3",
+        "name": "Mutfak Tereya\u011F\u0131 & Zeytinya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_05",
+    "recipeCode": "REC-PIL-005",
+    "code": "REC-PIL-005",
+    "name": "\u0130\xE7 Pilav",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 350,
+    "proteinGrams": 6,
+    "carbGrams": 54,
+    "fatGrams": 12.5,
+    "nutritionalValues": {
+      "calories": 350,
+      "protein": 6,
+      "carbs": 54,
+      "fat": 12.5
+    },
+    "allergens": [
+      "F\u0131st\u0131k (Dolmal\u0131k)",
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Osmanl\u0131 usul\xFC pirin\xE7 bol tereya\u011F\u0131, karamelize so\u011Fan, dolmal\u0131k f\u0131st\u0131k, ku\u015F \xFCz\xFCm\xFC, yenibahar ve tar\xE7\u0131n ile demlendirilir.",
+    "cookingInstructions": "Osmanl\u0131 usul\xFC pirin\xE7 bol tereya\u011F\u0131, karamelize so\u011Fan, dolmal\u0131k f\u0131st\u0131k, ku\u015F \xFCz\xFCm\xFC, yenibahar ve tar\xE7\u0131n ile demlendirilir.",
+    "portionCost": 19.3,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 26.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_pil_05_1",
+        "name": "Baldo Pirin\xE7",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_05_2",
+        "name": "Dolmal\u0131k F\u0131st\u0131k & Ku\u015F \xDCz\xFCm\xFC",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 6.75,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_pil_05_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Baharat Kar\u0131\u015F\u0131m\u0131 (Yenibahar, Tar\xE7\u0131n)",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 5.76,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_05_4",
+        "name": "Karamelize So\u011Fan & Et Suyu",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.6,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_06",
+    "recipeCode": "REC-PIL-006",
+    "code": "REC-PIL-006",
+    "name": "Perde Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 480,
+    "proteinGrams": 18,
+    "carbGrams": 52,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 18,
+      "carbs": 52,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten (Hamur)",
+      "Badem",
+      "Laktoz",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Siirt usul\xFC tencereye dizilen bademler ve incecik a\xE7\u0131lan yufka i\xE7erisine kekikli tavuk eti, ku\u015F \xFCz\xFCml\xFC pirin\xE7 pilav\u0131 konup f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Siirt usul\xFC tencereye dizilen bademler ve incecik a\xE7\u0131lan yufka i\xE7erisine kekikli tavuk eti, ku\u015F \xFCz\xFCml\xFC pirin\xE7 pilav\u0131 konup f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "portionCost": 27.1,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.7,
+    "totalCostPerPortion": 39.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_pil_06_1",
+        "name": "Didiklenmi\u015F K\xF6y Tavuk Eti",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 12.35,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_pil_06_2",
+        "name": "Baldo Pirin\xE7 & Ku\u015F \xDCz\xFCm\xFC",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_06_3",
+        "name": "\xD6zel Perde Hamuru (Yumurta, Un, Yo\u011Furt)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta, Laktoz"
+      },
+      {
+        "id": "ing_pil_06_4",
+        "name": "Soyulmu\u015F \xC7i\u011F Badem & Tereya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 7.2,
+        "wastagePercent": 0,
+        "allergen": "Badem, Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_07",
+    "recipeCode": "REC-PIL-007",
+    "code": "REC-PIL-007",
+    "name": "Siyez Bulgur Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 270,
+    "proteinGrams": 9,
+    "carbGrams": 44,
+    "fatGrams": 7,
+    "nutritionalValues": {
+      "calories": 270,
+      "protein": 9,
+      "carbs": 44,
+      "fat": 7
+    },
+    "allergens": [
+      "Gluten (Siyez)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kastamonu 12 bin y\u0131ll\u0131k ata tohumu siyez bulguru tereya\u011F\u0131, arpac\u0131k so\u011Fan ve kemik suyuyla k\u0131s\u0131k ate\u015Fte demlendirilir.",
+    "cookingInstructions": "Kastamonu 12 bin y\u0131ll\u0131k ata tohumu siyez bulguru tereya\u011F\u0131, arpac\u0131k so\u011Fan ve kemik suyuyla k\u0131s\u0131k ate\u015Fte demlendirilir.",
+    "portionCost": 14.8,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.1,
+    "totalCostPerPortion": 20.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 30,
+    "ingredients": [
+      {
+        "id": "ing_pil_07_1",
+        "name": "Do\u011Fal Kastamonu Siyez Bulguru",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 6.38,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_07_2",
+        "name": "K\xF6y Tereya\u011F\u0131 & Arpac\u0131k So\u011Fan",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_07_3",
+        "name": "Do\u011Fal Et Suyu",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3.25,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_08",
+    "recipeCode": "REC-PIL-008",
+    "code": "REC-PIL-008",
+    "name": "Firik Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 8.5,
+    "carbGrams": 48,
+    "fatGrams": 8,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 8.5,
+      "carbs": 48,
+      "fat": 8
+    },
+    "allergens": [
+      "Gluten (Firik)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "T\xFCts\xFC aromal\u0131 ye\u015Fil firik bu\u011Fday\u0131 ve pilavl\u0131k bulgur tereya\u011F\u0131 ve et suyu ile pi\u015Firilir; duman\u0131 \xFCst\xFCnde demlenir.",
+    "cookingInstructions": "T\xFCts\xFC aromal\u0131 ye\u015Fil firik bu\u011Fday\u0131 ve pilavl\u0131k bulgur tereya\u011F\u0131 ve et suyu ile pi\u015Firilir; duman\u0131 \xFCst\xFCnde demlenir.",
+    "portionCost": 10.9,
+    "laborCostPerPortion": 3.8,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.4,
+    "totalCostPerPortion": 17.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 31,
+    "ingredients": [
+      {
+        "id": "ing_pil_08_1",
+        "name": "Do\u011Fal T\xFCts\xFCl\xFC Firik Bu\u011Fday\u0131",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 4.68,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_08_2",
+        "name": "Pilavl\u0131k \u0130ri Sar\u0131 Bulgur",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 36,
+        "portionCost": 1.26,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_08_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Et Suyu",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 250,
+        "portionCost": 5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_09",
+    "recipeCode": "REC-PIL-009",
+    "code": "REC-PIL-009",
+    "name": "Nohutlu Pilav",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 7.5,
+    "carbGrams": 56,
+    "fatGrams": 9,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 7.5,
+      "carbs": 56,
+      "fat": 9
+    },
+    "allergens": [
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Geceden \u0131slat\u0131l\u0131p lokum gibi ha\u015Flanm\u0131\u015F ko\xE7ba\u015F\u0131 nohutlar tereya\u011Fl\u0131 baldo pirin\xE7 pilav\u0131na eklenerek dinlendirilir.",
+    "cookingInstructions": "Geceden \u0131slat\u0131l\u0131p lokum gibi ha\u015Flanm\u0131\u015F ko\xE7ba\u015F\u0131 nohutlar tereya\u011Fl\u0131 baldo pirin\xE7 pilav\u0131na eklenerek dinlendirilir.",
+    "portionCost": 12.6,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 18.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_pil_09_1",
+        "name": "Baldo Pirin\xE7",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_09_2",
+        "name": "Ha\u015Flanm\u0131\u015F Ko\xE7ba\u015F\u0131 Nohut",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 2.6,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_09_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Tavuk Suyu",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_10",
+    "recipeCode": "REC-PIL-010",
+    "code": "REC-PIL-010",
+    "name": "Sebzeli Bulgur Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 270,
+    "proteinGrams": 6.5,
+    "carbGrams": 46,
+    "fatGrams": 7.5,
+    "nutritionalValues": {
+      "calories": 270,
+      "protein": 6.5,
+      "carbs": 46,
+      "fat": 7.5
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xFCp kabak, havu\xE7, bezelye ve taze so\u011Fan zeytinya\u011F\u0131nda sotelenir; bulgurla birle\u015Ftirilip demlendirilir.",
+    "cookingInstructions": "K\xFCp kabak, havu\xE7, bezelye ve taze so\u011Fan zeytinya\u011F\u0131nda sotelenir; bulgurla birle\u015Ftirilip demlendirilir.",
+    "portionCost": 7.9,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 13.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 31,
+    "ingredients": [
+      {
+        "id": "ing_pil_10_1",
+        "name": "Pilavl\u0131k Bulgur",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 36,
+        "portionCost": 2.88,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_10_2",
+        "name": "Kar\u0131\u015F\u0131k Sebze K\xFCpleri (Havu\xE7, Kabak, Bezelye)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_10_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 3.3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_11",
+    "recipeCode": "REC-PIL-011",
+    "code": "REC-PIL-011",
+    "name": "Arpa \u015Eehriye Pilav\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 300,
+    "proteinGrams": 6.5,
+    "carbGrams": 50,
+    "fatGrams": 9,
+    "nutritionalValues": {
+      "calories": 300,
+      "protein": 6.5,
+      "carbs": 50,
+      "fat": 9
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Arpa \u015Fehriyelerin \xFC\xE7te biri tereya\u011F\u0131nda koyu karamel rengine kavrulur, kalan\u0131 eklenip s\u0131cak et suyuyla demlendirilir.",
+    "cookingInstructions": "Arpa \u015Fehriyelerin \xFC\xE7te biri tereya\u011F\u0131nda koyu karamel rengine kavrulur, kalan\u0131 eklenip s\u0131cak et suyuyla demlendirilir.",
+    "portionCost": 12.2,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.6,
+    "totalCostPerPortion": 17.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 41,
+    "ingredients": [
+      {
+        "id": "ing_pil_11_1",
+        "name": "Durum Arpa \u015Eehriye",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 38,
+        "portionCost": 3.42,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_11_2",
+        "name": "Trabzon Tereya\u011F\u0131",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 5.76,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_11_3",
+        "name": "Et Suyu & Kaya Tuzu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_12",
+    "recipeCode": "REC-PIL-012",
+    "code": "REC-PIL-012",
+    "name": "\xD6zbek Pilav\u0131 (T\xFCrk Usul\xFC)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 260,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 22,
+    "carbGrams": 52,
+    "fatGrams": 19,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 22,
+      "carbs": 52,
+      "fat": 19
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ku\u015Fba\u015F\u0131 kuzu eti, j\xFClyen bol sar\u0131 havu\xE7 ve b\xFCt\xFCn sar\u0131msak ba\u015F\u0131 d\xF6k\xFCm kazanda kavrulur; \xFCzerine pirin\xE7 \xE7ekilip suyunu \xE7ekene kadar demlendirilir.",
+    "cookingInstructions": "Ku\u015Fba\u015F\u0131 kuzu eti, j\xFClyen bol sar\u0131 havu\xE7 ve b\xFCt\xFCn sar\u0131msak ba\u015F\u0131 d\xF6k\xFCm kazanda kavrulur; \xFCzerine pirin\xE7 \xE7ekilip suyunu \xE7ekene kadar demlendirilir.",
+    "portionCost": 39.5,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 49,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_pil_12_1",
+        "name": "Kuzu Ku\u015Fba\u015F\u0131 Lokum",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 460,
+        "portionCost": 29.9,
+        "wastagePercent": 18
+      },
+      {
+        "id": "ing_pil_12_2",
+        "name": "Jasmine / Baldo Pirin\xE7",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 4.88,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_12_3",
+        "name": "Sar\u0131 Havu\xE7 (J\xFClyen) & B\xFCt\xFCn Sar\u0131msak",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 1.8,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_pil_12_4",
+        "name": "Kuyruk Ya\u011F\u0131 / S\u0131v\u0131 Ya\u011F & Kimyon",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 2.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_13",
+    "recipeCode": "REC-PIL-013",
+    "code": "REC-PIL-013",
+    "name": "F\u0131st\u0131kl\u0131 / Ku\u015F \xDCz\xFCml\xFC Pilav",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 320,
+    "proteinGrams": 5.5,
+    "carbGrams": 52,
+    "fatGrams": 10.5,
+    "nutritionalValues": {
+      "calories": 320,
+      "protein": 5.5,
+      "carbs": 52,
+      "fat": 10.5
+    },
+    "allergens": [
+      "F\u0131st\u0131k",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tereya\u011F\u0131nda kavrulmu\u015F \xE7am f\u0131st\u0131\u011F\u0131 ve \u0131slat\u0131lm\u0131\u015F ku\u015F \xFCz\xFCmleri ile demlenen tane baldo pirin\xE7 pilav\u0131.",
+    "cookingInstructions": "Tereya\u011F\u0131nda kavrulmu\u015F \xE7am f\u0131st\u0131\u011F\u0131 ve \u0131slat\u0131lm\u0131\u015F ku\u015F \xFCz\xFCmleri ile demlenen tane baldo pirin\xE7 pilav\u0131.",
+    "portionCost": 17.5,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 23.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_pil_13_1",
+        "name": "Baldo Pirin\xE7",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_13_2",
+        "name": "\xC7am F\u0131st\u0131\u011F\u0131 & Ku\u015F \xDCz\xFCm\xFC",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 7.2,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_pil_13_3",
+        "name": "K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 16,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 5.12,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_14",
+    "recipeCode": "REC-PIL-014",
+    "code": "REC-PIL-014",
+    "name": "Su B\xF6re\u011Fi",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 420,
+    "proteinGrams": 14,
+    "carbGrams": 42,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 420,
+      "protein": 14,
+      "carbs": 42,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bol yumurtal\u0131 elle a\xE7\u0131lan yufkalar kaynar tuzlu suda ha\u015Flan\u0131p \u015Foklan\u0131r; aralar\u0131na eritilmi\u015F tereya\u011F\u0131 ve ya\u011Fl\u0131 beyaz peynir/maydanoz serpilerek f\u0131r\u0131nda nar gibi pi\u015Firilir.",
+    "cookingInstructions": "Bol yumurtal\u0131 elle a\xE7\u0131lan yufkalar kaynar tuzlu suda ha\u015Flan\u0131p \u015Foklan\u0131r; aralar\u0131na eritilmi\u015F tereya\u011F\u0131 ve ya\u011Fl\u0131 beyaz peynir/maydanoz serpilerek f\u0131r\u0131nda nar gibi pi\u015Firilir.",
+    "portionCost": 26,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 11.7,
+    "totalCostPerPortion": 37.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_pil_14_1",
+        "name": "El A\xE7mas\u0131 Ha\u015Flama Yufka",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 6.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_pil_14_2",
+        "name": "Tam Ya\u011Fl\u0131 Beyaz Peynir & Maydanoz",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 11.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_14_3",
+        "name": "Eritilmi\u015F K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_15",
+    "recipeCode": "REC-PIL-015",
+    "code": "REC-PIL-015",
+    "name": "Kol B\xF6re\u011Fi (K\u0131ymal\u0131 / Peynirli / Patatesli)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 440,
+    "proteinGrams": 16,
+    "carbGrams": 46,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 440,
+      "protein": 16,
+      "carbs": 46,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Susam"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Zeytinya\u011F\u0131yla zar gibi a\xE7\u0131lan \xE7\u0131t\u0131r yufka i\xE7erisine k\u0131ymal\u0131 so\u011Fanl\u0131 har\xE7 sar\u0131l\u0131p helezon tepsiye dizilir; \xFCzeri yumurtalan\u0131p susamla f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "Zeytinya\u011F\u0131yla zar gibi a\xE7\u0131lan \xE7\u0131t\u0131r yufka i\xE7erisine k\u0131ymal\u0131 so\u011Fanl\u0131 har\xE7 sar\u0131l\u0131p helezon tepsiye dizilir; \xFCzeri yumurtalan\u0131p susamla f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 38.4,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3.2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10.7,
+    "totalCostPerPortion": 49.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_pil_15_1",
+        "name": "El A\xE7mas\u0131 \xC7\u0131t\u0131r Baklava Yufkas\u0131",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 4.95,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_15_2",
+        "name": "Dana K\u0131yma & Karamelize So\u011Fan Harc\u0131",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 30.4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_15_3",
+        "name": "S\u0131v\u0131 Ya\u011F, Tereya\u011F\u0131 & \xC7\xF6rekotu",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_16",
+    "recipeCode": "REC-PIL-016",
+    "code": "REC-PIL-016",
+    "name": "Sigara B\xF6re\u011Fi",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 11,
+    "carbGrams": 34,
+    "fatGrams": 20,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 11,
+      "carbs": 34,
+      "fat": 20
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xDC\xE7gen yufkaya maydanozlu lor ve beyaz peynir harc\u0131 sar\u0131l\u0131r; u\xE7lar\u0131 \u0131slat\u0131l\u0131p k\u0131zg\u0131n ya\u011Fda alt\u0131n sar\u0131s\u0131 \xE7\u0131t\u0131r \xE7\u0131t\u0131r k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "\xDC\xE7gen yufkaya maydanozlu lor ve beyaz peynir harc\u0131 sar\u0131l\u0131r; u\xE7lar\u0131 \u0131slat\u0131l\u0131p k\u0131zg\u0131n ya\u011Fda alt\u0131n sar\u0131s\u0131 \xE7\u0131t\u0131r \xE7\u0131t\u0131r k\u0131zart\u0131l\u0131r.",
+    "portionCost": 14.2,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 7.1,
+    "totalCostPerPortion": 21.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_pil_16_1",
+        "name": "Taze \xDC\xE7gen Yufka (4 adet)",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 3.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_16_2",
+        "name": "Lor & Beyaz Peynir & Maydanoz",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 9.1,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_16_3",
+        "name": "K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_17",
+    "recipeCode": "REC-PIL-017",
+    "code": "REC-PIL-017",
+    "name": "Pa\xE7anga B\xF6re\u011Fi",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 430,
+    "proteinGrams": 18,
+    "carbGrams": 32,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 430,
+      "protein": 18,
+      "carbs": 32,
+      "fat": 26
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Yufkaya \xE7emenli Kayseri past\u0131rmas\u0131, ka\u015Far peyniri, domates ve biber sar\u0131l\u0131p k\u0131zg\u0131n ya\u011Fda peyniri uzayana kadar k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Yufkaya \xE7emenli Kayseri past\u0131rmas\u0131, ka\u015Far peyniri, domates ve biber sar\u0131l\u0131p k\u0131zg\u0131n ya\u011Fda peyniri uzayana kadar k\u0131zart\u0131l\u0131r.",
+    "portionCost": 43.3,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8,
+    "totalCostPerPortion": 51.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 80,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_pil_17_1",
+        "name": "Taze Yufka",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_17_2",
+        "name": "Kayseri Past\u0131rmas\u0131 (\xC7emenli/\xC7emensiz)",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 680,
+        "portionCost": 27.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_17_3",
+        "name": "Taze Ka\u015Far Peyniri",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 11.7,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_17_4",
+        "name": "Domates & Biber & K\u0131zartma Ya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 1.75,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_18",
+    "recipeCode": "REC-PIL-018",
+    "code": "REC-PIL-018",
+    "name": "Tepsi B\xF6re\u011Fi",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 390,
+    "proteinGrams": 12,
+    "carbGrams": 42,
+    "fatGrams": 20,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 12,
+      "carbs": 42,
+      "fat": 20
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Yufka katlar\u0131 aras\u0131na s\xFCt, maden suyu ve yumurtal\u0131 har\xE7 s\xFCr\xFCl\xFCp peynirli maydanozlu i\xE7 yay\u0131l\u0131r; f\u0131r\u0131nda kabara kabara pi\u015Firilir.",
+    "cookingInstructions": "Yufka katlar\u0131 aras\u0131na s\xFCt, maden suyu ve yumurtal\u0131 har\xE7 s\xFCr\xFCl\xFCp peynirli maydanozlu i\xE7 yay\u0131l\u0131r; f\u0131r\u0131nda kabara kabara pi\u015Firilir.",
+    "portionCost": 18.1,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.8,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.6,
+    "totalCostPerPortion": 26.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_pil_18_1",
+        "name": "Taze Elde A\xE7\u0131lm\u0131\u015F Yufka",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_18_2",
+        "name": "Beyaz Peynir & Maydanoz",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 10.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_18_3",
+        "name": "S\xFCt, Yumurta & S\u0131v\u0131 Ya\u011F Sosu",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Yumurta"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_19",
+    "recipeCode": "REC-PIL-019",
+    "code": "REC-PIL-019",
+    "name": "Bo\u015Fnak B\xF6re\u011Fi",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 450,
+    "proteinGrams": 16,
+    "carbGrams": 44,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 450,
+      "protein": 16,
+      "carbs": 44,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Zar inceli\u011Finde \xE7ar\u015Faf \xFCzerinde el ile a\xE7\u0131lan Bo\u015Fnak yufkas\u0131 k\u0131yma veya \u0131spanak harc\u0131yla rulo yap\u0131l\u0131p f\u0131r\u0131nda \xE7\u0131t\u0131r pi\u015Firilir.",
+    "cookingInstructions": "Zar inceli\u011Finde \xE7ar\u015Faf \xFCzerinde el ile a\xE7\u0131lan Bo\u015Fnak yufkas\u0131 k\u0131yma veya \u0131spanak harc\u0131yla rulo yap\u0131l\u0131p f\u0131r\u0131nda \xE7\u0131t\u0131r pi\u015Firilir.",
+    "portionCost": 37.9,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 3.2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11.2,
+    "totalCostPerPortion": 49.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_pil_19_1",
+        "name": "\xC7ar\u015Faf Usul\xFC El A\xE7mas\u0131 Hamur",
+        "portionGrams": 95,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 4.28,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_19_2",
+        "name": "K\u0131ymal\u0131 & So\u011Fanl\u0131 Har\xE7",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 28.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_19_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F Kar\u0131\u015F\u0131m\u0131",
+        "portionGrams": 22,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 4.84,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_20",
+    "recipeCode": "REC-PIL-020",
+    "code": "REC-PIL-020",
+    "name": "G\xF6zleme (Ispanakl\u0131 / Peynirli / K\u0131ymal\u0131)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 380,
+    "proteinGrams": 12,
+    "carbGrams": 46,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 12,
+      "carbs": 46,
+      "fat": 16
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Oklava ile a\xE7\u0131lan mayas\u0131z ince yufka i\xE7ine \u0131spanak ve beyaz peynir konularak sa\xE7ta iki taraf\u0131 tereya\u011Flan\u0131p pi\u015Firilir.",
+    "cookingInstructions": "Oklava ile a\xE7\u0131lan mayas\u0131z ince yufka i\xE7ine \u0131spanak ve beyaz peynir konularak sa\xE7ta iki taraf\u0131 tereya\u011Flan\u0131p pi\u015Firilir.",
+    "portionCost": 16,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 23.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_pil_20_1",
+        "name": "Sac Yufkas\u0131 Hamuru",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_20_2",
+        "name": "Taze Ispanak & Beyaz Peynir Harc\u0131",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 7.7,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_20_3",
+        "name": "\xDCst Ya\u011Flama K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_21",
+    "recipeCode": "REC-PIL-021",
+    "code": "REC-PIL-021",
+    "name": "Mant\u0131 (Kayseri Usul\xFC)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 50,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 460,
+    "proteinGrams": 20,
+    "carbGrams": 58,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 20,
+      "carbs": 58,
+      "fat": 16
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bir ka\u015F\u0131\u011Fa k\u0131rk adet s\u0131\u011Facak boyutta minik minik b\xFCk\xFClen k\u0131ymal\u0131 mant\u0131lar ha\u015Flan\u0131r; sar\u0131msakl\u0131 yo\u011Furt, sumak, nane ve tereya\u011Fl\u0131 sal\xE7a sos ile servis edilir.",
+    "cookingInstructions": "Bir ka\u015F\u0131\u011Fa k\u0131rk adet s\u0131\u011Facak boyutta minik minik b\xFCk\xFClen k\u0131ymal\u0131 mant\u0131lar ha\u015Flan\u0131r; sar\u0131msakl\u0131 yo\u011Furt, sumak, nane ve tereya\u011Fl\u0131 sal\xE7a sos ile servis edilir.",
+    "portionCost": 28.7,
+    "laborCostPerPortion": 8.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 40.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_pil_21_1",
+        "name": "Kayseri Usul\xFC El Mant\u0131s\u0131",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 18.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_pil_21_2",
+        "name": "Sar\u0131msakl\u0131 S\xFCzme Yo\u011Furt",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 5.25,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_21_3",
+        "name": "K\u0131zg\u0131n Tereya\u011Fl\u0131 Sal\xE7a Sosu & Sumak",
+        "portionGrams": 22,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 5.28,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_22",
+    "recipeCode": "REC-PIL-022",
+    "code": "REC-PIL-022",
+    "name": "Sinop Mant\u0131s\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 480,
+    "proteinGrams": 18,
+    "carbGrams": 54,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 18,
+      "carbs": 54,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Ceviz",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kulak \u015Feklinde b\xFCy\xFCk\xE7e b\xFCk\xFClen k\u0131ymal\u0131 mant\u0131lar ha\u015Flan\u0131r; yar\u0131s\u0131 sar\u0131msakl\u0131 yo\u011Furtlu, yar\u0131s\u0131 bol cevizli ve k\u0131zg\u0131n tereya\u011Fl\u0131 olarak servis edilir.",
+    "cookingInstructions": "Kulak \u015Feklinde b\xFCy\xFCk\xE7e b\xFCk\xFClen k\u0131ymal\u0131 mant\u0131lar ha\u015Flan\u0131r; yar\u0131s\u0131 sar\u0131msakl\u0131 yo\u011Furtlu, yar\u0131s\u0131 bol cevizli ve k\u0131zg\u0131n tereya\u011Fl\u0131 olarak servis edilir.",
+    "portionCost": 39.2,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 50.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 80,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_pil_22_1",
+        "name": "Sinop Tipi \u0130ri El Mant\u0131s\u0131",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 130,
+        "portionCost": 18.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_22_2",
+        "name": "D\xF6v\xFClm\xFC\u015F Ceviz \u0130\xE7i",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 12,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_pil_22_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Yo\u011Furt",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_23",
+    "recipeCode": "REC-PIL-023",
+    "code": "REC-PIL-023",
+    "name": "Tepsi Mant\u0131s\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 490,
+    "proteinGrams": 22,
+    "carbGrams": 56,
+    "fatGrams": 20,
+    "nutritionalValues": {
+      "calories": 490,
+      "protein": 22,
+      "carbs": 56,
+      "fat": 20
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xDCst\xFC a\xE7\u0131k kay\u0131k \u015Feklinde b\xFCk\xFClen mant\u0131lar tepsiye dizilir, f\u0131r\u0131nda veya ocakta alt\u0131 \xE7\u0131t\u0131rla\u015Fana dek pi\u015Firilir; s\u0131cak sal\xE7al\u0131 et suyu verilip demlendirilir.",
+    "cookingInstructions": "\xDCst\xFC a\xE7\u0131k kay\u0131k \u015Feklinde b\xFCk\xFClen mant\u0131lar tepsiye dizilir, f\u0131r\u0131nda veya ocakta alt\u0131 \xE7\u0131t\u0131rla\u015Fana dek pi\u015Firilir; s\u0131cak sal\xE7al\u0131 et suyu verilip demlendirilir.",
+    "portionCost": 27.4,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 39.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_pil_23_1",
+        "name": "Kay\u0131k B\xFCk\xFCm Tepsi Mant\u0131s\u0131",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 19.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_23_2",
+        "name": "Et Suyu & Tereya\u011Fl\u0131 Sal\xE7a Sosu",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_23_3",
+        "name": "Sar\u0131msakl\u0131 Yo\u011Furt & Sumak",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3.75,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_24",
+    "recipeCode": "REC-PIL-024",
+    "code": "REC-PIL-024",
+    "name": "Ya\u011Flama (\u015Eebit)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 280,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 530,
+    "proteinGrams": 24,
+    "carbGrams": 58,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 530,
+      "protein": 24,
+      "carbs": 58,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kayseri klasi\u011Fi incecik \u015Febit lava\u015Flar\u0131n\u0131n kat kat aras\u0131na k\u0131ymal\u0131, domatesli, biberli sulu har\xE7 serilir; d\xF6rde b\xF6l\xFCnerek sar\u0131msakl\u0131 yo\u011Furtla servis edilir.",
+    "cookingInstructions": "Kayseri klasi\u011Fi incecik \u015Febit lava\u015Flar\u0131n\u0131n kat kat aras\u0131na k\u0131ymal\u0131, domatesli, biberli sulu har\xE7 serilir; d\xF6rde b\xF6l\xFCnerek sar\u0131msakl\u0131 yo\u011Furtla servis edilir.",
+    "portionCost": 43.5,
+    "laborCostPerPortion": 7,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 54.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 85,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_pil_24_1",
+        "name": "\u015Eebit Lava\u015F Yufkas\u0131 (6 kat)",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_24_2",
+        "name": "K\u0131ymal\u0131 Sulu Ya\u011Flama Harc\u0131",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 35.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_24_3",
+        "name": "Sar\u0131msakl\u0131 Yo\u011Furt",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3.75,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_25",
+    "recipeCode": "REC-PIL-025",
+    "code": "REC-PIL-025",
+    "name": "F\u0131r\u0131n Makarna",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 240,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 15,
+    "carbGrams": 50,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 15,
+      "carbs": 50,
+      "fat": 17
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kal\u0131n delikli f\u0131r\u0131n makarna be\u015Famel sos, beyaz peynir ve rendelenmi\u015F ka\u015Farla kar\u0131\u015Ft\u0131r\u0131l\u0131p f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Kal\u0131n delikli f\u0131r\u0131n makarna be\u015Famel sos, beyaz peynir ve rendelenmi\u015F ka\u015Farla kar\u0131\u015Ft\u0131r\u0131l\u0131p f\u0131r\u0131nda nar gibi k\u0131zart\u0131l\u0131r.",
+    "portionCost": 17.5,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2.8,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.1,
+    "totalCostPerPortion": 25.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_pil_25_1",
+        "name": "F\u0131r\u0131n Makarna (Bucatini)",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 3.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_25_2",
+        "name": "Be\u015Famel Sos (S\xFCt, Un, Tereya\u011F\u0131)",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 4.55,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_pil_25_3",
+        "name": "Ka\u015Far & Beyaz Peynir",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 9.6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_26",
+    "recipeCode": "REC-PIL-026",
+    "code": "REC-PIL-026",
+    "name": "Soslu Makarna (Domates / K\u0131yma / Peynir)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 230,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 12,
+    "carbGrams": 55,
+    "fatGrams": 10,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 12,
+      "carbs": 55,
+      "fat": 10
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ha\u015Flanm\u0131\u015F burgu veya kalem makarna fesle\u011Fenli zengin domates sosu ve tereya\u011F\u0131nda \xE7evrilip rendelenmi\u015F peynirle servis edilir.",
+    "cookingInstructions": "Ha\u015Flanm\u0131\u015F burgu veya kalem makarna fesle\u011Fenli zengin domates sosu ve tereya\u011F\u0131nda \xE7evrilip rendelenmi\u015F peynirle servis edilir.",
+    "portionCost": 11.1,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 17,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_pil_26_1",
+        "name": "Durum Bu\u011Fday\u0131 Makarna",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 38,
+        "portionCost": 3.23,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_26_2",
+        "name": "Tereya\u011Fl\u0131 Fesle\u011Fenli Domates Sosu",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_26_3",
+        "name": "Rendelenmi\u015F Ka\u015Far Peyniri",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_27",
+    "recipeCode": "REC-PIL-027",
+    "code": "REC-PIL-027",
+    "name": "Eri\u015Fte (Cevizli / Peynirli)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 420,
+    "proteinGrams": 14,
+    "carbGrams": 52,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 420,
+      "protein": 14,
+      "carbs": 52,
+      "fat": 18
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ev yap\u0131m\u0131 bol yumurtal\u0131 eri\u015Fte ha\u015Flan\u0131r; k\xF6y tereya\u011F\u0131nda kavrulan ceviz i\xE7i ve tulum peyniri ile harmanlan\u0131r.",
+    "cookingInstructions": "Ev yap\u0131m\u0131 bol yumurtal\u0131 eri\u015Fte ha\u015Flan\u0131r; k\xF6y tereya\u011F\u0131nda kavrulan ceviz i\xE7i ve tulum peyniri ile harmanlan\u0131r.",
+    "portionCost": 25,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 1.8,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.4,
+    "totalCostPerPortion": 31.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_pil_27_1",
+        "name": "K\xF6y Usul\xFC Yumurtal\u0131 Ev Eri\u015Ftesi",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.85,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_pil_27_2",
+        "name": "\u0130ri K\u0131r\u0131lm\u0131\u015F Ceviz \u0130\xE7i",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 10,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_pil_27_3",
+        "name": "Tulum Peyniri & K\u0131zg\u0131n Tereya\u011F\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 9.1,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_28",
+    "recipeCode": "REC-PIL-028",
+    "code": "REC-PIL-028",
+    "name": "\xC7i\u011F B\xF6rek (\xC7ib\xF6rek)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 15,
+    "carbGrams": 42,
+    "fatGrams": 21,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 15,
+      "carbs": 42,
+      "fat": 21
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Eski\u015Fehir K\u0131r\u0131m Tatar usul\xFC ince a\xE7\u0131lan hamura sulu \xE7i\u011F k\u0131yma ve karabiberli har\xE7 konup k\u0131zg\u0131n derin ya\u011Fda puf b\xF6rek gibi kabart\u0131l\u0131r.",
+    "cookingInstructions": "Eski\u015Fehir K\u0131r\u0131m Tatar usul\xFC ince a\xE7\u0131lan hamura sulu \xE7i\u011F k\u0131yma ve karabiberli har\xE7 konup k\u0131zg\u0131n derin ya\u011Fda puf b\xF6rek gibi kabart\u0131l\u0131r.",
+    "portionCost": 28.1,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8,
+    "totalCostPerPortion": 36.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 55,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_pil_28_1",
+        "name": "Sirkeli \xC7ib\xF6rek Hamuru",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 3.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_28_2",
+        "name": "Sulu K\u0131yma Harc\u0131 (So\u011Fan Suyu, Karabiber)",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 22.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_28_3",
+        "name": "Derin K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_29",
+    "recipeCode": "REC-PIL-029",
+    "code": "REC-PIL-029",
+    "name": "Pide \xC7e\u015Fitleri (K\u0131ymal\u0131 / Ka\u015Farl\u0131 / Ku\u015Fba\u015F\u0131l\u0131)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 270,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 540,
+    "proteinGrams": 26,
+    "carbGrams": 62,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 540,
+      "protein": 26,
+      "carbs": 62,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Geleneksel pide hamuru kay\u0131k \u015Feklinde a\xE7\u0131l\u0131r; k\u0131ymal\u0131/ku\u015Fba\u015F\u0131l\u0131 har\xE7 ve ka\u015Farla ta\u015F f\u0131r\u0131nda gevrek pi\u015Firilip kenarlar\u0131 tereya\u011Flan\u0131r.",
+    "cookingInstructions": "Geleneksel pide hamuru kay\u0131k \u015Feklinde a\xE7\u0131l\u0131r; k\u0131ymal\u0131/ku\u015Fba\u015F\u0131l\u0131 har\xE7 ve ka\u015Farla ta\u015F f\u0131r\u0131nda gevrek pi\u015Firilip kenarlar\u0131 tereya\u011Flan\u0131r.",
+    "portionCost": 44.8,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 11,
+    "totalCostPerPortion": 55.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 85,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_pil_29_1",
+        "name": "Mayal\u0131 Ta\u015F F\u0131r\u0131n Pide Hamuru",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_29_2",
+        "name": "Ku\u015Fba\u015F\u0131 / K\u0131yma Harc\u0131",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 420,
+        "portionCost": 31.5,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_pil_29_3",
+        "name": "Ka\u015Far Peyniri & Tereya\u011F\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 9.1,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_30",
+    "recipeCode": "REC-PIL-030",
+    "code": "REC-PIL-030",
+    "name": "Lahmacun",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 8,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 16,
+    "carbGrams": 40,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 16,
+      "carbs": 40,
+      "fat": 12
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Z\u0131rh k\u0131ymas\u0131, sar\u0131msak, maydanoz, domates ve biber sal\xE7al\u0131 har\xE7 ka\u011F\u0131t gibi ince hamurun \xFCzerine yay\u0131l\u0131p ta\u015F f\u0131r\u0131nda gevrek pi\u015Firilir.",
+    "cookingInstructions": "Z\u0131rh k\u0131ymas\u0131, sar\u0131msak, maydanoz, domates ve biber sal\xE7al\u0131 har\xE7 ka\u011F\u0131t gibi ince hamurun \xFCzerine yay\u0131l\u0131p ta\u015F f\u0131r\u0131nda gevrek pi\u015Firilir.",
+    "portionCost": 32,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.3,
+    "totalCostPerPortion": 40.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_pil_30_1",
+        "name": "Ta\u015F F\u0131r\u0131n \u0130nce Lahmacun Hamuru",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.45,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_30_2",
+        "name": "Z\u0131rh K\u0131yma & Baharatl\u0131 Sal\xE7al\u0131 Har\xE7",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 28.5,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_30_3",
+        "name": "Limon Dilimi & Maydanoz Ye\u015Fillik",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.05,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_31",
+    "recipeCode": "REC-PIL-031",
+    "code": "REC-PIL-031",
+    "name": "Boyoz",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 140,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 380,
+    "proteinGrams": 7,
+    "carbGrams": 42,
+    "fatGrams": 21,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 7,
+      "carbs": 42,
+      "fat": 21
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130zmir gelene\u011Fi un, su ve tuz ile dinlendirilen hamur tahin ve s\u0131v\u0131 ya\u011F ile defalarca a\xE7\u0131larak katlan\u0131r; f\u0131r\u0131nda \xE7\u0131t\u0131r katmerli pi\u015Firilir.",
+    "cookingInstructions": "\u0130zmir gelene\u011Fi un, su ve tuz ile dinlendirilen hamur tahin ve s\u0131v\u0131 ya\u011F ile defalarca a\xE7\u0131larak katlan\u0131r; f\u0131r\u0131nda \xE7\u0131t\u0131r katmerli pi\u015Firilir.",
+    "portionCost": 11.8,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.8,
+    "totalCostPerPortion": 20.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 31,
+    "ingredients": [
+      {
+        "id": "ing_pil_31_1",
+        "name": "\xD6zel Dinlendirilmi\u015F Boyoz Hamuru",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 3.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_31_2",
+        "name": "Tahin & Bitkisel A\xE7ma Ya\u011F\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 4.9,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_pil_31_3",
+        "name": "F\u0131r\u0131nlanm\u0131\u015F Ha\u015Flama Yumurta",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 3.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_32",
+    "recipeCode": "REC-PIL-032",
+    "code": "REC-PIL-032",
+    "name": "Pi\u015Fi / Hamur K\u0131zartmas\u0131",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 390,
+    "proteinGrams": 8,
+    "carbGrams": 48,
+    "fatGrams": 19,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 8,
+      "carbs": 48,
+      "fat": 19
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Mayal\u0131 yumu\u015Fak hamur bezeleri el ile a\xE7\u0131l\u0131p ortas\u0131 delinerek k\u0131zg\u0131n ya\u011Fda alt\u0131n sar\u0131s\u0131 puf puf k\u0131zart\u0131l\u0131r.",
+    "cookingInstructions": "Mayal\u0131 yumu\u015Fak hamur bezeleri el ile a\xE7\u0131l\u0131p ortas\u0131 delinerek k\u0131zg\u0131n ya\u011Fda alt\u0131n sar\u0131s\u0131 puf puf k\u0131zart\u0131l\u0131r.",
+    "portionCost": 5.7,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.6,
+    "totalCostPerPortion": 12.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_pil_32_1",
+        "name": "Mayal\u0131 Pi\u015Fi Hamuru",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_32_2",
+        "name": "K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_33",
+    "recipeCode": "REC-PIL-033",
+    "code": "REC-PIL-033",
+    "name": "Hingel / H\u0131ngel",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 430,
+    "proteinGrams": 15,
+    "carbGrams": 60,
+    "fatGrams": 15,
+    "nutritionalValues": {
+      "calories": 430,
+      "protein": 15,
+      "carbs": 60,
+      "fat": 15
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kafkas/Sivas usul\xFC \xF6rg\xFC \u015Feklinde kapat\u0131lan patatesli veya k\u0131ymal\u0131 iri mant\u0131lar ha\u015Flan\u0131r; \xFCzerine sar\u0131msakl\u0131 yo\u011Furt ve k\u0131zg\u0131n tereya\u011F\u0131 d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "Kafkas/Sivas usul\xFC \xF6rg\xFC \u015Feklinde kapat\u0131lan patatesli veya k\u0131ymal\u0131 iri mant\u0131lar ha\u015Flan\u0131r; \xFCzerine sar\u0131msakl\u0131 yo\u011Furt ve k\u0131zg\u0131n tereya\u011F\u0131 d\xF6k\xFCl\xFCr.",
+    "portionCost": 22.9,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 32.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_pil_33_1",
+        "name": "H\u0131ngel Hamuru (Patatesli/K\u0131ymal\u0131 Har\xE7)",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 12.75,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_pil_33_2",
+        "name": "K\xF6y Tereya\u011F\u0131 & K\u0131rm\u0131z\u0131 Pul Biber",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 6.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_pil_33_3",
+        "name": "Sar\u0131msakl\u0131 Yo\u011Furt",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 3.75,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_pil_34",
+    "recipeCode": "REC-PIL-034",
+    "code": "REC-PIL-034",
+    "name": "Cant\u0131k (Bursa)",
+    "category": "side_dish",
+    "categoryLabel": "Pilav & Makarna",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+65\xB0C (S\u0131cak)",
+    "servingTemp": "+65\xB0C (S\u0131cak)",
+    "caloriePerPortion": 440,
+    "proteinGrams": 18,
+    "carbGrams": 48,
+    "fatGrams": 20,
+    "nutritionalValues": {
+      "calories": 440,
+      "protein": 18,
+      "carbs": 48,
+      "fat": 20
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bursa usul\xFC kabar\u0131k yuvarlak mayal\u0131 hamurun ortas\u0131na k\u0131ymal\u0131 har\xE7 bast\u0131r\u0131l\u0131p f\u0131r\u0131nda kenarlar\u0131 puf puf \xE7\u0131t\u0131r pi\u015Firilir.",
+    "cookingInstructions": "Bursa usul\xFC kabar\u0131k yuvarlak mayal\u0131 hamurun ortas\u0131na k\u0131ymal\u0131 har\xE7 bast\u0131r\u0131l\u0131p f\u0131r\u0131nda kenarlar\u0131 puf puf \xE7\u0131t\u0131r pi\u015Firilir.",
+    "portionCost": 33,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.8,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 9.1,
+    "totalCostPerPortion": 42.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_pil_34_1",
+        "name": "\xD6zel Bursa Cant\u0131k Hamuru",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.15,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_pil_34_2",
+        "name": "K\u0131ymal\u0131 & Domatesli Cant\u0131k Harc\u0131",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 26.6,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_pil_34_3",
+        "name": "Kenar Ya\u011Flama Tereya\u011F\u0131",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 3.2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  }
+];
+
+// src/data/recipes/saladRecipes.ts
+var saladRecipes = [
+  {
+    "id": "rec_sal_01",
+    "recipeCode": "REC-SAL-001",
+    "code": "REC-SAL-001",
+    "name": "\xC7oban Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 120,
+    "proteinGrams": 2.5,
+    "carbGrams": 9,
+    "fatGrams": 8.5,
+    "nutritionalValues": {
+      "calories": 120,
+      "protein": 2.5,
+      "carbs": 9,
+      "fat": 8.5
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tarla domatesi, salatal\u0131k, sivri biber, kuru so\u011Fan ve maydanoz e\u015Fit k\xFCpler halinde do\u011Fran\u0131r. \xDCzerine s\u0131zma zeytinya\u011F\u0131, nar ek\u015Fisi ve taze limon suyu gezdirilir.",
+    "cookingInstructions": "Tarla domatesi, salatal\u0131k, sivri biber, kuru so\u011Fan ve maydanoz e\u015Fit k\xFCpler halinde do\u011Fran\u0131r. \xDCzerine s\u0131zma zeytinya\u011F\u0131, nar ek\u015Fisi ve taze limon suyu gezdirilir.",
+    "portionCost": 10.8,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.7,
+    "totalCostPerPortion": 16.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_sal_01_1",
+        "name": "Tarla Domatesi & \xC7engelk\xF6y Salatal\u0131k",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.2,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_sal_01_2",
+        "name": "Sivri Biber, K\u0131rm\u0131z\u0131 So\u011Fan & Maydanoz",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_sal_01_3",
+        "name": "Erken Hasat S\u0131zma Zeytinya\u011F\u0131 & Limon",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 4.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_02",
+    "recipeCode": "REC-SAL-002",
+    "code": "REC-SAL-002",
+    "name": "Mevsim Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 12,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 110,
+    "proteinGrams": 2.2,
+    "carbGrams": 8,
+    "fatGrams": 8,
+    "nutritionalValues": {
+      "calories": 110,
+      "protein": 2.2,
+      "carbs": 8,
+      "fat": 8
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130nce k\u0131y\u0131lm\u0131\u015F mor lahana, g\xF6bek marul, rendelenmi\u015F havu\xE7 ve m\u0131s\u0131r zeytinya\u011Fl\u0131 limonlu sosla harmanlan\u0131r.",
+    "cookingInstructions": "\u0130nce k\u0131y\u0131lm\u0131\u015F mor lahana, g\xF6bek marul, rendelenmi\u015F havu\xE7 ve m\u0131s\u0131r zeytinya\u011Fl\u0131 limonlu sosla harmanlan\u0131r.",
+    "portionCost": 8.7,
+    "laborCostPerPortion": 2.8,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.5,
+    "totalCostPerPortion": 14.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 29,
+    "ingredients": [
+      {
+        "id": "ing_sal_02_1",
+        "name": "G\xF6bek Marul & Mor Lahana",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 3,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_02_2",
+        "name": "Rende Havu\xE7 & Tane M\u0131s\u0131r",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_02_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Limon Sosu",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 3.96,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_03",
+    "recipeCode": "REC-SAL-003",
+    "code": "REC-SAL-003",
+    "name": "Gavurda\u011F\u0131 Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 220,
+    "proteinGrams": 4.5,
+    "carbGrams": 12,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 220,
+      "protein": 4.5,
+      "carbs": 12,
+      "fat": 18
+    },
+    "allergens": [
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kabu\u011Fu soyulup tavla zar\u0131 b\xFCy\xFCkl\xFC\u011F\xFCnde do\u011Franan domates, salatal\u0131k, taze so\u011Fan ve maydanoz; bol k\u0131r\u0131k ceviz, sumak, hakiki nar ek\u015Fisi ve zeytinya\u011F\u0131 ile bulu\u015Fur.",
+    "cookingInstructions": "Kabu\u011Fu soyulup tavla zar\u0131 b\xFCy\xFCkl\xFC\u011F\xFCnde do\u011Franan domates, salatal\u0131k, taze so\u011Fan ve maydanoz; bol k\u0131r\u0131k ceviz, sumak, hakiki nar ek\u015Fisi ve zeytinya\u011F\u0131 ile bulu\u015Fur.",
+    "portionCost": 24.2,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 31,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_03_1",
+        "name": "Soyulmu\u015F Tarla Domatesi & Salatal\u0131k",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.2,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_03_2",
+        "name": "\u0130ri K\u0131r\u0131lm\u0131\u015F Yerli Ceviz \u0130\xE7i",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 14,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_sal_03_3",
+        "name": "Ye\u015Fillikler (Taze So\u011Fan, Maydanoz)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_03_4",
+        "name": "Do\u011Fal Nar Ek\u015Fisi, Sumak & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 250,
+        "portionCost": 5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_04",
+    "recipeCode": "REC-SAL-004",
+    "code": "REC-SAL-004",
+    "name": "Piyaz (Antalya Usul\xFC - Tahinli)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 340,
+    "proteinGrams": 14,
+    "carbGrams": 32,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 340,
+      "protein": 14,
+      "carbs": 32,
+      "fat": 18
+    },
+    "allergens": [
+      "Susam (Tahin)",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\xC7and\u0131r kuru fasulyesi ha\u015Flan\u0131r. Tahin, sar\u0131msak, sirke ve limonla haz\u0131rlanan \xF6zel tarator sos fasulyeyle harmanlan\u0131r; ha\u015Flanm\u0131\u015F yumurta ve domatesle s\xFCslenir.",
+    "cookingInstructions": "\xC7and\u0131r kuru fasulyesi ha\u015Flan\u0131r. Tahin, sar\u0131msak, sirke ve limonla haz\u0131rlanan \xF6zel tarator sos fasulyeyle harmanlan\u0131r; ha\u015Flanm\u0131\u015F yumurta ve domatesle s\xFCslenir.",
+    "portionCost": 21.7,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.1,
+    "totalCostPerPortion": 27.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 45,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_04_1",
+        "name": "Ha\u015Flanm\u0131\u015F K\xFC\xE7\xFCk Kuru Fasulye (\xC7and\u0131r)",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 8.55,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_04_2",
+        "name": "\xD6zel Antalya Tahin Sosu (Tahin, Sirke, Limon, Sar\u0131msak)",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 8.8,
+        "wastagePercent": 0,
+        "allergen": "Susam"
+      },
+      {
+        "id": "ing_sal_04_3",
+        "name": "K\xF6y Yumurtas\u0131 (Ha\u015Flanm\u0131\u015F Dilim)",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.8,
+        "wastagePercent": 0,
+        "allergen": "Yumurta"
+      },
+      {
+        "id": "ing_sal_04_4",
+        "name": "Domates, Maydanoz & Zeytinya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_05",
+    "recipeCode": "REC-SAL-005",
+    "code": "REC-SAL-005",
+    "name": "Piyaz (Klasik Fasulye)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 230,
+    "proteinGrams": 11,
+    "carbGrams": 28,
+    "fatGrams": 8,
+    "nutritionalValues": {
+      "calories": 230,
+      "protein": 11,
+      "carbs": 28,
+      "fat": 8
+    },
+    "allergens": [
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ha\u015Flanm\u0131\u015F kuru fasulye sumakl\u0131 ince piyaz so\u011Fan, maydanoz, domates, s\u0131zma zeytinya\u011F\u0131 ve sirke ile harmanlan\u0131r.",
+    "cookingInstructions": "Ha\u015Flanm\u0131\u015F kuru fasulye sumakl\u0131 ince piyaz so\u011Fan, maydanoz, domates, s\u0131zma zeytinya\u011F\u0131 ve sirke ile harmanlan\u0131r.",
+    "portionCost": 15.9,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 0.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 20.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_sal_05_1",
+        "name": "Ha\u015Flanm\u0131\u015F Kuru Fasulye (Dermason)",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 8.25,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_05_2",
+        "name": "Piyazl\u0131k K\u0131rm\u0131z\u0131 So\u011Fan & Maydanoz",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.58,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_05_3",
+        "name": "Ha\u015Flanm\u0131\u015F Yumurta Dilimleri",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.45,
+        "wastagePercent": 0,
+        "allergen": "Yumurta"
+      },
+      {
+        "id": "ing_sal_05_4",
+        "name": "S\u0131zma Zeytinya\u011F\u0131, Elma Sirkesi & Sumak",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 200,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_06",
+    "recipeCode": "REC-SAL-006",
+    "code": "REC-SAL-006",
+    "name": "Haydari",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 9,
+    "carbGrams": 8,
+    "fatGrams": 19,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 9,
+      "carbs": 8,
+      "fat": 19
+    },
+    "allergens": [
+      "Laktoz (S\xFCzme Yo\u011Furt, Peynir, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Koyu s\xFCzme yo\u011Furt, ezilmi\u015F ya\u011Fl\u0131 beyaz peynir, d\xF6v\xFClm\xFC\u015F sar\u0131msak, taze nane ve tereya\u011F\u0131nda hafif \xE7evrilmi\u015F kuru nane ile homojen kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "Koyu s\xFCzme yo\u011Furt, ezilmi\u015F ya\u011Fl\u0131 beyaz peynir, d\xF6v\xFClm\xFC\u015F sar\u0131msak, taze nane ve tereya\u011F\u0131nda hafif \xE7evrilmi\u015F kuru nane ile homojen kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "portionCost": 22.8,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 0.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 27.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_sal_06_1",
+        "name": "Koyu S\xFCzme K\xF6y Yo\u011Furdu",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 8.25,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_06_2",
+        "name": "Ezine Ya\u011Fl\u0131 Beyaz Peynir",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 210,
+        "portionCost": 7.35,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_06_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Kuru Nane",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_06_4",
+        "name": "Ezilmi\u015F Sar\u0131msak & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_07",
+    "recipeCode": "REC-SAL-007",
+    "code": "REC-SAL-007",
+    "name": "Humus (S\u0131cak Past\u0131rmal\u0131 / So\u011Fuk)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+50\xB0C (S\u0131cak)",
+    "servingTemp": "+50\xB0C (S\u0131cak)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 14,
+    "carbGrams": 30,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 14,
+      "carbs": 30,
+      "fat": 22
+    },
+    "allergens": [
+      "Susam (Tahin)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kabuklar\u0131 tek tek soyulmu\u015F ha\u015Flanm\u0131\u015F nohut tahin, sar\u0131msak, kimyon ve limonla ipeksi p\xFCre yap\u0131l\u0131r; \xFCzerine tereya\u011F\u0131nda \xE7\u0131t\u0131rdat\u0131lm\u0131\u015F past\u0131rma dilimleri serilir.",
+    "cookingInstructions": "Kabuklar\u0131 tek tek soyulmu\u015F ha\u015Flanm\u0131\u015F nohut tahin, sar\u0131msak, kimyon ve limonla ipeksi p\xFCre yap\u0131l\u0131r; \xFCzerine tereya\u011F\u0131nda \xE7\u0131t\u0131rdat\u0131lm\u0131\u015F past\u0131rma dilimleri serilir.",
+    "portionCost": 35.4,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.6,
+    "totalCostPerPortion": 42,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 65,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_sal_07_1",
+        "name": "Soyulmu\u015F \u0130peksi Nohut P\xFCresi",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.85,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_07_2",
+        "name": "\xC7ifte Kavrulmu\u015F Tahin & Limon Suyu",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 6.75,
+        "wastagePercent": 0,
+        "allergen": "Susam"
+      },
+      {
+        "id": "ing_sal_07_3",
+        "name": "Kayseri Past\u0131rmas\u0131 (\xC7emenli)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 680,
+        "portionCost": 17,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_07_4",
+        "name": "K\xF6y Tereya\u011F\u0131 & Kimyon",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 5.76,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_08",
+    "recipeCode": "REC-SAL-008",
+    "code": "REC-SAL-008",
+    "name": "\u015Eak\u015Fuka (So\u011Fuk Meze)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 210,
+    "proteinGrams": 3.5,
+    "carbGrams": 18,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 210,
+      "protein": 3.5,
+      "carbs": 18,
+      "fat": 14
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xFCp k\u0131zart\u0131lm\u0131\u015F kemer patl\u0131can ve k\xF6y biberi yo\u011Fun sar\u0131msakl\u0131 domates sosuyla dinlendirilir; so\u011Fuk meze olarak servis edilir.",
+    "cookingInstructions": "K\xFCp k\u0131zart\u0131lm\u0131\u015F kemer patl\u0131can ve k\xF6y biberi yo\u011Fun sar\u0131msakl\u0131 domates sosuyla dinlendirilir; so\u011Fuk meze olarak servis edilir.",
+    "portionCost": 10.5,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.5,
+    "totalCostPerPortion": 16,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_sal_08_1",
+        "name": "K\u0131zarm\u0131\u015F Patl\u0131can & Biber K\xFCpleri",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 5.4,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_08_2",
+        "name": "Sar\u0131msakl\u0131 Yo\u011Fun Domates Sosu",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_08_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 2.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_09",
+    "recipeCode": "REC-SAL-009",
+    "code": "REC-SAL-009",
+    "name": "Babagannu\u015F (Abugannu\u015F)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 190,
+    "proteinGrams": 4,
+    "carbGrams": 14,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 190,
+      "protein": 4,
+      "carbs": 14,
+      "fat": 14
+    },
+    "allergens": [
+      "Susam (Tahin)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Me\u015Fe k\xF6m\xFCr\xFCnde k\xF6zlenmi\u015F patl\u0131can, kapya biber ve sar\u0131msak b\u0131\xE7akla incecik k\u0131y\u0131l\u0131r; tahin, nar ek\u015Fisi ve s\u0131zma zeytinya\u011F\u0131 ile harmanlan\u0131r.",
+    "cookingInstructions": "Me\u015Fe k\xF6m\xFCr\xFCnde k\xF6zlenmi\u015F patl\u0131can, kapya biber ve sar\u0131msak b\u0131\xE7akla incecik k\u0131y\u0131l\u0131r; tahin, nar ek\u015Fisi ve s\u0131zma zeytinya\u011F\u0131 ile harmanlan\u0131r.",
+    "portionCost": 15.9,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.5,
+    "totalCostPerPortion": 21.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_sal_09_1",
+        "name": "K\xF6zlenmi\u015F Patl\u0131can & Kapya Biber",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 7.15,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_sal_09_2",
+        "name": "Tahin & Hakiki Nar Ek\u015Fisi",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Susam"
+      },
+      {
+        "id": "ing_sal_09_3",
+        "name": "Sar\u0131msak & Erken Hasat Zeytinya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 3.9,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_10",
+    "recipeCode": "REC-SAL-010",
+    "code": "REC-SAL-010",
+    "name": "Muhammara / Acuka",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 7,
+    "carbGrams": 20,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 7,
+      "carbs": 20,
+      "fat": 26
+    },
+    "allergens": [
+      "Ceviz",
+      "Gluten (Galeta)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Gaziantep ac\u0131 biber sal\xE7as\u0131, domates sal\xE7as\u0131, bol \xE7ekilmi\u015F ceviz, sar\u0131msak, kimyon, galeta unu, nar ek\u015Fisi ve zeytinya\u011F\u0131 ta\u015F havanda d\xF6v\xFClerek haz\u0131rlan\u0131r.",
+    "cookingInstructions": "Gaziantep ac\u0131 biber sal\xE7as\u0131, domates sal\xE7as\u0131, bol \xE7ekilmi\u015F ceviz, sar\u0131msak, kimyon, galeta unu, nar ek\u015Fisi ve zeytinya\u011F\u0131 ta\u015F havanda d\xF6v\xFClerek haz\u0131rlan\u0131r.",
+    "portionCost": 31.7,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 6.2,
+    "totalCostPerPortion": 37.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_sal_10_1",
+        "name": "Antep Biber & Domates Sal\xE7as\u0131",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 4.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_10_2",
+        "name": "\xC7ekilmi\u015F Yerli Ceviz \u0130\xE7i",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 20,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_sal_10_3",
+        "name": "Galeta Unu & Kimyon",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 0.9,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_sal_10_4",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Nar Ek\u015Fisi",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_11",
+    "recipeCode": "REC-SAL-011",
+    "code": "REC-SAL-011",
+    "name": "Ezme (Ac\u0131l\u0131 Ezme)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 130,
+    "proteinGrams": 2.5,
+    "carbGrams": 14,
+    "fatGrams": 8,
+    "nutritionalValues": {
+      "calories": 130,
+      "protein": 2.5,
+      "carbs": 14,
+      "fat": 8
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kabuksuz domates, kapya biber, sivri biber, sar\u0131msak ve maydanoz z\u0131rhtan ge\xE7irilip suyu s\xFCz\xFCl\xFCr; nar ek\u015Fisi, isot ve zeytinya\u011F\u0131 ile kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "Kabuksuz domates, kapya biber, sivri biber, sar\u0131msak ve maydanoz z\u0131rhtan ge\xE7irilip suyu s\xFCz\xFCl\xFCr; nar ek\u015Fisi, isot ve zeytinya\u011F\u0131 ile kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "portionCost": 11.5,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 6.2,
+    "totalCostPerPortion": 17.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 29,
+    "ingredients": [
+      {
+        "id": "ing_sal_11_1",
+        "name": "Z\u0131rhtan Ge\xE7mi\u015F Domates & Biber",
+        "portionGrams": 125,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 4.38,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_sal_11_2",
+        "name": "Urfa \u0130sotu, Sar\u0131msak & Biber Sal\xE7as\u0131",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 2.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_11_3",
+        "name": "Nar Ek\u015Fisi & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 4.32,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_12",
+    "recipeCode": "REC-SAL-012",
+    "code": "REC-SAL-012",
+    "name": "Tarator (Havu\xE7lu / Cevizli)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 8,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 220,
+    "proteinGrams": 6.5,
+    "carbGrams": 12,
+    "fatGrams": 16.5,
+    "nutritionalValues": {
+      "calories": 220,
+      "protein": 6.5,
+      "carbs": 12,
+      "fat": 16.5
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Rendelenmi\u015F havu\xE7 zeytinya\u011F\u0131nda yumu\u015Fayana dek sotelenir. So\u011Fuyunca sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ve k\u0131r\u0131k cevizle harmanlan\u0131r.",
+    "cookingInstructions": "Rendelenmi\u015F havu\xE7 zeytinya\u011F\u0131nda yumu\u015Fayana dek sotelenir. So\u011Fuyunca sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ve k\u0131r\u0131k cevizle harmanlan\u0131r.",
+    "portionCost": 13.6,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 0.8,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 18.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 40,
+    "ingredients": [
+      {
+        "id": "ing_sal_12_1",
+        "name": "Rende Havu\xE7 (Sotelenmi\u015F)",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 2.7,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_sal_12_2",
+        "name": "S\xFCzme K\xF6y Yo\u011Furdu & Sar\u0131msak",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_12_3",
+        "name": "K\u0131r\u0131k Ceviz \u0130\xE7i & Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 300,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_13",
+    "recipeCode": "REC-SAL-013",
+    "code": "REC-SAL-013",
+    "name": "Yo\u011Furtlu Semizotu Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 12,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 150,
+    "proteinGrams": 6,
+    "carbGrams": 8,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 150,
+      "protein": 6,
+      "carbs": 8,
+      "fat": 11
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze k\xF6rpe semizotu yapraklar\u0131 sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, zeytinya\u011F\u0131 ve pul biber ile harmanlan\u0131r.",
+    "cookingInstructions": "Taze k\xF6rpe semizotu yapraklar\u0131 sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, zeytinya\u011F\u0131 ve pul biber ile harmanlan\u0131r.",
+    "portionCost": 11.6,
+    "laborCostPerPortion": 2.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 5.1,
+    "totalCostPerPortion": 16.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_sal_13_1",
+        "name": "K\xF6rpe Semizotu Yapraklar\u0131",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_13_2",
+        "name": "S\xFCzme Tava Yo\u011Furdu & Sar\u0131msak",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_13_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & \xC7\xF6rekotu",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 2.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_14",
+    "recipeCode": "REC-SAL-014",
+    "code": "REC-SAL-014",
+    "name": "K\u0131s\u0131r",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 7,
+    "carbGrams": 48,
+    "fatGrams": 9,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 7,
+      "carbs": 48,
+      "fat": 9
+    },
+    "allergens": [
+      "Gluten (Bulgur)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130nce esmer bulgur s\u0131cak su ve sal\xE7ayla demlenir. \u0130nce k\u0131y\u0131lm\u0131\u015F taze so\u011Fan, maydanoz, nane, nar ek\u015Fisi, limon ve zeytinya\u011F\u0131 ile yo\u011Frulur.",
+    "cookingInstructions": "\u0130nce esmer bulgur s\u0131cak su ve sal\xE7ayla demlenir. \u0130nce k\u0131y\u0131lm\u0131\u015F taze so\u011Fan, maydanoz, nane, nar ek\u015Fisi, limon ve zeytinya\u011F\u0131 ile yo\u011Frulur.",
+    "portionCost": 13.3,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 6.2,
+    "totalCostPerPortion": 19.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_sal_14_1",
+        "name": "K\xF6ftelik \u0130nce Esmer Bulgur",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 3.38,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_sal_14_2",
+        "name": "Biber Sal\xE7as\u0131 & Domates Sal\xE7as\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_14_3",
+        "name": "Taze Ye\u015Fillikler (Taze So\u011Fan, Maydanoz, Nane)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_14_4",
+        "name": "Hakiki Nar Ek\u015Fisi & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 5.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_15",
+    "recipeCode": "REC-SAL-015",
+    "code": "REC-SAL-015",
+    "name": "Mercimek K\xF6ftesi",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "servingTemp": "+15\xB0C (Il\u0131k/So\u011Fuk)",
+    "caloriePerPortion": 310,
+    "proteinGrams": 12,
+    "carbGrams": 50,
+    "fatGrams": 8,
+    "nutritionalValues": {
+      "calories": 310,
+      "protein": 12,
+      "carbs": 50,
+      "fat": 8
+    },
+    "allergens": [
+      "Gluten (Bulgur)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\u0131rm\u0131z\u0131 mercimek ha\u015Flan\u0131r, ince bulgur eklenip \u015Fi\u015Firilir. Zeytinya\u011F\u0131nda kavrulmu\u015F so\u011Fan ve sal\xE7a eklenerek yo\u011Frulur, maydanoz ve taze so\u011Fan kat\u0131l\u0131p elle s\u0131k\u0131l\u0131r.",
+    "cookingInstructions": "K\u0131rm\u0131z\u0131 mercimek ha\u015Flan\u0131r, ince bulgur eklenip \u015Fi\u015Firilir. Zeytinya\u011F\u0131nda kavrulmu\u015F so\u011Fan ve sal\xE7a eklenerek yo\u011Frulur, maydanoz ve taze so\u011Fan kat\u0131l\u0131p elle s\u0131k\u0131l\u0131r.",
+    "portionCost": 9.7,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.1,
+    "totalCostPerPortion": 15.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_sal_15_1",
+        "name": "K\u0131rm\u0131z\u0131 Mercimek",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 48,
+        "portionCost": 3.12,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_15_2",
+        "name": "K\xF6ftelik \u0130nce Bulgur",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.25,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_sal_15_3",
+        "name": "Karamelize So\u011Fan & Sal\xE7a Harc\u0131",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 2.93,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_15_4",
+        "name": "Ye\u015Fillikler (Maydanoz, Taze So\u011Fan) & Limon",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_16",
+    "recipeCode": "REC-SAL-016",
+    "code": "REC-SAL-016",
+    "name": "Patl\u0131can Salatas\u0131 (K\xF6zlenmi\u015F)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 160,
+    "proteinGrams": 3,
+    "carbGrams": 11,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 160,
+      "protein": 3,
+      "carbs": 11,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Odun ate\u015Finde k\xF6zlenmi\u015F patl\u0131canlar soyulup b\u0131\xE7akla d\xF6v\xFCl\xFCr; sar\u0131msak, taze limon suyu ve erken hasat zeytinya\u011F\u0131 ile \xE7\u0131rp\u0131l\u0131r.",
+    "cookingInstructions": "Odun ate\u015Finde k\xF6zlenmi\u015F patl\u0131canlar soyulup b\u0131\xE7akla d\xF6v\xFCl\xFCr; sar\u0131msak, taze limon suyu ve erken hasat zeytinya\u011F\u0131 ile \xE7\u0131rp\u0131l\u0131r.",
+    "portionCost": 15.2,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5,
+    "totalCostPerPortion": 20.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_sal_16_1",
+        "name": "K\xF6zlenmi\u015F Kemer Patl\u0131can",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 9.75,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_sal_16_2",
+        "name": "Ta\u015Fk\xF6pr\xFC Sar\u0131msa\u011F\u0131 & Limon Suyu",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 0.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_16_3",
+        "name": "Erken Hasat S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 4.68,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_17",
+    "recipeCode": "REC-SAL-017",
+    "code": "REC-SAL-017",
+    "name": "Pembe Sultan (Pancar Salatas\u0131)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 175,
+    "proteinGrams": 5.5,
+    "carbGrams": 14,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 175,
+      "protein": 5.5,
+      "carbs": 14,
+      "fat": 11
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "F\u0131r\u0131nlanm\u0131\u015F k\u0131rm\u0131z\u0131 pancar rendelenir, sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ve zeytinya\u011F\u0131 ile harmanlanarak g\xF6z al\u0131c\u0131 pembe renge kavu\u015Fur.",
+    "cookingInstructions": "F\u0131r\u0131nlanm\u0131\u015F k\u0131rm\u0131z\u0131 pancar rendelenir, sar\u0131msakl\u0131 s\xFCzme yo\u011Furt ve zeytinya\u011F\u0131 ile harmanlanarak g\xF6z al\u0131c\u0131 pembe renge kavu\u015Fur.",
+    "portionCost": 11.1,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.9,
+    "totalCostPerPortion": 16,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_sal_17_1",
+        "name": "F\u0131r\u0131nlanm\u0131\u015F K\u0131rm\u0131z\u0131 Pancar",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 12
+      },
+      {
+        "id": "ing_sal_17_2",
+        "name": "S\xFCzme Yo\u011Furt & Ezilmi\u015F Sar\u0131msak",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_17_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Dereotu",
+        "portionGrams": 12,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_18",
+    "recipeCode": "REC-SAL-018",
+    "code": "REC-SAL-018",
+    "name": "Fava (Kuru Bakla Ezmesi)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 260,
+    "proteinGrams": 11,
+    "carbGrams": 32,
+    "fatGrams": 10,
+    "nutritionalValues": {
+      "calories": 260,
+      "protein": 11,
+      "carbs": 32,
+      "fat": 10
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ege klasi\u011Fi kuru i\xE7 bakla so\u011Fan, havu\xE7, zeytinya\u011F\u0131 ve dereotu ile pi\u015Firilip p\xFCr\xFCzs\xFCz ezilir; dondurulup dilimlenir, \xFCzerine k\u0131rm\u0131z\u0131 so\u011Fan ve zeytinya\u011F\u0131 konur.",
+    "cookingInstructions": "Ege klasi\u011Fi kuru i\xE7 bakla so\u011Fan, havu\xE7, zeytinya\u011F\u0131 ve dereotu ile pi\u015Firilip p\xFCr\xFCzs\xFCz ezilir; dondurulup dilimlenir, \xFCzerine k\u0131rm\u0131z\u0131 so\u011Fan ve zeytinya\u011F\u0131 konur.",
+    "portionCost": 15.1,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.6,
+    "totalCostPerPortion": 21.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_18_1",
+        "name": "Kuru Sar\u0131 \u0130\xE7 Bakla",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 7.23,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_18_2",
+        "name": "Erken Hasat S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 6.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_18_3",
+        "name": "K\u0131rm\u0131z\u0131 So\u011Fan, Taze Dereotu & Limon",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 5
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_19",
+    "recipeCode": "REC-SAL-019",
+    "code": "REC-SAL-019",
+    "name": "Atom",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 12,
+    "cookingTimeMinutes": 8,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 260,
+    "proteinGrams": 7,
+    "carbGrams": 8,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 260,
+      "protein": 7,
+      "carbs": 8,
+      "fat": 22
+    },
+    "allergens": [
+      "Laktoz (S\xFCzme Yo\u011Furt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Sar\u0131msakl\u0131 yo\u011Fun s\xFCzme yo\u011Furt taba\u011Fa yay\u0131l\u0131r. \xDCzerine k\u0131zg\u0131n tereya\u011F\u0131nda \xE7evrilmi\u015F \xE7\u0131t\u0131r kurutulmu\u015F arnavut ac\u0131 biberleri ya\u011F\u0131yla birlikte c\u0131z\u0131rdayarak d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "Sar\u0131msakl\u0131 yo\u011Fun s\xFCzme yo\u011Furt taba\u011Fa yay\u0131l\u0131r. \xDCzerine k\u0131zg\u0131n tereya\u011F\u0131nda \xE7evrilmi\u015F \xE7\u0131t\u0131r kurutulmu\u015F arnavut ac\u0131 biberleri ya\u011F\u0131yla birlikte c\u0131z\u0131rdayarak d\xF6k\xFCl\xFCr.",
+    "portionCost": 20.3,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 0.8,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 24.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_19_1",
+        "name": "Koyu S\xFCzme K\xF6y Yo\u011Furdu",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_19_2",
+        "name": "Kurutulmu\u015F Ac\u0131 Arnavut Biberi",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 3.3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_sal_19_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Sar\u0131msak",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_20",
+    "recipeCode": "REC-SAL-020",
+    "code": "REC-SAL-020",
+    "name": "\xC7erkez Tavu\u011Fu (So\u011Fuk Meze)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 350,
+    "proteinGrams": 24,
+    "carbGrams": 12,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 350,
+      "protein": 24,
+      "carbs": 12,
+      "fat": 24
+    },
+    "allergens": [
+      "Ceviz",
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130nce didiklenmi\u015F tavuk g\xF6\u011Fs\xFC sar\u0131msak, ceviz p\xFCresi ve tavuk suyuyla k\u0131vama getirilir; pul biberli ceviz ya\u011F\u0131 gezdirilir.",
+    "cookingInstructions": "\u0130nce didiklenmi\u015F tavuk g\xF6\u011Fs\xFC sar\u0131msak, ceviz p\xFCresi ve tavuk suyuyla k\u0131vama getirilir; pul biberli ceviz ya\u011F\u0131 gezdirilir.",
+    "portionCost": 37.8,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.6,
+    "totalCostPerPortion": 44.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_sal_20_1",
+        "name": "Tavuk G\xF6\u011F\xFCs Eti (Tiftik)",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 17.1,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_20_2",
+        "name": "\xC7ekilmi\u015F Ceviz \u0130\xE7i & Baharat",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 18,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_sal_20_3",
+        "name": "Tavuk Suyu, Ekmek \u0130\xE7i & Ceviz Ya\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 2.7,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_21",
+    "recipeCode": "REC-SAL-021",
+    "code": "REC-SAL-021",
+    "name": "Haydari (Peynirli)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 250,
+    "proteinGrams": 10,
+    "carbGrams": 7,
+    "fatGrams": 21,
+    "nutritionalValues": {
+      "calories": 250,
+      "protein": 10,
+      "carbs": 7,
+      "fat": 21
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ezine olgunla\u015Ft\u0131r\u0131lm\u0131\u015F beyaz peynir ezilip s\xFCzme yo\u011Furt, dereotu, taze nane ve sar\u0131msakla harmanlan\u0131r.",
+    "cookingInstructions": "Ezine olgunla\u015Ft\u0131r\u0131lm\u0131\u015F beyaz peynir ezilip s\xFCzme yo\u011Furt, dereotu, taze nane ve sar\u0131msakla harmanlan\u0131r.",
+    "portionCost": 20.1,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 26,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_sal_21_1",
+        "name": "S\xFCzme Yo\u011Furt & Ezine Peyniri Kar\u0131\u015F\u0131m\u0131",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 16.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_21_2",
+        "name": "Taze Nane, Dereotu & Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_22",
+    "recipeCode": "REC-SAL-022",
+    "code": "REC-SAL-022",
+    "name": "Zeytin Salatas\u0131 (Antakya)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 3,
+    "carbGrams": 10,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 3,
+      "carbs": 10,
+      "fat": 22
+    },
+    "allergens": [
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Antakya k\u0131rma ye\u015Fil zeytini \xE7ekirdeksiz do\u011Fran\u0131r; taze zahter, ceviz, taze so\u011Fan, maydanoz, nar ek\u015Fisi ve s\u0131zma zeytinya\u011F\u0131 ile kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "Antakya k\u0131rma ye\u015Fil zeytini \xE7ekirdeksiz do\u011Fran\u0131r; taze zahter, ceviz, taze so\u011Fan, maydanoz, nar ek\u015Fisi ve s\u0131zma zeytinya\u011F\u0131 ile kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "portionCost": 27.1,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 6.2,
+    "totalCostPerPortion": 33.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_sal_22_1",
+        "name": "K\u0131rma Ye\u015Fil Halhal\u0131 Zeytin",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 130,
+        "portionCost": 11.05,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_22_2",
+        "name": "K\u0131r\u0131k Ceviz & Taze Zahter",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 350,
+        "portionCost": 10.5,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_sal_22_3",
+        "name": "Taze So\u011Fan, Nar Ek\u015Fisi & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 25,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 5.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_23",
+    "recipeCode": "REC-SAL-023",
+    "code": "REC-SAL-023",
+    "name": "Zahter Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 180,
+    "proteinGrams": 3,
+    "carbGrams": 9,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 180,
+      "protein": 3,
+      "carbs": 9,
+      "fat": 16
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze yabani da\u011F keki\u011Fi (zahter), taze so\u011Fan, maydanoz, domates, bol nar ek\u015Fisi ve s\u0131zma zeytinya\u011F\u0131 ile ferahlat\u0131c\u0131 lezzet olu\u015Fturulur.",
+    "cookingInstructions": "Taze yabani da\u011F keki\u011Fi (zahter), taze so\u011Fan, maydanoz, domates, bol nar ek\u015Fisi ve s\u0131zma zeytinya\u011F\u0131 ile ferahlat\u0131c\u0131 lezzet olu\u015Fturulur.",
+    "portionCost": 16.6,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.9,
+    "totalCostPerPortion": 22.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_sal_23_1",
+        "name": "Taze Da\u011F Zahteri (Yabani Kekik)",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 9,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_23_2",
+        "name": "K\xFCp Domates, Taze So\u011Fan & Maydanoz",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.28,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_23_3",
+        "name": "Antakya Nar Ek\u015Fisi & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 22,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 5.28,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_24",
+    "recipeCode": "REC-SAL-024",
+    "code": "REC-SAL-024",
+    "name": "Nuraniye",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 210,
+    "proteinGrams": 6,
+    "carbGrams": 22,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 210,
+      "protein": 6,
+      "carbs": 22,
+      "fat": 12
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Rende kabak zeytinya\u011F\u0131nda pirin\xE7le birlikte sotelenip pi\u015Firilir; dereotu, taze nane ve sar\u0131msakl\u0131 yo\u011Furtla birle\u015Ftirilir.",
+    "cookingInstructions": "Rende kabak zeytinya\u011F\u0131nda pirin\xE7le birlikte sotelenip pi\u015Firilir; dereotu, taze nane ve sar\u0131msakl\u0131 yo\u011Furtla birle\u015Ftirilir.",
+    "portionCost": 10.8,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5,
+    "totalCostPerPortion": 15.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_sal_24_1",
+        "name": "Rende Sak\u0131z Kaba\u011F\u0131 & Pirin\xE7",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 4,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_24_2",
+        "name": "S\xFCzme Yo\u011Furt & Sar\u0131msak",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_24_3",
+        "name": "Taze Dereotu, Taze Nane & Zeytinya\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 2.25,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_25",
+    "recipeCode": "REC-SAL-025",
+    "code": "REC-SAL-025",
+    "name": "Girit Ezmesi",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 11,
+    "carbGrams": 6,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 11,
+      "carbs": 6,
+      "fat": 26
+    },
+    "allergens": [
+      "Laktoz (Ezine, Lor)",
+      "F\u0131st\u0131k (Antep F\u0131st\u0131\u011F\u0131)",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ezine beyaz peynir, lor peyniri, \xE7ekilmi\u015F Antep f\u0131st\u0131\u011F\u0131, ceviz, sar\u0131msak, taze fesle\u011Fen ve s\u0131zma zeytinya\u011F\u0131 ile krema k\u0131vam\u0131nda yo\u011Frulur.",
+    "cookingInstructions": "Ezine beyaz peynir, lor peyniri, \xE7ekilmi\u015F Antep f\u0131st\u0131\u011F\u0131, ceviz, sar\u0131msak, taze fesle\u011Fen ve s\u0131zma zeytinya\u011F\u0131 ile krema k\u0131vam\u0131nda yo\u011Frulur.",
+    "portionCost": 37.6,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 6.2,
+    "totalCostPerPortion": 43.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 70,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_sal_25_1",
+        "name": "Ezine Peyniri & Ya\u011Fl\u0131 Lor",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 18,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_25_2",
+        "name": "Antep F\u0131st\u0131\u011F\u0131 & Ceviz \u0130\xE7i (\xC7ekilmi\u015F)",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 480,
+        "portionCost": 14.4,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k, Ceviz"
+      },
+      {
+        "id": "ing_sal_25_3",
+        "name": "Taze Fesle\u011Fen & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 260,
+        "portionCost": 5.2,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_26",
+    "recipeCode": "REC-SAL-026",
+    "code": "REC-SAL-026",
+    "name": "Mamzana",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 160,
+    "proteinGrams": 3.5,
+    "carbGrams": 12,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 160,
+      "protein": 3.5,
+      "carbs": 12,
+      "fat": 11
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6zlenmi\u015F patl\u0131can, k\xF6z k\u0131rm\u0131z\u0131 ve ye\u015Fil biber, domates ve sar\u0131msak k\xFCp k\xFCp do\u011Fran\u0131p maydanoz ve zeytinya\u011Fl\u0131 nar ek\u015Fisiyle harmanlan\u0131r.",
+    "cookingInstructions": "K\xF6zlenmi\u015F patl\u0131can, k\xF6z k\u0131rm\u0131z\u0131 ve ye\u015Fil biber, domates ve sar\u0131msak k\xFCp k\xFCp do\u011Fran\u0131p maydanoz ve zeytinya\u011Fl\u0131 nar ek\u015Fisiyle harmanlan\u0131r.",
+    "portionCost": 12.7,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5,
+    "totalCostPerPortion": 17.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 29,
+    "ingredients": [
+      {
+        "id": "ing_sal_26_1",
+        "name": "K\xF6z Patl\u0131can & K\xF6zlenmi\u015F Biberler",
+        "portionGrams": 120,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 7.2,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_sal_26_2",
+        "name": "K\xFCp Domates & Maydanoz",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.58,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_26_3",
+        "name": "Sar\u0131msak, Nar Ek\u015Fisi & Zeytinya\u011F\u0131",
+        "portionGrams": 18,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 3.96,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_27",
+    "recipeCode": "REC-SAL-027",
+    "code": "REC-SAL-027",
+    "name": "Borani",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 180,
+    "proteinGrams": 6,
+    "carbGrams": 11,
+    "fatGrams": 13,
+    "nutritionalValues": {
+      "calories": 180,
+      "protein": 6,
+      "carbs": 11,
+      "fat": 13
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kavrulmu\u015F taze \u0131spanak yapraklar\u0131 sar\u0131msakl\u0131 yo\u011Furtla kar\u0131\u015Ft\u0131r\u0131l\u0131r; \xFCst\xFCne k\u0131zg\u0131n tereya\u011Fl\u0131 pul biber gezdirilir.",
+    "cookingInstructions": "Kavrulmu\u015F taze \u0131spanak yapraklar\u0131 sar\u0131msakl\u0131 yo\u011Furtla kar\u0131\u015Ft\u0131r\u0131l\u0131r; \xFCst\xFCne k\u0131zg\u0131n tereya\u011Fl\u0131 pul biber gezdirilir.",
+    "portionCost": 12.6,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 17.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_sal_27_1",
+        "name": "Sotelenmi\u015F Taze Ispanak",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_sal_27_2",
+        "name": "S\xFCzme Yo\u011Furt & Sar\u0131msak",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_27_3",
+        "name": "Tereya\u011Fl\u0131 K\u0131rm\u0131z\u0131 Biber Sosu",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 4.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_28",
+    "recipeCode": "REC-SAL-028",
+    "code": "REC-SAL-028",
+    "name": "\u015Ealgaml\u0131 Kuskus Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 6,
+    "carbGrams": 42,
+    "fatGrams": 6.5,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 6,
+      "carbs": 42,
+      "fat": 6.5
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuskus makarna do\u011Fal ac\u0131s\u0131z \u015Falgam suyunda ha\u015Flanarak yakut k\u0131rm\u0131z\u0131s\u0131 renk al\u0131r; m\u0131s\u0131r, korni\u015Fon tur\u015Fu, dereotu ve zeytinya\u011F\u0131 ile harmanlan\u0131r.",
+    "cookingInstructions": "Kuskus makarna do\u011Fal ac\u0131s\u0131z \u015Falgam suyunda ha\u015Flanarak yakut k\u0131rm\u0131z\u0131s\u0131 renk al\u0131r; m\u0131s\u0131r, korni\u015Fon tur\u015Fu, dereotu ve zeytinya\u011F\u0131 ile harmanlan\u0131r.",
+    "portionCost": 10.8,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.7,
+    "totalCostPerPortion": 15.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_28_1",
+        "name": "\u015Ealgam Suyunda Pi\u015Fmi\u015F Kuskus",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 4.95,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_sal_28_2",
+        "name": "Korni\u015Fon Tur\u015Fu & Tane M\u0131s\u0131r",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 2.25,
+        "wastagePercent": 5
+      },
+      {
+        "id": "ing_sal_28_3",
+        "name": "Taze Dereotu & S\u0131zma Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_29",
+    "recipeCode": "REC-SAL-029",
+    "code": "REC-SAL-029",
+    "name": "Yo\u011Furtlu K\u0131rm\u0131z\u0131 Biber Salatas\u0131",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 190,
+    "proteinGrams": 6,
+    "carbGrams": 12,
+    "fatGrams": 13,
+    "nutritionalValues": {
+      "calories": 190,
+      "protein": 6,
+      "carbs": 12,
+      "fat": 13
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6zlenmi\u015F etli k\u0131rm\u0131z\u0131 kapya biberler j\xFClyen dilimlenir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, ceviz ve zeytinya\u011F\u0131 ile servis edilir.",
+    "cookingInstructions": "K\xF6zlenmi\u015F etli k\u0131rm\u0131z\u0131 kapya biberler j\xFClyen dilimlenir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, ceviz ve zeytinya\u011F\u0131 ile servis edilir.",
+    "portionCost": 13.8,
+    "laborCostPerPortion": 3.2,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.7,
+    "totalCostPerPortion": 18.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_29_1",
+        "name": "K\xF6zlenmi\u015F K\u0131rm\u0131z\u0131 Kapya Biber",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 6.05,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_sal_29_2",
+        "name": "Sar\u0131msakl\u0131 S\xFCzme Yo\u011Furt",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_29_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & \xC7\xF6rekotu",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 240,
+        "portionCost": 2.88,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_30",
+    "recipeCode": "REC-SAL-030",
+    "code": "REC-SAL-030",
+    "name": "Semizotu Mezesi (Cevizli)",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 200,
+    "proteinGrams": 6,
+    "carbGrams": 9,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 200,
+      "protein": 6,
+      "carbs": 9,
+      "fat": 16
+    },
+    "allergens": [
+      "Laktoz",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6rpe semizotu sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, iri d\xF6v\xFClm\xFC\u015F ceviz ve zeytinya\u011F\u0131yla kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "K\xF6rpe semizotu sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, iri d\xF6v\xFClm\xFC\u015F ceviz ve zeytinya\u011F\u0131yla kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "portionCost": 15.2,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.7,
+    "totalCostPerPortion": 20.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 30,
+    "ingredients": [
+      {
+        "id": "ing_sal_30_1",
+        "name": "Taze Semizotu",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.5,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_sal_30_2",
+        "name": "S\xFCzme Yo\u011Furt & Sar\u0131msak",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_30_3",
+        "name": "K\u0131r\u0131k Ceviz \u0130\xE7i & Zeytinya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 7.2,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_31",
+    "recipeCode": "REC-SAL-031",
+    "code": "REC-SAL-031",
+    "name": "Havu\xE7 Tarator",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 210,
+    "proteinGrams": 5.5,
+    "carbGrams": 13,
+    "fatGrams": 15.5,
+    "nutritionalValues": {
+      "calories": 210,
+      "protein": 5.5,
+      "carbs": 13,
+      "fat": 15.5
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Rendelenmi\u015F havu\xE7lar az zeytinya\u011F\u0131nda rengini b\u0131rakana kadar sotelenir; so\u011Fuyunca sar\u0131msakl\u0131 s\xFCzme yo\u011Furtla birle\u015Ftirilir.",
+    "cookingInstructions": "Rendelenmi\u015F havu\xE7lar az zeytinya\u011F\u0131nda rengini b\u0131rakana kadar sotelenir; so\u011Fuyunca sar\u0131msakl\u0131 s\xFCzme yo\u011Furtla birle\u015Ftirilir.",
+    "portionCost": 10.5,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 0.8,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.3,
+    "totalCostPerPortion": 14.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 41,
+    "ingredients": [
+      {
+        "id": "ing_sal_31_1",
+        "name": "Taze Havu\xE7 (Sotelenmi\u015F)",
+        "portionGrams": 100,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 3,
+        "wastagePercent": 8
+      },
+      {
+        "id": "ing_sal_31_2",
+        "name": "S\xFCzme K\xF6y Yo\u011Furdu & Sar\u0131msak",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_31_3",
+        "name": "S\u0131zma Zeytinya\u011F\u0131 & Maydanoz",
+        "portionGrams": 12,
+        "unit": "ml",
+        "unitCost": 220,
+        "portionCost": 2.64,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_sal_32",
+    "recipeCode": "REC-SAL-032",
+    "code": "REC-SAL-032",
+    "name": "Kabak Tarator",
+    "category": "salad_appetizer",
+    "categoryLabel": "Salata & Meze",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 185,
+    "proteinGrams": 5.5,
+    "carbGrams": 10,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 185,
+      "protein": 5.5,
+      "carbs": 10,
+      "fat": 14
+    },
+    "allergens": [
+      "Laktoz",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Rende sak\u0131z kaba\u011F\u0131n\u0131n suyu s\u0131k\u0131l\u0131p zeytinya\u011F\u0131nda sotelenir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, d\xF6v\xFClm\xFC\u015F ceviz ve taze dereotu ile lezzetlendirilir.",
+    "cookingInstructions": "Rende sak\u0131z kaba\u011F\u0131n\u0131n suyu s\u0131k\u0131l\u0131p zeytinya\u011F\u0131nda sotelenir; sar\u0131msakl\u0131 s\xFCzme yo\u011Furt, d\xF6v\xFClm\xFC\u015F ceviz ve taze dereotu ile lezzetlendirilir.",
+    "portionCost": 14.3,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 0.8,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 4.3,
+    "totalCostPerPortion": 18.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_sal_32_1",
+        "name": "S\u0131k\u0131lm\u0131\u015F Sak\u0131z Kaba\u011F\u0131 (Sotelenmi\u015F)",
+        "portionGrams": 95,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.33,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_sal_32_2",
+        "name": "S\xFCzme Yo\u011Furt, Dereotu & Sar\u0131msak",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 5.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_sal_32_3",
+        "name": "Ceviz \u0130\xE7i & Zeytinya\u011F\u0131",
+        "portionGrams": 18,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 5.76,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  }
+];
+
+// src/data/recipes/dessertRecipes.ts
+var dessertRecipes = [
+  {
+    "id": "rec_tat_01",
+    "recipeCode": "REC-TAT-001",
+    "code": "REC-TAT-001",
+    "name": "Baklava (F\u0131st\u0131kl\u0131 / Cevizli)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 50,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 520,
+    "proteinGrams": 8,
+    "carbGrams": 68,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 520,
+      "protein": 8,
+      "carbs": 68,
+      "fat": 26
+    },
+    "allergens": [
+      "Gluten",
+      "F\u0131st\u0131k (Antep F\u0131st\u0131\u011F\u0131)",
+      "Laktoz (Tereya\u011F\u0131)",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "40 kat elle a\xE7\u0131lm\u0131\u015F incecik baklava yufkalar\u0131 aras\u0131na boz i\xE7 Antep f\u0131st\u0131\u011F\u0131 yay\u0131l\u0131r; sade ya\u011F (urfa ya\u011F\u0131) verilerek f\u0131r\u0131nda alt\u0131n sar\u0131s\u0131 pi\u015Firilir ve s\u0131cak \u015Ferbetle bulu\u015Fturulur.",
+    "cookingInstructions": "40 kat elle a\xE7\u0131lm\u0131\u015F incecik baklava yufkalar\u0131 aras\u0131na boz i\xE7 Antep f\u0131st\u0131\u011F\u0131 yay\u0131l\u0131r; sade ya\u011F (urfa ya\u011F\u0131) verilerek f\u0131r\u0131nda alt\u0131n sar\u0131s\u0131 pi\u015Firilir ve s\u0131cak \u015Ferbetle bulu\u015Fturulur.",
+    "portionCost": 44.5,
+    "laborCostPerPortion": 8,
+    "gasEnergyCostPerPortion": 4,
+    "overheadCostPerPortion": 1.5,
+    "laborAndOverheadPerPortion": 13.5,
+    "totalCostPerPortion": 58,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 90,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_01_1",
+        "name": "El A\xE7mas\u0131 Baklava Yufkas\u0131 (40 kat)",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 5.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_tat_01_2",
+        "name": "Gaziantep Boz \u0130\xE7 Antep F\u0131st\u0131\u011F\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 750,
+        "portionCost": 26.25,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_tat_01_3",
+        "name": "Urfa Sade Ya\u011F\u0131 (Eritilmi\u015F Tereya\u011F\u0131)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 11.25,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_01_4",
+        "name": "\u015Eeker \u015Eerbeti & Limon Damlas\u0131",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.58,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_02",
+    "recipeCode": "REC-TAT-002",
+    "code": "REC-TAT-002",
+    "name": "\u015E\xF6biyet",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 150,
+    "servingsCount": 1,
+    "prepTimeMinutes": 45,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 490,
+    "proteinGrams": 7.5,
+    "carbGrams": 62,
+    "fatGrams": 24,
+    "nutritionalValues": {
+      "calories": 490,
+      "protein": 7.5,
+      "carbs": 62,
+      "fat": 24
+    },
+    "allergens": [
+      "Gluten",
+      "F\u0131st\u0131k",
+      "Laktoz (Kaymak/S\xFCt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Muska \u015Feklinde katlanan baklava yufkalar\u0131n\u0131n i\xE7ine irmik kayma\u011F\u0131 ve bol Antep f\u0131st\u0131\u011F\u0131 konur; sade ya\u011Fla f\u0131r\u0131nlan\u0131p s\u0131cak \u015Ferbet d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "Muska \u015Feklinde katlanan baklava yufkalar\u0131n\u0131n i\xE7ine irmik kayma\u011F\u0131 ve bol Antep f\u0131st\u0131\u011F\u0131 konur; sade ya\u011Fla f\u0131r\u0131nlan\u0131p s\u0131cak \u015Ferbet d\xF6k\xFCl\xFCr.",
+    "portionCost": 35,
+    "laborCostPerPortion": 7.5,
+    "gasEnergyCostPerPortion": 3.5,
+    "overheadCostPerPortion": 1.2,
+    "laborAndOverheadPerPortion": 12.2,
+    "totalCostPerPortion": 47.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_tat_02_1",
+        "name": "Baklava Yufkas\u0131 Katlar\u0131",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 4.95,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_02_2",
+        "name": "\u0130rmik Kayma\u011F\u0131 (S\xFCt & \u0130rmik)",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 110,
+        "portionCost": 3.3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_02_3",
+        "name": "Antep F\u0131st\u0131\u011F\u0131 \u0130\xE7i",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 750,
+        "portionCost": 18.75,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_tat_02_4",
+        "name": "Sade Ya\u011F & \u015Eerbet",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_03",
+    "recipeCode": "REC-TAT-003",
+    "code": "REC-TAT-003",
+    "name": "Kaday\u0131f (Tel Kaday\u0131f / Burma)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 480,
+    "proteinGrams": 7,
+    "carbGrams": 65,
+    "fatGrams": 22,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 7,
+      "carbs": 65,
+      "fat": 22
+    },
+    "allergens": [
+      "Gluten",
+      "F\u0131st\u0131k",
+      "Laktoz (Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze tel kaday\u0131f tereya\u011F\u0131 ile harmanlan\u0131r; aras\u0131na bol Antep f\u0131st\u0131\u011F\u0131 veya ceviz serilip tepside iki y\xFCz\xFC nar gibi k\u0131zart\u0131l\u0131r ve \u0131l\u0131k \u015Ferbetlenir.",
+    "cookingInstructions": "Taze tel kaday\u0131f tereya\u011F\u0131 ile harmanlan\u0131r; aras\u0131na bol Antep f\u0131st\u0131\u011F\u0131 veya ceviz serilip tepside iki y\xFCz\xFC nar gibi k\u0131zart\u0131l\u0131r ve \u0131l\u0131k \u015Ferbetlenir.",
+    "portionCost": 37.5,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 47,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 75,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_tat_03_1",
+        "name": "Taze Tel Kaday\u0131f",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 4.88,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_03_2",
+        "name": "Antep F\u0131st\u0131\u011F\u0131 \u0130\xE7i (D\xF6v\xFClm\xFC\u015F)",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 750,
+        "portionCost": 22.5,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_tat_03_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & Sade Ya\u011F",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 340,
+        "portionCost": 8.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_03_4",
+        "name": "K\u0131vaml\u0131 \u015Eerbet",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.58,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_04",
+    "recipeCode": "REC-TAT-004",
+    "code": "REC-TAT-004",
+    "name": "K\xFCnefe",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "servingTemp": "+70\xB0C (S\u0131cak)",
+    "caloriePerPortion": 510,
+    "proteinGrams": 12,
+    "carbGrams": 62,
+    "fatGrams": 25,
+    "nutritionalValues": {
+      "calories": 510,
+      "protein": 12,
+      "carbs": 62,
+      "fat": 25
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz (Antakya Peyniri, Tereya\u011F\u0131)",
+      "F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Antakya usul\xFC k\xFCnefe taba\u011F\u0131 tereya\u011F\u0131 ve pekmezle ya\u011Flan\u0131r; tel kaday\u0131f aras\u0131na tuzsuz Antakya k\xFCnefe peyniri konup k\u0131s\u0131k ocakta iki taraf\u0131 \xE7evrilerek pi\u015Firilir; s\u0131cak \u015Ferbet d\xF6k\xFCl\xFCp f\u0131st\u0131kla sunulur.",
+    "cookingInstructions": "Antakya usul\xFC k\xFCnefe taba\u011F\u0131 tereya\u011F\u0131 ve pekmezle ya\u011Flan\u0131r; tel kaday\u0131f aras\u0131na tuzsuz Antakya k\xFCnefe peyniri konup k\u0131s\u0131k ocakta iki taraf\u0131 \xE7evrilerek pi\u015Firilir; s\u0131cak \u015Ferbet d\xF6k\xFCl\xFCp f\u0131st\u0131kla sunulur.",
+    "portionCost": 30.5,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 40,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 60,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_tat_04_1",
+        "name": "Taze \u0130nce Tel Kaday\u0131f",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 4.23,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_04_2",
+        "name": "Hakiki Tuzsuz Antakya K\xFCnefe Peyniri",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 240,
+        "portionCost": 12,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_04_3",
+        "name": "K\xF6y Tereya\u011F\u0131 & \xDCz\xFCm Pekmezi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 300,
+        "portionCost": 7.5,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_04_4",
+        "name": "S\u0131cak \u015Eerbet & Toz Antep F\u0131st\u0131\u011F\u0131",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 6.75,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_05",
+    "recipeCode": "REC-TAT-005",
+    "code": "REC-TAT-005",
+    "name": "Revani",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 390,
+    "proteinGrams": 6,
+    "carbGrams": 66,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 6,
+      "carbs": 66,
+      "fat": 12
+    },
+    "allergens": [
+      "Gluten (\u0130rmik, Un)",
+      "Yumurta",
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130rmik, un, yumurta ve yo\u011Furtla haz\u0131rlanan s\xFCngerimsi kek f\u0131r\u0131nda kabart\u0131l\u0131r; f\u0131r\u0131ndan \xE7\u0131k\u0131nca so\u011Fuk limonlu \u015Ferbetle demlendirilir, hindistan ceviziyle s\xFCslenir.",
+    "cookingInstructions": "\u0130rmik, un, yumurta ve yo\u011Furtla haz\u0131rlanan s\xFCngerimsi kek f\u0131r\u0131nda kabart\u0131l\u0131r; f\u0131r\u0131ndan \xE7\u0131k\u0131nca so\u011Fuk limonlu \u015Ferbetle demlendirilir, hindistan ceviziyle s\xFCslenir.",
+    "portionCost": 9.1,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 16.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_tat_05_1",
+        "name": "\u0130rmik & Bu\u011Fday Unu",
+        "portionGrams": 55,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_05_2",
+        "name": "K\xF6y Yumurtas\u0131 & Yo\u011Furt",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 2.8,
+        "wastagePercent": 0,
+        "allergen": "Yumurta, Laktoz"
+      },
+      {
+        "id": "ing_tat_05_3",
+        "name": "\u015Eeker \u015Eerbeti & Limon",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.28,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_05_4",
+        "name": "Hindistan Cevizi & F\u0131st\u0131k S\xFCs",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 1.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_06",
+    "recipeCode": "REC-TAT-006",
+    "code": "REC-TAT-006",
+    "name": "\u015Eekerpare",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 420,
+    "proteinGrams": 5.5,
+    "carbGrams": 68,
+    "fatGrams": 15,
+    "nutritionalValues": {
+      "calories": 420,
+      "protein": 5.5,
+      "carbs": 68,
+      "fat": 15
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz (Tereya\u011F\u0131)",
+      "F\u0131nd\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tereya\u011Fl\u0131 irmikli yumu\u015Fak hamur yuvarlan\u0131p ortas\u0131na f\u0131nd\u0131k bat\u0131r\u0131l\u0131r; f\u0131r\u0131nda alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131p s\u0131cak \u015Ferbete at\u0131l\u0131r.",
+    "cookingInstructions": "Tereya\u011Fl\u0131 irmikli yumu\u015Fak hamur yuvarlan\u0131p ortas\u0131na f\u0131nd\u0131k bat\u0131r\u0131l\u0131r; f\u0131r\u0131nda alt\u0131n sar\u0131s\u0131 k\u0131zart\u0131l\u0131p s\u0131cak \u015Ferbete at\u0131l\u0131r.",
+    "portionCost": 14.2,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.5,
+    "totalCostPerPortion": 21.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_tat_06_1",
+        "name": "\u015Eekerpare Hamuru (\u0130rmik, Un, Tereya\u011F\u0131)",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 6,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_tat_06_2",
+        "name": "Kavrulmu\u015F Giresun F\u0131nd\u0131\u011F\u0131",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 5.7,
+        "wastagePercent": 0,
+        "allergen": "F\u0131nd\u0131k"
+      },
+      {
+        "id": "ing_tat_06_3",
+        "name": "Limonlu \u015Eeker \u015Eerbeti",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.45,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_07",
+    "recipeCode": "REC-TAT-007",
+    "code": "REC-TAT-007",
+    "name": "Kemalpa\u015Fa Tatl\u0131s\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 380,
+    "proteinGrams": 7.5,
+    "carbGrams": 64,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 7.5,
+      "carbs": 64,
+      "fat": 11
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz (Peynir, Kaymak)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bursa Mustafakemalpa\u015Fa taze peyniriyle f\u0131r\u0131nlanm\u0131\u015F kuru tatl\u0131lar kaynayan \u015Ferbette kabarana kadar kaynat\u0131l\u0131r; manda kayma\u011F\u0131 ve tahinle sunulur.",
+    "cookingInstructions": "Bursa Mustafakemalpa\u015Fa taze peyniriyle f\u0131r\u0131nlanm\u0131\u015F kuru tatl\u0131lar kaynayan \u015Ferbette kabarana kadar kaynat\u0131l\u0131r; manda kayma\u011F\u0131 ve tahinle sunulur.",
+    "portionCost": 18.7,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 25.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_07_1",
+        "name": "Hakiki Kemalpa\u015Fa Peynir Tatl\u0131s\u0131",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 4.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_tat_07_2",
+        "name": "Kaynayan \u015Eeker \u015Eerbeti",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_07_3",
+        "name": "Manda Kayma\u011F\u0131 Garnit\xFCr\xFC",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 11.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_08",
+    "recipeCode": "REC-TAT-008",
+    "code": "REC-TAT-008",
+    "name": "Kalburabast\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 430,
+    "proteinGrams": 6,
+    "carbGrams": 66,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 430,
+      "protein": 6,
+      "carbs": 66,
+      "fat": 17
+    },
+    "allergens": [
+      "Gluten",
+      "Ceviz",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kalbur \xFCzerine bast\u0131r\u0131larak desen verilen ceviz dolgulu tereya\u011Fl\u0131 hamur f\u0131r\u0131nda gevrek pi\u015Firilir; s\u0131cakken so\u011Fuk \u015Ferbet verilir.",
+    "cookingInstructions": "Kalbur \xFCzerine bast\u0131r\u0131larak desen verilen ceviz dolgulu tereya\u011Fl\u0131 hamur f\u0131r\u0131nda gevrek pi\u015Firilir; s\u0131cakken so\u011Fuk \u015Ferbet verilir.",
+    "portionCost": 17.9,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.5,
+    "totalCostPerPortion": 25.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_tat_08_1",
+        "name": "Kalburabast\u0131 Hamuru (Un, \u0130rmik, Tereya\u011F\u0131)",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 5.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_tat_08_2",
+        "name": "\u0130ri K\u0131r\u0131lm\u0131\u015F Ceviz \u0130\xE7i",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 10,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      },
+      {
+        "id": "ing_tat_08_3",
+        "name": "K\u0131vaml\u0131 \u015Eerbet",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.28,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_09",
+    "recipeCode": "REC-TAT-009",
+    "code": "REC-TAT-009",
+    "name": "Tulumba Tatl\u0131s\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 150,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 410,
+    "proteinGrams": 5,
+    "carbGrams": 68,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 5,
+      "carbs": 68,
+      "fat": 14
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Choux hamuru gibi pi\u015Firilen tulumba hamuru y\u0131ld\u0131z u\xE7la \u0131l\u0131k ya\u011Fa s\u0131k\u0131l\u0131r; \xE7\u0131t\u0131r \xE7\u0131t\u0131r k\u0131zart\u0131l\u0131p hemen so\u011Fuk koyu \u015Ferbete at\u0131l\u0131r.",
+    "cookingInstructions": "Choux hamuru gibi pi\u015Firilen tulumba hamuru y\u0131ld\u0131z u\xE7la \u0131l\u0131k ya\u011Fa s\u0131k\u0131l\u0131r; \xE7\u0131t\u0131r \xE7\u0131t\u0131r k\u0131zart\u0131l\u0131p hemen so\u011Fuk koyu \u015Ferbete at\u0131l\u0131r.",
+    "portionCost": 7.2,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.5,
+    "totalCostPerPortion": 14.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 41,
+    "ingredients": [
+      {
+        "id": "ing_tat_09_1",
+        "name": "\xD6zel Pi\u015Firilmi\u015F Tulumba Hamuru",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 3.25,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_tat_09_2",
+        "name": "K\u0131zartma Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_09_3",
+        "name": "Koyu Limonlu Tulumba \u015Eerbeti",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.45,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_10",
+    "recipeCode": "REC-TAT-010",
+    "code": "REC-TAT-010",
+    "name": "Lokma Tatl\u0131s\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 150,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 15,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 390,
+    "proteinGrams": 4.5,
+    "carbGrams": 66,
+    "fatGrams": 13,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 4.5,
+      "carbs": 66,
+      "fat": 13
+    },
+    "allergens": [
+      "Gluten"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130zmir gelene\u011Fi mayal\u0131 c\u0131v\u0131k hamur avu\xE7 i\xE7inden s\u0131k\u0131larak k\u0131zg\u0131n ya\u011Fa d\xF6k\xFCl\xFCr; alt\u0131n sar\u0131s\u0131 olunca s\xFCz\xFCl\xFCp koyu \u015Ferbetle tatland\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "\u0130zmir gelene\u011Fi mayal\u0131 c\u0131v\u0131k hamur avu\xE7 i\xE7inden s\u0131k\u0131larak k\u0131zg\u0131n ya\u011Fa d\xF6k\xFCl\xFCr; alt\u0131n sar\u0131s\u0131 olunca s\xFCz\xFCl\xFCp koyu \u015Ferbetle tatland\u0131r\u0131l\u0131r.",
+    "portionCost": 6.1,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 12.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_10_1",
+        "name": "Mayal\u0131 C\u0131v\u0131k Lokma Hamuru",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.28,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_10_2",
+        "name": "K\u0131zartma S\u0131v\u0131 Ya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "ml",
+        "unitCost": 75,
+        "portionCost": 1.5,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_10_3",
+        "name": "Limonlu So\u011Fuk \u015Eerbet & Tar\xE7\u0131n",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 2.28,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_11",
+    "recipeCode": "REC-TAT-011",
+    "code": "REC-TAT-011",
+    "name": "S\xFCtla\xE7 (F\u0131r\u0131n S\xFCtla\xE7)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 280,
+    "proteinGrams": 7.5,
+    "carbGrams": 48,
+    "fatGrams": 7,
+    "nutritionalValues": {
+      "calories": 280,
+      "protein": 7.5,
+      "carbs": 48,
+      "fat": 7
+    },
+    "allergens": [
+      "Laktoz (S\xFCt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\u0131r\u0131k pirin\xE7 tam ya\u011Fl\u0131 k\xF6y s\xFCt\xFC, \u015Feker ve ni\u015Fasta ile k\u0131vam alana dek kaynat\u0131l\u0131r; g\xFCve\xE7 kaplara d\xF6k\xFCl\xFCp su dolu f\u0131r\u0131n tepsisinde \xFCst\xFC yan\u0131k kahverengi olana dek f\u0131r\u0131nlan\u0131r.",
+    "cookingInstructions": "K\u0131r\u0131k pirin\xE7 tam ya\u011Fl\u0131 k\xF6y s\xFCt\xFC, \u015Feker ve ni\u015Fasta ile k\u0131vam alana dek kaynat\u0131l\u0131r; g\xFCve\xE7 kaplara d\xF6k\xFCl\xFCp su dolu f\u0131r\u0131n tepsisinde \xFCst\xFC yan\u0131k kahverengi olana dek f\u0131r\u0131nlan\u0131r.",
+    "portionCost": 8,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.8,
+    "totalCostPerPortion": 15.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_tat_11_1",
+        "name": "Tam Ya\u011Fl\u0131 \xC7i\u011F \xC7iftlik S\xFCt\xFC",
+        "portionGrams": 160,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 5.6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_11_2",
+        "name": "K\u0131r\u0131k Baldo Pirin\xE7 & Ni\u015Fasta",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.35,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_11_3",
+        "name": "Toz \u015Eeker & Vanilya",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.05,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_12",
+    "recipeCode": "REC-TAT-012",
+    "code": "REC-TAT-012",
+    "name": "Kazandibi",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 7,
+    "carbGrams": 50,
+    "fatGrams": 7.5,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 7,
+      "carbs": 50,
+      "fat": 7.5
+    },
+    "allergens": [
+      "Laktoz (S\xFCt, Tereya\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "S\xFCt, s\xFCbyeli pirin\xE7 unu ve \u015Fekerle haz\u0131rlanan muhallebi pudra \u015Fekeri ve tereya\u011F\u0131 s\xFCr\xFClm\xFC\u015F tepsinin dibinde d\xF6nd\xFCr\xFClerek karamelize yak\u0131l\u0131r; rulo dilimlenir.",
+    "cookingInstructions": "S\xFCt, s\xFCbyeli pirin\xE7 unu ve \u015Fekerle haz\u0131rlanan muhallebi pudra \u015Fekeri ve tereya\u011F\u0131 s\xFCr\xFClm\xFC\u015F tepsinin dibinde d\xF6nd\xFCr\xFClerek karamelize yak\u0131l\u0131r; rulo dilimlenir.",
+    "portionCost": 7.7,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.3,
+    "totalCostPerPortion": 16,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_12_1",
+        "name": "Ya\u011Fl\u0131 S\xFCt & S\xFCbye (Pirin\xE7 Unu)",
+        "portionGrams": 140,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_12_2",
+        "name": "Pudra \u015Eekeri (Dip Karamel)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_12_3",
+        "name": "Toz \u015Eeker & K\xF6y Tereya\u011F\u0131",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 1.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_13",
+    "recipeCode": "REC-TAT-013",
+    "code": "REC-TAT-013",
+    "name": "Tavuk G\xF6\u011Fs\xFC",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 270,
+    "proteinGrams": 9.5,
+    "carbGrams": 46,
+    "fatGrams": 6,
+    "nutritionalValues": {
+      "calories": 270,
+      "protein": 9.5,
+      "carbs": 46,
+      "fat": 6
+    },
+    "allergens": [
+      "Laktoz (S\xFCt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ha\u015Flan\u0131p lif lif ayr\u0131lan ve suda kokusu gidene dek y\u0131kanan tavuk g\xF6\u011Fs\xFC eti s\xFCt, pirin\xE7 s\xFCbyesi ve \u015Fekerle tokmaklanarak sak\u0131z gibi elastik k\u0131vama getirilir.",
+    "cookingInstructions": "Ha\u015Flan\u0131p lif lif ayr\u0131lan ve suda kokusu gidene dek y\u0131kanan tavuk g\xF6\u011Fs\xFC eti s\xFCt, pirin\xE7 s\xFCbyesi ve \u015Fekerle tokmaklanarak sak\u0131z gibi elastik k\u0131vama getirilir.",
+    "portionCost": 11.2,
+    "laborCostPerPortion": 6,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 20.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 31,
+    "ingredients": [
+      {
+        "id": "ing_tat_13_1",
+        "name": "Lif Lif Ayr\u0131lm\u0131\u015F Tavuk G\xF6\u011F\xFCs Eti",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 190,
+        "portionCost": 4.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_13_2",
+        "name": "Tam Ya\u011Fl\u0131 \xC7iftlik S\xFCt\xFC",
+        "portionGrams": 140,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_13_3",
+        "name": "Pirin\xE7 S\xFCbyesi & Toz \u015Eeker",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 1.58,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_14",
+    "recipeCode": "REC-TAT-014",
+    "code": "REC-TAT-014",
+    "name": "Ke\u015Fk\xFCl",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 310,
+    "proteinGrams": 7.5,
+    "carbGrams": 44,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 310,
+      "protein": 7.5,
+      "carbs": 44,
+      "fat": 12
+    },
+    "allergens": [
+      "Laktoz (S\xFCt)",
+      "Badem",
+      "F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Osmanl\u0131 saray klasi\u011Fi ke\u015Fk\xFCl-i fukara; \xE7ekilmi\u015F tatl\u0131 ve ac\u0131 badem tozu, s\xFCt, yumurta sar\u0131s\u0131, pirin\xE7 unu ve \u015Fekerle ipeksi pi\u015Firilir; badem ve f\u0131st\u0131kla s\xFCslenir.",
+    "cookingInstructions": "Osmanl\u0131 saray klasi\u011Fi ke\u015Fk\xFCl-i fukara; \xE7ekilmi\u015F tatl\u0131 ve ac\u0131 badem tozu, s\xFCt, yumurta sar\u0131s\u0131, pirin\xE7 unu ve \u015Fekerle ipeksi pi\u015Firilir; badem ve f\u0131st\u0131kla s\xFCslenir.",
+    "portionCost": 17.1,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 24.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_tat_14_1",
+        "name": "Tam Ya\u011Fl\u0131 S\xFCt",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.55,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_14_2",
+        "name": "\u0130nce \xC7ekilmi\u015F Badem Unu",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 9.5,
+        "wastagePercent": 0,
+        "allergen": "Badem"
+      },
+      {
+        "id": "ing_tat_14_3",
+        "name": "Pirin\xE7 Unu, \u015Eeker & Antep F\u0131st\u0131\u011F\u0131 S\xFCs",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_15",
+    "recipeCode": "REC-TAT-015",
+    "code": "REC-TAT-015",
+    "name": "Muhallebi (Damla Sak\u0131zl\u0131)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 260,
+    "proteinGrams": 6.5,
+    "carbGrams": 46,
+    "fatGrams": 6.5,
+    "nutritionalValues": {
+      "calories": 260,
+      "protein": 6.5,
+      "carbs": 46,
+      "fat": 6.5
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Halis Sak\u0131z Adas\u0131 damla sak\u0131z\u0131 havanda d\xF6v\xFCl\xFCr; s\xFCt, ni\u015Fasta, pirin\xE7 unu ve tereya\u011F\u0131 ile p\xFCr\xFCzs\xFCz pi\u015Firilir.",
+    "cookingInstructions": "Halis Sak\u0131z Adas\u0131 damla sak\u0131z\u0131 havanda d\xF6v\xFCl\xFCr; s\xFCt, ni\u015Fasta, pirin\xE7 unu ve tereya\u011F\u0131 ile p\xFCr\xFCzs\xFCz pi\u015Firilir.",
+    "portionCost": 9.9,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.6,
+    "totalCostPerPortion": 16.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_tat_15_1",
+        "name": "K\xF6y S\xFCt\xFC",
+        "portionGrams": 140,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 4.9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_15_2",
+        "name": "Ni\u015Fasta, Pirin\xE7 Unu & \u015Eeker",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_15_3",
+        "name": "Halis Damla Sak\u0131z\u0131 & Tereya\u011F\u0131",
+        "portionGrams": 8,
+        "unit": "g",
+        "unitCost": 450,
+        "portionCost": 3.6,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_16",
+    "recipeCode": "REC-TAT-016",
+    "code": "REC-TAT-016",
+    "name": "Supangle",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 320,
+    "proteinGrams": 7,
+    "carbGrams": 48,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 320,
+      "protein": 7,
+      "carbs": 48,
+      "fat": 12
+    },
+    "allergens": [
+      "Laktoz",
+      "Gluten",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kasedeki kakaolu kek taban\u0131 \xFCzerine bitter \xE7ikolatal\u0131, kakaolu yo\u011Fun s\xFCtl\xFC puding d\xF6k\xFCl\xFCr; buzlu su eklenerek kabuk tutmas\u0131 engellenir; f\u0131st\u0131kla s\xFCslenir.",
+    "cookingInstructions": "Kasedeki kakaolu kek taban\u0131 \xFCzerine bitter \xE7ikolatal\u0131, kakaolu yo\u011Fun s\xFCtl\xFC puding d\xF6k\xFCl\xFCr; buzlu su eklenerek kabuk tutmas\u0131 engellenir; f\u0131st\u0131kla s\xFCslenir.",
+    "portionCost": 15,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 22.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_16_1",
+        "name": "Tam Ya\u011Fl\u0131 S\xFCt & Bitter \xC7ikolata (%60)",
+        "portionGrams": 140,
+        "unit": "g",
+        "unitCost": 85,
+        "portionCost": 11.9,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_16_2",
+        "name": "Kakaolu Kek Taban\u0131 (K\xFCp)",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 1.75,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_tat_16_3",
+        "name": "Kakao, Ni\u015Fasta & Toz \u015Eeker",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 1.38,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_17",
+    "recipeCode": "REC-TAT-017",
+    "code": "REC-TAT-017",
+    "name": "Profiterol (T\xFCrk Usul\xFC Pastane)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 360,
+    "proteinGrams": 7.5,
+    "carbGrams": 46,
+    "fatGrams": 17,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 7.5,
+      "carbs": 46,
+      "fat": 17
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Pi\u015Firilen \u015Fu hamuru toplar\u0131n\u0131n i\xE7ine vanilyal\u0131 pastac\u0131 kremas\u0131 s\u0131k\u0131l\u0131r; \xFCzerine \u0131l\u0131k bitter \xE7ikolata sosu bolca d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "Pi\u015Firilen \u015Fu hamuru toplar\u0131n\u0131n i\xE7ine vanilyal\u0131 pastac\u0131 kremas\u0131 s\u0131k\u0131l\u0131r; \xFCzerine \u0131l\u0131k bitter \xE7ikolata sosu bolca d\xF6k\xFCl\xFCr.",
+    "portionCost": 15.3,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 24.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_tat_17_1",
+        "name": "Profiterol \u015Eu Toplar\u0131 (4 adet)",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 70,
+        "portionCost": 3.5,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_tat_17_2",
+        "name": "\u0130peksi Pastac\u0131 Kremas\u0131 (S\xFCt, Yumurta)",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 75,
+        "portionCost": 5.63,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, Yumurta"
+      },
+      {
+        "id": "ing_tat_17_3",
+        "name": "Yo\u011Fun Bitter \xC7ikolata Sosu",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 95,
+        "portionCost": 6.18,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_18",
+    "recipeCode": "REC-TAT-018",
+    "code": "REC-TAT-018",
+    "name": "G\xFClla\xE7",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 290,
+    "proteinGrams": 7,
+    "carbGrams": 54,
+    "fatGrams": 6.5,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 7,
+      "carbs": 54,
+      "fat": 6.5
+    },
+    "allergens": [
+      "Laktoz",
+      "Ceviz / F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ramazan klasi\u011Fi m\u0131s\u0131r ni\u015Fastal\u0131 g\xFClla\xE7 yapraklar\u0131 \u0131l\u0131k \u015Fekerli g\xFCl sulu s\xFCt ile \u0131slat\u0131l\u0131r; orta kat\u0131na bol ceviz ve f\u0131st\u0131k konup nar taneleriyle donat\u0131l\u0131r.",
+    "cookingInstructions": "Ramazan klasi\u011Fi m\u0131s\u0131r ni\u015Fastal\u0131 g\xFClla\xE7 yapraklar\u0131 \u0131l\u0131k \u015Fekerli g\xFCl sulu s\xFCt ile \u0131slat\u0131l\u0131r; orta kat\u0131na bol ceviz ve f\u0131st\u0131k konup nar taneleriyle donat\u0131l\u0131r.",
+    "portionCost": 20.6,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 27.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_tat_18_1",
+        "name": "Do\u011Fal M\u0131s\u0131r Ni\u015Fastal\u0131 G\xFClla\xE7 Yapra\u011F\u0131",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 4.9,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_18_2",
+        "name": "G\xFCl Sulu \u015Eekerli Ya\u011Fl\u0131 S\xFCt",
+        "portionGrams": 130,
+        "unit": "ml",
+        "unitCost": 45,
+        "portionCost": 5.85,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_18_3",
+        "name": "Ceviz \u0130\xE7i, Nar Taneleri & Toz F\u0131st\u0131k",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 9.8,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_19",
+    "recipeCode": "REC-TAT-019",
+    "code": "REC-TAT-019",
+    "name": "A\u015Fure",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 60,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 340,
+    "proteinGrams": 8,
+    "carbGrams": 68,
+    "fatGrams": 6,
+    "nutritionalValues": {
+      "calories": 340,
+      "protein": 8,
+      "carbs": 68,
+      "fat": 6
+    },
+    "allergens": [
+      "Gluten (Bu\u011Fday)",
+      "F\u0131nd\u0131k",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Geceden \u0131slat\u0131lm\u0131\u015F a\u015Furelik bu\u011Fday, nohut ve fasulye a\u011F\u0131r ate\u015Fte kaynat\u0131l\u0131r; kuru incir, kay\u0131s\u0131, ku\u015F \xFCz\xFCm\xFC ve portakal kabu\u011Fu eklenir; nar, f\u0131nd\u0131k, tar\xE7\u0131nla s\xFCslenir.",
+    "cookingInstructions": "Geceden \u0131slat\u0131lm\u0131\u015F a\u015Furelik bu\u011Fday, nohut ve fasulye a\u011F\u0131r ate\u015Fte kaynat\u0131l\u0131r; kuru incir, kay\u0131s\u0131, ku\u015F \xFCz\xFCm\xFC ve portakal kabu\u011Fu eklenir; nar, f\u0131nd\u0131k, tar\xE7\u0131nla s\xFCslenir.",
+    "portionCost": 17.2,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9.5,
+    "totalCostPerPortion": 26.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_tat_19_1",
+        "name": "A\u015Furelik D\xF6vme Bu\u011Fday",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_19_2",
+        "name": "Nohut, Kuru Fasulye & Bakliyat",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 2.6,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_19_3",
+        "name": "Kuru Meyveler (Kuru \u0130ncir, Kay\u0131s\u0131, Ku\u015F \xDCz\xFCm\xFC)",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 7.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_19_4",
+        "name": "Toz \u015Eeker, F\u0131nd\u0131k, Nar & Tar\xE7\u0131n",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 5.4,
+        "wastagePercent": 0,
+        "allergen": "F\u0131nd\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_20",
+    "recipeCode": "REC-TAT-020",
+    "code": "REC-TAT-020",
+    "name": "Trile\xE7e (Karamelli)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 35,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 330,
+    "proteinGrams": 8,
+    "carbGrams": 52,
+    "fatGrams": 11,
+    "nutritionalValues": {
+      "calories": 330,
+      "protein": 8,
+      "carbs": 52,
+      "fat": 11
+    },
+    "allergens": [
+      "Gluten",
+      "Yumurta",
+      "Laktoz (\xDC\xE7 S\xFCt: Manda, Ke\xE7i, \u0130nek)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "G\xF6zenekli hafif pandispanya keki manda, ke\xE7i ve inek s\xFCt\xFC kremas\u0131 kar\u0131\u015F\u0131m\u0131yla \u0131slat\u0131l\u0131r; \xFCzerine ev yap\u0131m\u0131 parlak karamel sos d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "G\xF6zenekli hafif pandispanya keki manda, ke\xE7i ve inek s\xFCt\xFC kremas\u0131 kar\u0131\u015F\u0131m\u0131yla \u0131slat\u0131l\u0131r; \xFCzerine ev yap\u0131m\u0131 parlak karamel sos d\xF6k\xFCl\xFCr.",
+    "portionCost": 13.5,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.3,
+    "totalCostPerPortion": 21.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_tat_20_1",
+        "name": "Trile\xE7e Pandispanya Keki",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 3.3,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_tat_20_2",
+        "name": "Kremal\u0131 \xDC\xE7 S\xFCt \u015Eerbeti",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 70,
+        "portionCost": 7,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_20_3",
+        "name": "Tereya\u011Fl\u0131 Parlak Karamel Sosu",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 3.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_21",
+    "recipeCode": "REC-TAT-021",
+    "code": "REC-TAT-021",
+    "name": "Ayva Tatl\u0131s\u0131 (Kaymakl\u0131)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 210,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 70,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 290,
+    "proteinGrams": 3,
+    "carbGrams": 58,
+    "fatGrams": 8,
+    "nutritionalValues": {
+      "calories": 290,
+      "protein": 3,
+      "carbs": 58,
+      "fat": 8
+    },
+    "allergens": [
+      "Laktoz (Kaymak)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ortadan ikiye b\xF6l\xFCnen E\u015Fme ayvalar\u0131 \xE7ekirdekleri, karanfil ve tar\xE7\u0131nla f\u0131r\u0131nda k\u0131s\u0131k ate\u015Fte nar rengini alana dek pi\u015Firilir; manda kayma\u011F\u0131 ve Antep f\u0131st\u0131\u011F\u0131 ile ta\xE7land\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "Ortadan ikiye b\xF6l\xFCnen E\u015Fme ayvalar\u0131 \xE7ekirdekleri, karanfil ve tar\xE7\u0131nla f\u0131r\u0131nda k\u0131s\u0131k ate\u015Fte nar rengini alana dek pi\u015Firilir; manda kayma\u011F\u0131 ve Antep f\u0131st\u0131\u011F\u0131 ile ta\xE7land\u0131r\u0131l\u0131r.",
+    "portionCost": 20.3,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 8.3,
+    "totalCostPerPortion": 28.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 45,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_21_1",
+        "name": "E\u015Fme Sulu Ayva (Yar\u0131m)",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 5.2,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_tat_21_2",
+        "name": "\u015Eeker, Karanfil, \xC7ubuk Tar\xE7\u0131n & Ayva \xC7ekirde\u011Fi",
+        "portionGrams": 45,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 1.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_21_3",
+        "name": "Taze Manda Kayma\u011F\u0131 & Toz F\u0131st\u0131k",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 13.3,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_22",
+    "recipeCode": "REC-TAT-022",
+    "code": "REC-TAT-022",
+    "name": "Kabak Tatl\u0131s\u0131 (Tahinli & Cevizli)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 60,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 340,
+    "proteinGrams": 5,
+    "carbGrams": 62,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 340,
+      "protein": 5,
+      "carbs": 62,
+      "fat": 12
+    },
+    "allergens": [
+      "Susam (Tahin)",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Adapazar\u0131 kestane kaba\u011F\u0131 \u015Fekerle bir gece bekletilip kendi suyunda f\u0131r\u0131nda karamelize edilene dek pi\u015Firilir; \xFCzerine \xE7ifte kavrulmu\u015F tahin ve ceviz d\xF6k\xFCl\xFCr.",
+    "cookingInstructions": "Adapazar\u0131 kestane kaba\u011F\u0131 \u015Fekerle bir gece bekletilip kendi suyunda f\u0131r\u0131nda karamelize edilene dek pi\u015Firilir; \xFCzerine \xE7ifte kavrulmu\u015F tahin ve ceviz d\xF6k\xFCl\xFCr.",
+    "portionCost": 14.5,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2.8,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.6,
+    "totalCostPerPortion": 22.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 37,
+    "ingredients": [
+      {
+        "id": "ing_tat_22_1",
+        "name": "Adapazar\u0131 Kestane Kaba\u011F\u0131",
+        "portionGrams": 150,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 5.25,
+        "wastagePercent": 20
+      },
+      {
+        "id": "ing_tat_22_2",
+        "name": "Karamelize Toz \u015Eeker",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_22_3",
+        "name": "\xC7ifte Kavrulmu\u015F Tahin & K\u0131r\u0131k Ceviz",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 260,
+        "portionCost": 7.8,
+        "wastagePercent": 0,
+        "allergen": "Susam, Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_23",
+    "recipeCode": "REC-TAT-023",
+    "code": "REC-TAT-023",
+    "name": "\u0130ncir Uyutmas\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 6,
+    "carbGrams": 46,
+    "fatGrams": 5,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 6,
+      "carbs": 46,
+      "fat": 5
+    },
+    "allergens": [
+      "Laktoz (S\xFCt)",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kuru Ayd\u0131n da\u011F incirleri \u0131l\u0131k s\xFCtte p\xFCre yap\u0131l\u0131r; mayalanmas\u0131 i\xE7in \xFCzeri \xF6rt\xFCl\xFCp uyutulur, buzdolab\u0131nda so\u011Futulup cevizle servis edilir.",
+    "cookingInstructions": "Kuru Ayd\u0131n da\u011F incirleri \u0131l\u0131k s\xFCtte p\xFCre yap\u0131l\u0131r; mayalanmas\u0131 i\xE7in \xFCzeri \xF6rt\xFCl\xFCp uyutulur, buzdolab\u0131nda so\u011Futulup cevizle servis edilir.",
+    "portionCost": 18.7,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5,
+    "totalCostPerPortion": 23.7,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_tat_23_1",
+        "name": "Do\u011Fal Ayd\u0131n Kuru Da\u011F \u0130nciri",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 10.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_23_2",
+        "name": "K\xF6y S\xFCt\xFC",
+        "portionGrams": 110,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 3.85,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_23_3",
+        "name": "Ceviz \u0130\xE7i Garnit\xFCr",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 4,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_24",
+    "recipeCode": "REC-TAT-024",
+    "code": "REC-TAT-024",
+    "name": "Katmer (Gaziantep)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 25,
+    "cookingTimeMinutes": 12,
+    "storageTemp": "+70\xB0C (S\u0131cak)",
+    "servingTemp": "+70\xB0C (S\u0131cak)",
+    "caloriePerPortion": 490,
+    "proteinGrams": 9,
+    "carbGrams": 58,
+    "fatGrams": 26,
+    "nutritionalValues": {
+      "calories": 490,
+      "protein": 9,
+      "carbs": 58,
+      "fat": 26
+    },
+    "allergens": [
+      "Gluten",
+      "F\u0131st\u0131k",
+      "Laktoz (Kaymak)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Gaziantep usul\xFC havada d\xF6nd\xFCr\xFClerek zar gibi a\xE7\u0131lan hamura sahan kayma\u011F\u0131, \u015Feker ve bol Antep f\u0131st\u0131\u011F\u0131 boh\xE7a \u015Feklinde katlan\u0131r; ta\u015F f\u0131r\u0131nda \xE7\u0131t\u0131r pi\u015Firilir.",
+    "cookingInstructions": "Gaziantep usul\xFC havada d\xF6nd\xFCr\xFClerek zar gibi a\xE7\u0131lan hamura sahan kayma\u011F\u0131, \u015Feker ve bol Antep f\u0131st\u0131\u011F\u0131 boh\xE7a \u015Feklinde katlan\u0131r; ta\u015F f\u0131r\u0131nda \xE7\u0131t\u0131r pi\u015Firilir.",
+    "portionCost": 47.4,
+    "laborCostPerPortion": 6.5,
+    "gasEnergyCostPerPortion": 2.5,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 10,
+    "totalCostPerPortion": 57.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 90,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_24_1",
+        "name": "Zar \u0130nceli\u011Finde Katmer Hamuru",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 3,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_24_2",
+        "name": "Hakiki Sahan Kayma\u011F\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 14.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_24_3",
+        "name": "Boz Antep F\u0131st\u0131\u011F\u0131 (D\xF6v\xFClm\xFC\u015F) & \u015Eeker",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 750,
+        "portionCost": 30,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_25",
+    "recipeCode": "REC-TAT-025",
+    "code": "REC-TAT-025",
+    "name": "H\xF6\u015Fmerim",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 360,
+    "proteinGrams": 11,
+    "carbGrams": 48,
+    "fatGrams": 15,
+    "nutritionalValues": {
+      "calories": 360,
+      "protein": 11,
+      "carbs": 48,
+      "fat": 15
+    },
+    "allergens": [
+      "Laktoz (Tuzsuz Peynir)",
+      "Gluten (\u0130rmik)",
+      "Yumurta"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Bal\u0131kesir y\xF6resi taze mayalanm\u0131\u015F tuzsuz koyun peyniri, irmik, \u015Feker ve yumurta sar\u0131s\u0131 ile a\u011F\u0131r ate\u015Fte helmelenerek alt\u0131n sar\u0131s\u0131 pi\u015Firilir.",
+    "cookingInstructions": "Bal\u0131kesir y\xF6resi taze mayalanm\u0131\u015F tuzsuz koyun peyniri, irmik, \u015Feker ve yumurta sar\u0131s\u0131 ile a\u011F\u0131r ate\u015Fte helmelenerek alt\u0131n sar\u0131s\u0131 pi\u015Firilir.",
+    "portionCost": 18.6,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 25.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_tat_25_1",
+        "name": "Taze Mayalanm\u0131\u015F Tuzsuz Peynir",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 14.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_25_2",
+        "name": "Durum \u0130rmi\u011Fi & Yumurta Sar\u0131s\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 60,
+        "portionCost": 2.4,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Yumurta"
+      },
+      {
+        "id": "ing_tat_25_3",
+        "name": "Toz \u015Eeker",
+        "portionGrams": 50,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 1.75,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_26",
+    "recipeCode": "REC-TAT-026",
+    "code": "REC-TAT-026",
+    "name": "Helva (\u0130rmik Helvas\u0131)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 170,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+60\xB0C (S\u0131cak/Il\u0131k)",
+    "servingTemp": "+60\xB0C (S\u0131cak/Il\u0131k)",
+    "caloriePerPortion": 390,
+    "proteinGrams": 6.5,
+    "carbGrams": 58,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 6.5,
+      "carbs": 58,
+      "fat": 16
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz (Tereya\u011F\u0131, S\xFCt)",
+      "F\u0131st\u0131k (Dolmal\u0131k)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130rmik ve \xE7am f\u0131st\u0131\u011F\u0131 bol k\xF6y tereya\u011F\u0131nda esmerle\u015Fene dek kavrulur; s\u0131cak s\xFCtl\xFC \u015Feker \u015Ferbeti verilip demlendirilir, dondurmayla sunulabilir.",
+    "cookingInstructions": "\u0130rmik ve \xE7am f\u0131st\u0131\u011F\u0131 bol k\xF6y tereya\u011F\u0131nda esmerle\u015Fene dek kavrulur; s\u0131cak s\xFCtl\xFC \u015Feker \u015Ferbeti verilip demlendirilir, dondurmayla sunulabilir.",
+    "portionCost": 16.8,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7,
+    "totalCostPerPortion": 23.8,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_tat_26_1",
+        "name": "\u0130ri Tane \u0130rmik",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.6,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_26_2",
+        "name": "K\xF6y Tereya\u011F\u0131 & \xC7am F\u0131st\u0131\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 360,
+        "portionCost": 10.8,
+        "wastagePercent": 0,
+        "allergen": "Laktoz, F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_tat_26_3",
+        "name": "S\xFCtl\xFC \u015Eerbet (S\xFCt, Su, \u015Eeker)",
+        "portionGrams": 75,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 3.38,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_27",
+    "recipeCode": "REC-TAT-027",
+    "code": "REC-TAT-027",
+    "name": "Helva (Un Helvas\u0131)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 160,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 25,
+    "storageTemp": "+60\xB0C (S\u0131cak/Il\u0131k)",
+    "servingTemp": "+60\xB0C (S\u0131cak/Il\u0131k)",
+    "caloriePerPortion": 410,
+    "proteinGrams": 5.5,
+    "carbGrams": 60,
+    "fatGrams": 18,
+    "nutritionalValues": {
+      "calories": 410,
+      "protein": 5.5,
+      "carbs": 60,
+      "fat": 18
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz",
+      "Ceviz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "K\xF6y tereya\u011F\u0131nda un sab\u0131rla f\u0131nd\u0131k kabu\u011Fu rengine gelene kadar kavrulur; ceviz i\xE7i ve s\u0131cak \u015Ferbet eklenip ka\u015F\u0131kla \u015Fekil verilir.",
+    "cookingInstructions": "K\xF6y tereya\u011F\u0131nda un sab\u0131rla f\u0131nd\u0131k kabu\u011Fu rengine gelene kadar kavrulur; ceviz i\xE7i ve s\u0131cak \u015Ferbet eklenip ka\u015F\u0131kla \u015Fekil verilir.",
+    "portionCost": 16.5,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7,
+    "totalCostPerPortion": 23.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 35,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_tat_27_1",
+        "name": "Bu\u011Fday Unu",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 30,
+        "portionCost": 1.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_27_2",
+        "name": "K\xF6y Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 280,
+        "portionCost": 8.4,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_tat_27_3",
+        "name": "Ceviz \u0130\xE7i & S\u0131cak \u015Eerbet",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 6.3,
+        "wastagePercent": 0,
+        "allergen": "Ceviz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_28",
+    "recipeCode": "REC-TAT-028",
+    "code": "REC-TAT-028",
+    "name": "Zerde",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 180,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 220,
+    "proteinGrams": 2.5,
+    "carbGrams": 52,
+    "fatGrams": 1,
+    "nutritionalValues": {
+      "calories": 220,
+      "protein": 2.5,
+      "carbs": 52,
+      "fat": 1
+    },
+    "allergens": [
+      "F\u0131st\u0131k (\xC7am F\u0131st\u0131\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Saray mutfa\u011F\u0131n\u0131n d\xFC\u011F\xFCn tatl\u0131s\u0131 pirin\xE7, safran/haspir ve g\xFCl suyu ile pi\u015Firilir; alt\u0131n sar\u0131s\u0131 rengiyle kaseye d\xF6k\xFCl\xFCp ku\u015F \xFCz\xFCm\xFC ve narla s\xFCslenir.",
+    "cookingInstructions": "Saray mutfa\u011F\u0131n\u0131n d\xFC\u011F\xFCn tatl\u0131s\u0131 pirin\xE7, safran/haspir ve g\xFCl suyu ile pi\u015Firilir; alt\u0131n sar\u0131s\u0131 rengiyle kaseye d\xF6k\xFCl\xFCp ku\u015F \xFCz\xFCm\xFC ve narla s\xFCslenir.",
+    "portionCost": 11,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.6,
+    "laborAndOverheadPerPortion": 6.6,
+    "totalCostPerPortion": 17.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 30,
+    "ingredients": [
+      {
+        "id": "ing_tat_28_1",
+        "name": "Baldo K\u0131r\u0131k Pirin\xE7",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_28_2",
+        "name": "Halis Safran / Haspir & G\xFCl Suyu",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 4,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_28_3",
+        "name": "\u015Eeker, \xC7am F\u0131st\u0131\u011F\u0131, Ku\u015F \xDCz\xFCm\xFC & Nar",
+        "portionGrams": 35,
+        "unit": "g",
+        "unitCost": 150,
+        "portionCost": 5.25,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_29",
+    "recipeCode": "REC-TAT-029",
+    "code": "REC-TAT-029",
+    "name": "Pi\u015Fmaniye",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 120,
+    "servingsCount": 1,
+    "prepTimeMinutes": 60,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 460,
+    "proteinGrams": 4.5,
+    "carbGrams": 80,
+    "fatGrams": 14,
+    "nutritionalValues": {
+      "calories": 460,
+      "protein": 4.5,
+      "carbs": 80,
+      "fat": 14
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz (Tereya\u011F\u0131)",
+      "F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "\u0130zmit klasi\u011Fi kavrulmu\u015F un ve a\u011Fdala\u015Fm\u0131\u015F \u015Feker ustal\u0131kla \xE7ekilerek ipek gibi binlerce tel haline getirilir; Antep f\u0131st\u0131\u011F\u0131yla s\xFCslenir.",
+    "cookingInstructions": "\u0130zmit klasi\u011Fi kavrulmu\u015F un ve a\u011Fdala\u015Fm\u0131\u015F \u015Feker ustal\u0131kla \xE7ekilerek ipek gibi binlerce tel haline getirilir; Antep f\u0131st\u0131\u011F\u0131yla s\xFCslenir.",
+    "portionCost": 17.4,
+    "laborCostPerPortion": 5.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 8.5,
+    "totalCostPerPortion": 25.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_tat_29_1",
+        "name": "Geleneksel Tel Pi\u015Fmaniye (Un, \u015Eeker, Tereya\u011F\u0131)",
+        "portionGrams": 110,
+        "unit": "g",
+        "unitCost": 90,
+        "portionCost": 9.9,
+        "wastagePercent": 0,
+        "allergen": "Gluten, Laktoz"
+      },
+      {
+        "id": "ing_tat_29_2",
+        "name": "Antep F\u0131st\u0131\u011F\u0131 Tozu S\xFCs",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 750,
+        "portionCost": 7.5,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_30",
+    "recipeCode": "REC-TAT-030",
+    "code": "REC-TAT-030",
+    "name": "Lokum \xC7e\u015Fitleri",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 130,
+    "servingsCount": 1,
+    "prepTimeMinutes": 40,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 390,
+    "proteinGrams": 3.5,
+    "carbGrams": 84,
+    "fatGrams": 6,
+    "nutritionalValues": {
+      "calories": 390,
+      "protein": 3.5,
+      "carbs": 84,
+      "fat": 6
+    },
+    "allergens": [
+      "F\u0131st\u0131k",
+      "Ceviz",
+      "F\u0131nd\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Geleneksel T\xFCrk lokumu kazanlar\u0131nda ni\u015Fasta ve \u015Feker kaynat\u0131l\u0131r; \xE7ift kavrulmu\u015F f\u0131st\u0131kl\u0131, g\xFCll\xFC, narl\u0131 \xE7e\u015Fitler hindistan cevizinde dinlendirilir.",
+    "cookingInstructions": "Geleneksel T\xFCrk lokumu kazanlar\u0131nda ni\u015Fasta ve \u015Feker kaynat\u0131l\u0131r; \xE7ift kavrulmu\u015F f\u0131st\u0131kl\u0131, g\xFCll\xFC, narl\u0131 \xE7e\u015Fitler hindistan cevizinde dinlendirilir.",
+    "portionCost": 24.7,
+    "laborCostPerPortion": 4.5,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 7.3,
+    "totalCostPerPortion": 32,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_30_1",
+        "name": "\xC7ifte Kavrulmu\u015F F\u0131st\u0131kl\u0131 Lokum",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 14.3,
+        "wastagePercent": 0,
+        "allergen": "F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_tat_30_2",
+        "name": "G\xFCll\xFC & Narl\u0131 Lokum \xC7e\u015Fitleri",
+        "portionGrams": 65,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 10.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_31",
+    "recipeCode": "REC-TAT-031",
+    "code": "REC-TAT-031",
+    "name": "Ekmek Kaday\u0131f\u0131 (Kaymakl\u0131)",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 190,
+    "servingsCount": 1,
+    "prepTimeMinutes": 30,
+    "cookingTimeMinutes": 50,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 480,
+    "proteinGrams": 7,
+    "carbGrams": 78,
+    "fatGrams": 16,
+    "nutritionalValues": {
+      "calories": 480,
+      "protein": 7,
+      "carbs": 78,
+      "fat": 16
+    },
+    "allergens": [
+      "Gluten",
+      "Laktoz (Manda Kayma\u011F\u0131)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Afyonkarahisar usul\xFC kuru ekmek kaday\u0131f\u0131 \u0131slat\u0131l\u0131p karamelize \u015Ferbette a\u011F\u0131r a\u011F\u0131r \xE7evrilerek pi\u015Firilir; kal\u0131n manda kayma\u011F\u0131 ile servis edilir.",
+    "cookingInstructions": "Afyonkarahisar usul\xFC kuru ekmek kaday\u0131f\u0131 \u0131slat\u0131l\u0131p karamelize \u015Ferbette a\u011F\u0131r a\u011F\u0131r \xE7evrilerek pi\u015Firilir; kal\u0131n manda kayma\u011F\u0131 ile servis edilir.",
+    "portionCost": 23.2,
+    "laborCostPerPortion": 5,
+    "gasEnergyCostPerPortion": 3,
+    "overheadCostPerPortion": 1,
+    "laborAndOverheadPerPortion": 9,
+    "totalCostPerPortion": 32.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_tat_31_1",
+        "name": "Kuru Ekmek Kaday\u0131f\u0131 Taban\u0131",
+        "portionGrams": 60,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 4.8,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_tat_31_2",
+        "name": "Karamelize \u015Eeker \u015Eerbeti",
+        "portionGrams": 90,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 3.15,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_31_3",
+        "name": "Afyon Manda Kayma\u011F\u0131",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 380,
+        "portionCost": 15.2,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_32",
+    "recipeCode": "REC-TAT-032",
+    "code": "REC-TAT-032",
+    "name": "Cezerye",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 130,
+    "servingsCount": 1,
+    "prepTimeMinutes": 35,
+    "cookingTimeMinutes": 45,
+    "storageTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "servingTemp": "Oda S\u0131cakl\u0131\u011F\u0131",
+    "caloriePerPortion": 380,
+    "proteinGrams": 5,
+    "carbGrams": 72,
+    "fatGrams": 10,
+    "nutritionalValues": {
+      "calories": 380,
+      "protein": 5,
+      "carbs": 72,
+      "fat": 10
+    },
+    "allergens": [
+      "Ceviz",
+      "F\u0131st\u0131k"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Mersin usul\xFC tatl\u0131 sar\u0131 havu\xE7 \u015Fekerle macun k\u0131vam\u0131na gelene dek karamelize edilir; ceviz veya f\u0131st\u0131k eklenip hindistan cevizine bulan\u0131r.",
+    "cookingInstructions": "Mersin usul\xFC tatl\u0131 sar\u0131 havu\xE7 \u015Fekerle macun k\u0131vam\u0131na gelene dek karamelize edilir; ceviz veya f\u0131st\u0131k eklenip hindistan cevizine bulan\u0131r.",
+    "portionCost": 19.6,
+    "laborCostPerPortion": 4,
+    "gasEnergyCostPerPortion": 2,
+    "overheadCostPerPortion": 0.8,
+    "laborAndOverheadPerPortion": 6.8,
+    "totalCostPerPortion": 26.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 40,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_tat_32_1",
+        "name": "Karamelize Havu\xE7 Macunu",
+        "portionGrams": 85,
+        "unit": "g",
+        "unitCost": 65,
+        "portionCost": 5.53,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_tat_32_2",
+        "name": "Yerli Ceviz \u0130\xE7i & Antep F\u0131st\u0131\u011F\u0131",
+        "portionGrams": 30,
+        "unit": "g",
+        "unitCost": 400,
+        "portionCost": 12,
+        "wastagePercent": 0,
+        "allergen": "Ceviz, F\u0131st\u0131k"
+      },
+      {
+        "id": "ing_tat_32_3",
+        "name": "Hindistan Cevizi Kaplama",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 2.1,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_33",
+    "recipeCode": "REC-TAT-033",
+    "code": "REC-TAT-033",
+    "name": "Kar\u0131\u015F\u0131k Mevsim Meyveleri Taba\u011F\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 12,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 130,
+    "proteinGrams": 2,
+    "carbGrams": 30,
+    "fatGrams": 0.5,
+    "nutritionalValues": {
+      "calories": 130,
+      "protein": 2,
+      "carbs": 30,
+      "fat": 0.5
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Mevsimine g\xF6re taze amasya elmas\u0131, deveci armudu, \xE7ilek, \xFCz\xFCm ve mandalina estetik tabakta dilimlenip servis edilir.",
+    "cookingInstructions": "Mevsimine g\xF6re taze amasya elmas\u0131, deveci armudu, \xE7ilek, \xFCz\xFCm ve mandalina estetik tabakta dilimlenip servis edilir.",
+    "portionCost": 11.3,
+    "laborCostPerPortion": 2.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 5.1,
+    "totalCostPerPortion": 16.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 34,
+    "ingredients": [
+      {
+        "id": "ing_tat_33_1",
+        "name": "Mevsim Meyveleri (Elma, Armut, \xC7ilek, \xDCz\xFCm)",
+        "portionGrams": 250,
+        "unit": "g",
+        "unitCost": 45,
+        "portionCost": 11.25,
+        "wastagePercent": 12
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_tat_34",
+    "recipeCode": "REC-TAT-034",
+    "code": "REC-TAT-034",
+    "name": "Karpuz & Kavun Taba\u011F\u0131",
+    "category": "dessert_fruit",
+    "categoryLabel": "Tatl\u0131 & Meyve",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 300,
+    "servingsCount": 1,
+    "prepTimeMinutes": 10,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 110,
+    "proteinGrams": 2,
+    "carbGrams": 26,
+    "fatGrams": 0.5,
+    "nutritionalValues": {
+      "calories": 110,
+      "protein": 2,
+      "carbs": 26,
+      "fat": 0.5
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Buz gibi so\u011Futulmu\u015F Diyarbak\u0131r karpuzu ve K\u0131rka\u011Fa\xE7 bal kavunu \xFC\xE7gen dilimlenerek so\u011Fuk sunulur.",
+    "cookingInstructions": "Buz gibi so\u011Futulmu\u015F Diyarbak\u0131r karpuzu ve K\u0131rka\u011Fa\xE7 bal kavunu \xFC\xE7gen dilimlenerek so\u011Fuk sunulur.",
+    "portionCost": 7.5,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 4.6,
+    "totalCostPerPortion": 12.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 40,
+    "ingredients": [
+      {
+        "id": "ing_tat_34_1",
+        "name": "Diyarbak\u0131r Karpuzu & K\u0131rka\u011Fa\xE7 Kavunu",
+        "portionGrams": 300,
+        "unit": "g",
+        "unitCost": 25,
+        "portionCost": 7.5,
+        "wastagePercent": 30
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  }
+];
+
+// src/data/recipes/beverageRecipes.ts
+var beverageRecipes = [
+  {
+    "id": "rec_ice_01",
+    "recipeCode": "REC-ICE-001",
+    "code": "REC-ICE-001",
+    "name": "T\xFCrk \xC7ay\u0131 (Rize Demleme)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 150,
+    "servingsCount": 1,
+    "prepTimeMinutes": 5,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+85\xB0C (S\u0131cak)",
+    "servingTemp": "+85\xB0C (S\u0131cak)",
+    "caloriePerPortion": 2,
+    "proteinGrams": 0.1,
+    "carbGrams": 0.4,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 2,
+      "protein": 0.1,
+      "carbs": 0.4,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Rize may\u0131s s\xFCrg\xFCn\xFC siyah \xE7ay porselen demlikte kire\xE7siz tatl\u0131 suyla 20 dakika demlendirilir; ince belli bardakta taze sunulur.",
+    "cookingInstructions": "Rize may\u0131s s\xFCrg\xFCn\xFC siyah \xE7ay porselen demlikte kire\xE7siz tatl\u0131 suyla 20 dakika demlendirilir; ince belli bardakta taze sunulur.",
+    "portionCost": 1.4,
+    "laborCostPerPortion": 1.5,
+    "gasEnergyCostPerPortion": 0.8,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 2.6,
+    "totalCostPerPortion": 4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 5,
+    "actualGrossMarginPercent": 20,
+    "ingredients": [
+      {
+        "id": "ing_ice_01_1",
+        "name": "Rize Siyah \xC7ay\u0131 (May\u0131s S\xFCrg\xFCn\xFC)",
+        "portionGrams": 5,
+        "unit": "g",
+        "unitCost": 160,
+        "portionCost": 0.8,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_01_2",
+        "name": "Ar\u0131t\u0131lm\u0131\u015F Kaynak Suyu",
+        "portionGrams": 150,
+        "unit": "ml",
+        "unitCost": 2,
+        "portionCost": 0.3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_01_3",
+        "name": "Pancar Kesme \u015Eeker (\u0130ste\u011Fe ba\u011Fl\u0131)",
+        "portionGrams": 8,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 0.28,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_02",
+    "recipeCode": "REC-ICE-002",
+    "code": "REC-ICE-002",
+    "name": "T\xFCrk Kahvesi",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 80,
+    "servingsCount": 1,
+    "prepTimeMinutes": 3,
+    "cookingTimeMinutes": 5,
+    "storageTemp": "+80\xB0C (S\u0131cak)",
+    "servingTemp": "+80\xB0C (S\u0131cak)",
+    "caloriePerPortion": 15,
+    "proteinGrams": 0.5,
+    "carbGrams": 2,
+    "fatGrams": 0.4,
+    "nutritionalValues": {
+      "calories": 15,
+      "protein": 0.5,
+      "carbs": 2,
+      "fat": 0.4
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze \xE7ekilmi\u015F incecik Arabica kahvesi bak\u0131r cezvede so\u011Fuk suyla k\u0131s\u0131k ate\u015Fte veya kumda k\xF6p\xFCrene kadar pi\u015Firilir; lokum ve suyla ikram edilir.",
+    "cookingInstructions": "Taze \xE7ekilmi\u015F incecik Arabica kahvesi bak\u0131r cezvede so\u011Fuk suyla k\u0131s\u0131k ate\u015Fte veya kumda k\xF6p\xFCrene kadar pi\u015Firilir; lokum ve suyla ikram edilir.",
+    "portionCost": 5.9,
+    "laborCostPerPortion": 2.5,
+    "gasEnergyCostPerPortion": 0.5,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 3.3,
+    "totalCostPerPortion": 9.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 15,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_ice_02_1",
+        "name": "Ta\u015F De\u011Firmende \xC7ekilmi\u015F T\xFCrk Kahvesi",
+        "portionGrams": 8,
+        "unit": "g",
+        "unitCost": 320,
+        "portionCost": 2.56,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_02_2",
+        "name": "Kaynak Suyu & \u015Eeker",
+        "portionGrams": 70,
+        "unit": "ml",
+        "unitCost": 5,
+        "portionCost": 0.35,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_02_3",
+        "name": "\u0130kram \xC7ifte Kavrulmu\u015F Lokum",
+        "portionGrams": 15,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 3,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_03",
+    "recipeCode": "REC-ICE-003",
+    "code": "REC-ICE-003",
+    "name": "Ayran (K\xF6y / Yay\u0131k / A\xE7\u0131k K\xF6p\xFCkl\xFC)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 5,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 95,
+    "proteinGrams": 5.5,
+    "carbGrams": 6.5,
+    "fatGrams": 5,
+    "nutritionalValues": {
+      "calories": 95,
+      "protein": 5.5,
+      "carbs": 6.5,
+      "fat": 5
+    },
+    "allergens": [
+      "Laktoz (Yo\u011Furt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Tam ya\u011Fl\u0131 koyun ve inek yo\u011Furdu so\u011Fuk kaynak suyu ve kaya tuzu ile yay\u0131k makinesinde yo\u011Fun k\xF6p\xFCk olu\u015Fana dek \xE7\u0131rp\u0131l\u0131r.",
+    "cookingInstructions": "Tam ya\u011Fl\u0131 koyun ve inek yo\u011Furdu so\u011Fuk kaynak suyu ve kaya tuzu ile yay\u0131k makinesinde yo\u011Fun k\xF6p\xFCk olu\u015Fana dek \xE7\u0131rp\u0131l\u0131r.",
+    "portionCost": 7.4,
+    "laborCostPerPortion": 1.5,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 4,
+    "totalCostPerPortion": 11.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 43,
+    "ingredients": [
+      {
+        "id": "ing_ice_03_1",
+        "name": "Tam Ya\u011Fl\u0131 K\xF6y Yo\u011Furdu",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 7.15,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_ice_03_2",
+        "name": "So\u011Fuk Kaynak Suyu & Kaya Tuzu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 2,
+        "portionCost": 0.24,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_04",
+    "recipeCode": "REC-ICE-004",
+    "code": "REC-ICE-004",
+    "name": "\u015Ealgam Suyu (Ac\u0131l\u0131 / Ac\u0131s\u0131z)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 5,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 30,
+    "proteinGrams": 1,
+    "carbGrams": 6,
+    "fatGrams": 0.1,
+    "nutritionalValues": {
+      "calories": 30,
+      "protein": 1,
+      "carbs": 6,
+      "fat": 0.1
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Adana usul\xFC mor havu\xE7, \u015Falgam turpu ve bulgur mayas\u0131 ile fermente edilmi\u015F do\u011Fal \u015Falgam suyu; ac\u0131 s\xFCs biberi tur\u015Fusu ile servis edilir.",
+    "cookingInstructions": "Adana usul\xFC mor havu\xE7, \u015Falgam turpu ve bulgur mayas\u0131 ile fermente edilmi\u015F do\u011Fal \u015Falgam suyu; ac\u0131 s\xFCs biberi tur\u015Fusu ile servis edilir.",
+    "portionCost": 6.6,
+    "laborCostPerPortion": 1.2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 3.7,
+    "totalCostPerPortion": 10.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 15,
+    "actualGrossMarginPercent": 31,
+    "ingredients": [
+      {
+        "id": "ing_ice_04_1",
+        "name": "Do\u011Fal Fermente Adana \u015Ealgam Suyu",
+        "portionGrams": 230,
+        "unit": "ml",
+        "unitCost": 25,
+        "portionCost": 5.75,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_04_2",
+        "name": "Tane Mor Havu\xE7 & Ac\u0131 Biber",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 0.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_05",
+    "recipeCode": "REC-ICE-005",
+    "code": "REC-ICE-005",
+    "name": "Osmanl\u0131 \u015Eerbeti (G\xFCl / Demirhindi / Hibiskus)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 120,
+    "proteinGrams": 0.5,
+    "carbGrams": 29,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 120,
+      "protein": 0.5,
+      "carbs": 29,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Demirhindi meyvesi, hibiskus, karanfil, \xE7ubuk tar\xE7\u0131n, zencefil ve bal ile kaynat\u0131l\u0131p so\u011Futulur; buz ile ferahlat\u0131c\u0131 servis edilir.",
+    "cookingInstructions": "Demirhindi meyvesi, hibiskus, karanfil, \xE7ubuk tar\xE7\u0131n, zencefil ve bal ile kaynat\u0131l\u0131p so\u011Futulur; buz ile ferahlat\u0131c\u0131 servis edilir.",
+    "portionCost": 9.3,
+    "laborCostPerPortion": 2.5,
+    "gasEnergyCostPerPortion": 1.2,
+    "overheadCostPerPortion": 0.4,
+    "laborAndOverheadPerPortion": 4.1,
+    "totalCostPerPortion": 13.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 33,
+    "ingredients": [
+      {
+        "id": "ing_ice_05_1",
+        "name": "Demirhindi & Hibiskus \xC7i\xE7e\u011Fi",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 180,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_05_2",
+        "name": "Baharat Kar\u0131\u015F\u0131m\u0131 (\xC7ubuk Tar\xE7\u0131n, Karanfil, Zencefil)",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 220,
+        "portionCost": 2.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_05_3",
+        "name": "\xC7i\xE7ek Bal\u0131 & Pancar \u015Eekeri",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 3.5,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_06",
+    "recipeCode": "REC-ICE-006",
+    "code": "REC-ICE-006",
+    "name": "Limonata (Ev Yap\u0131m\u0131 - Naneli)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 110,
+    "proteinGrams": 0.5,
+    "carbGrams": 27,
+    "fatGrams": 0.1,
+    "nutritionalValues": {
+      "calories": 110,
+      "protein": 0.5,
+      "carbs": 27,
+      "fat": 0.1
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Limon kabuklar\u0131 \u015Fekerle ovularak esans\u0131 \xE7\u0131kar\u0131l\u0131r; taze s\u0131k\u0131lm\u0131\u015F limon suyu, so\u011Fuk su ve taze nane yapraklar\u0131 ile buz gibi kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "cookingInstructions": "Limon kabuklar\u0131 \u015Fekerle ovularak esans\u0131 \xE7\u0131kar\u0131l\u0131r; taze s\u0131k\u0131lm\u0131\u015F limon suyu, so\u011Fuk su ve taze nane yapraklar\u0131 ile buz gibi kar\u0131\u015Ft\u0131r\u0131l\u0131r.",
+    "portionCost": 6.1,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 10.6,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 15,
+    "actualGrossMarginPercent": 29,
+    "ingredients": [
+      {
+        "id": "ing_ice_06_1",
+        "name": "Taze S\u0131k\u0131lm\u0131\u015F Finike Limonu",
+        "portionGrams": 70,
+        "unit": "g",
+        "unitCost": 40,
+        "portionCost": 2.8,
+        "wastagePercent": 40
+      },
+      {
+        "id": "ing_ice_06_2",
+        "name": "Limon Kabu\u011Fu Esans\u0131 & \u015Eeker",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 0.88,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_06_3",
+        "name": "Taze Nane Yapraklar\u0131 & Kaynak Suyu",
+        "portionGrams": 160,
+        "unit": "ml",
+        "unitCost": 15,
+        "portionCost": 2.4,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_07",
+    "recipeCode": "REC-ICE-007",
+    "code": "REC-ICE-007",
+    "name": "Boza",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 20,
+    "cookingTimeMinutes": 40,
+    "storageTemp": "+10\xB0C (Serin)",
+    "servingTemp": "+10\xB0C (Serin)",
+    "caloriePerPortion": 240,
+    "proteinGrams": 4.5,
+    "carbGrams": 52,
+    "fatGrams": 1,
+    "nutritionalValues": {
+      "calories": 240,
+      "protein": 4.5,
+      "carbs": 52,
+      "fat": 1
+    },
+    "allergens": [
+      "Gluten (Dar\u0131/Bu\u011Fday)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Dar\u0131 irmi\u011Fi kaynat\u0131l\u0131p s\xFCz\xFCl\xFCr ve fermente edilir; yo\u011Fun boza k\u0131vam\u0131na gelince \xFCzerine bol tar\xE7\u0131n ve sar\u0131 leblebi eklenir.",
+    "cookingInstructions": "Dar\u0131 irmi\u011Fi kaynat\u0131l\u0131p s\xFCz\xFCl\xFCr ve fermente edilir; yo\u011Fun boza k\u0131vam\u0131na gelince \xFCzerine bol tar\xE7\u0131n ve sar\u0131 leblebi eklenir.",
+    "portionCost": 12.1,
+    "laborCostPerPortion": 3,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5,
+    "totalCostPerPortion": 17.1,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 32,
+    "ingredients": [
+      {
+        "id": "ing_ice_07_1",
+        "name": "Do\u011Fal Fermente Geleneksel Boza",
+        "portionGrams": 180,
+        "unit": "ml",
+        "unitCost": 45,
+        "portionCost": 8.1,
+        "wastagePercent": 0,
+        "allergen": "Gluten"
+      },
+      {
+        "id": "ing_ice_07_2",
+        "name": "\xC7ifte Kavrulmu\u015F \xC7orum Leblebisi",
+        "portionGrams": 25,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 3,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_07_3",
+        "name": "Toz Seylan Tar\xE7\u0131n\u0131",
+        "portionGrams": 5,
+        "unit": "g",
+        "unitCost": 200,
+        "portionCost": 1,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_08",
+    "recipeCode": "REC-ICE-008",
+    "code": "REC-ICE-008",
+    "name": "Sahlep (Do\u011Fal Da\u011F Salebi)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 10,
+    "cookingTimeMinutes": 20,
+    "storageTemp": "+75\xB0C (S\u0131cak)",
+    "servingTemp": "+75\xB0C (S\u0131cak)",
+    "caloriePerPortion": 210,
+    "proteinGrams": 7,
+    "carbGrams": 34,
+    "fatGrams": 5.5,
+    "nutritionalValues": {
+      "calories": 210,
+      "protein": 7,
+      "carbs": 34,
+      "fat": 5.5
+    },
+    "allergens": [
+      "Laktoz (S\xFCt)"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Kastamonu ta\u015Fk\xF6pr\xFC saf da\u011F salebi k\xF6k tozu s\xFCt ve \u015Fekerle k\u0131s\u0131k ate\u015Fte s\xFCrekli \xE7\u0131rp\u0131larak sak\u0131z k\u0131vam\u0131na gelene kadar pi\u015Firilir; tar\xE7\u0131nla sunulur.",
+    "cookingInstructions": "Kastamonu ta\u015Fk\xF6pr\xFC saf da\u011F salebi k\xF6k tozu s\xFCt ve \u015Fekerle k\u0131s\u0131k ate\u015Fte s\xFCrekli \xE7\u0131rp\u0131larak sak\u0131z k\u0131vam\u0131na gelene kadar pi\u015Firilir; tar\xE7\u0131nla sunulur.",
+    "portionCost": 26.9,
+    "laborCostPerPortion": 3.5,
+    "gasEnergyCostPerPortion": 1.5,
+    "overheadCostPerPortion": 0.5,
+    "laborAndOverheadPerPortion": 5.5,
+    "totalCostPerPortion": 32.4,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 50,
+    "actualGrossMarginPercent": 35,
+    "ingredients": [
+      {
+        "id": "ing_ice_08_1",
+        "name": "Halis Ta\u015Fk\xF6pr\xFC Da\u011F Salebi Tozu",
+        "portionGrams": 6,
+        "unit": "g",
+        "unitCost": 3200,
+        "portionCost": 19.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_08_2",
+        "name": "Tam Ya\u011Fl\u0131 K\xF6y S\xFCt\xFC",
+        "portionGrams": 190,
+        "unit": "ml",
+        "unitCost": 35,
+        "portionCost": 6.65,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_ice_08_3",
+        "name": "Toz \u015Eeker & Bol Toz Tar\xE7\u0131n",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 50,
+        "portionCost": 1,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_09",
+    "recipeCode": "REC-ICE-009",
+    "code": "REC-ICE-009",
+    "name": "\u015E\u0131ra",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 10,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 140,
+    "proteinGrams": 0.8,
+    "carbGrams": 34,
+    "fatGrams": 0.1,
+    "nutritionalValues": {
+      "calories": 140,
+      "protein": 0.8,
+      "carbs": 34,
+      "fat": 0.1
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Taze ezilmi\u015F k\u0131rm\u0131z\u0131 \xFCz\xFCm \u015F\u0131ras\u0131 fermente olmadan past\xF6rize edilip so\u011Futulur; \xF6zellikle d\xF6ner ve kebaplar\u0131n yan\u0131nda i\xE7ilir.",
+    "cookingInstructions": "Taze ezilmi\u015F k\u0131rm\u0131z\u0131 \xFCz\xFCm \u015F\u0131ras\u0131 fermente olmadan past\xF6rize edilip so\u011Futulur; \xF6zellikle d\xF6ner ve kebaplar\u0131n yan\u0131nda i\xE7ilir.",
+    "portionCost": 9.9,
+    "laborCostPerPortion": 1.5,
+    "gasEnergyCostPerPortion": 0.5,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 2.3,
+    "totalCostPerPortion": 12.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 39,
+    "ingredients": [
+      {
+        "id": "ing_ice_09_1",
+        "name": "Do\u011Fal Taze S\u0131k\u0131lm\u0131\u015F \xDCz\xFCm \u015E\u0131ras\u0131",
+        "portionGrams": 220,
+        "unit": "ml",
+        "unitCost": 45,
+        "portionCost": 9.9,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_10",
+    "recipeCode": "REC-ICE-10",
+    "code": "REC-ICE-10",
+    "name": "Reyhan \u015Eerbeti",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 10,
+    "cookingTimeMinutes": 10,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 95,
+    "proteinGrams": 0.3,
+    "carbGrams": 24,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 95,
+      "protein": 0.3,
+      "carbs": 24,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Mor reyhan yapraklar\u0131 kaynar su, limon tuzu ve \u015Fekerle demlendirilir; mor renkli enfes aromal\u0131 \u015Ferbet s\xFCz\xFCl\xFCp buzla sunulur.",
+    "cookingInstructions": "Mor reyhan yapraklar\u0131 kaynar su, limon tuzu ve \u015Fekerle demlendirilir; mor renkli enfes aromal\u0131 \u015Ferbet s\xFCz\xFCl\xFCp buzla sunulur.",
+    "portionCost": 4.6,
+    "laborCostPerPortion": 1.8,
+    "gasEnergyCostPerPortion": 0.5,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 2.6,
+    "totalCostPerPortion": 7.2,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 10,
+    "actualGrossMarginPercent": 28,
+    "ingredients": [
+      {
+        "id": "ing_ice_10_1",
+        "name": "Taze Mor Reyhan Demeti",
+        "portionGrams": 40,
+        "unit": "g",
+        "unitCost": 80,
+        "portionCost": 3.2,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_ice_10_2",
+        "name": "Toz \u015Eeker & Limon Tuzu",
+        "portionGrams": 22,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 0.77,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_10_3",
+        "name": "Kaynak Suyu & Buz",
+        "portionGrams": 200,
+        "unit": "ml",
+        "unitCost": 3,
+        "portionCost": 0.6,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_11",
+    "recipeCode": "REC-ICE-011",
+    "code": "REC-ICE-011",
+    "name": "Karadut Suyu",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 10,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 125,
+    "proteinGrams": 1,
+    "carbGrams": 30,
+    "fatGrams": 0.2,
+    "nutritionalValues": {
+      "calories": 125,
+      "protein": 1,
+      "carbs": 30,
+      "fat": 0.2
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Ege y\xF6resi yabani karadut meyveleri ezilerek suyu \xE7\u0131kar\u0131l\u0131r; so\u011Fuk kaynak suyu ile inceltilip buz gibi servis edilir.",
+    "cookingInstructions": "Ege y\xF6resi yabani karadut meyveleri ezilerek suyu \xE7\u0131kar\u0131l\u0131r; so\u011Fuk kaynak suyu ile inceltilip buz gibi servis edilir.",
+    "portionCost": 11.7,
+    "laborCostPerPortion": 1.8,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 4.3,
+    "totalCostPerPortion": 16,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 25,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_ice_11_1",
+        "name": "Ege Do\u011Fal Karadut \xD6z\xFC",
+        "portionGrams": 80,
+        "unit": "g",
+        "unitCost": 140,
+        "portionCost": 11.2,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_11_2",
+        "name": "Kaynak Suyu & Par\xE7a Buz",
+        "portionGrams": 170,
+        "unit": "ml",
+        "unitCost": 3,
+        "portionCost": 0.51,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_12",
+    "recipeCode": "REC-ICE-012",
+    "code": "REC-ICE-012",
+    "name": "Koruk Suyu",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 220,
+    "servingsCount": 1,
+    "prepTimeMinutes": 15,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 80,
+    "proteinGrams": 0.4,
+    "carbGrams": 20,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 80,
+      "protein": 0.4,
+      "carbs": 20,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Olgunla\u015Fmam\u0131\u015F ek\u015Fi koruk \xFCz\xFCmleri ezilip suyu s\xFCz\xFCl\xFCr; az \u015Feker ve suyla dengelenerek serinletici ek\u015Fi \u015Ferbet yap\u0131l\u0131r.",
+    "cookingInstructions": "Olgunla\u015Fmam\u0131\u015F ek\u015Fi koruk \xFCz\xFCmleri ezilip suyu s\xFCz\xFCl\xFCr; az \u015Feker ve suyla dengelenerek serinletici ek\u015Fi \u015Ferbet yap\u0131l\u0131r.",
+    "portionCost": 9.8,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 14.3,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 28,
+    "ingredients": [
+      {
+        "id": "ing_ice_12_1",
+        "name": "Taze S\u0131k\u0131lm\u0131\u015F Ham Koruk \xDCz\xFCm Suyu",
+        "portionGrams": 100,
+        "unit": "ml",
+        "unitCost": 80,
+        "portionCost": 8,
+        "wastagePercent": 15
+      },
+      {
+        "id": "ing_ice_12_2",
+        "name": "Kaynak Suyu & \u015Eeker \u015Eurubu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 15,
+        "portionCost": 1.8,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_13",
+    "recipeCode": "REC-ICE-013",
+    "code": "REC-ICE-013",
+    "name": "Meyve Suyu (Taze S\u0131kma Portakal / Nar)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 8,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 120,
+    "proteinGrams": 1.8,
+    "carbGrams": 28,
+    "fatGrams": 0.3,
+    "nutritionalValues": {
+      "calories": 120,
+      "protein": 1.8,
+      "carbs": 28,
+      "fat": 0.3
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Finike sulu s\u0131kmal\u0131k portakallar\u0131 veya Antakya narlar\u0131 sipari\u015F an\u0131nda hidrolik preste taze s\u0131k\u0131l\u0131r; katk\u0131s\u0131z sunulur.",
+    "cookingInstructions": "Finike sulu s\u0131kmal\u0131k portakallar\u0131 veya Antakya narlar\u0131 sipari\u015F an\u0131nda hidrolik preste taze s\u0131k\u0131l\u0131r; katk\u0131s\u0131z sunulur.",
+    "portionCost": 14,
+    "laborCostPerPortion": 2,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 4.5,
+    "totalCostPerPortion": 18.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 30,
+    "actualGrossMarginPercent": 38,
+    "ingredients": [
+      {
+        "id": "ing_ice_13_1",
+        "name": "Finike S\u0131kmal\u0131k Portakal & Hicaz Nar\u0131",
+        "portionGrams": 400,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 14,
+        "wastagePercent": 45
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_14",
+    "recipeCode": "REC-ICE-014",
+    "code": "REC-ICE-014",
+    "name": "Soda / Maden Suyu (Sade / Limonlu)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 200,
+    "servingsCount": 1,
+    "prepTimeMinutes": 2,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 300,
+    "proteinGrams": 10,
+    "carbGrams": 25,
+    "fatGrams": 12,
+    "nutritionalValues": {
+      "calories": 300,
+      "protein": 10,
+      "carbs": 25,
+      "fat": 12
+    },
+    "allergens": [],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Do\u011Fal zengin mineralli kaynak maden suyu, dilim taze limon ve buz e\u015Fli\u011Finde cam \u015Fi\u015Fede servis edilir.",
+    "cookingInstructions": "Do\u011Fal zengin mineralli kaynak maden suyu, dilim taze limon ve buz e\u015Fli\u011Finde cam \u015Fi\u015Fede servis edilir.",
+    "portionCost": 4.3,
+    "laborCostPerPortion": 0.8,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.2,
+    "laborAndOverheadPerPortion": 3.2,
+    "totalCostPerPortion": 7.5,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 10,
+    "actualGrossMarginPercent": 25,
+    "ingredients": [
+      {
+        "id": "ing_ice_14_1",
+        "name": "Do\u011Fal Mineralli Maden Suyu (200ml Cam \u015Ei\u015Fe)",
+        "portionGrams": 200,
+        "unit": "ml",
+        "unitCost": 18,
+        "portionCost": 3.6,
+        "wastagePercent": 0
+      },
+      {
+        "id": "ing_ice_14_2",
+        "name": "Taze Limon Dilimi & Buz",
+        "portionGrams": 20,
+        "unit": "g",
+        "unitCost": 35,
+        "portionCost": 0.7,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  },
+  {
+    "id": "rec_ice_15",
+    "recipeCode": "REC-ICE-015",
+    "code": "REC-ICE-015",
+    "name": "Yay\u0131k Ayran\u0131 (Fesle\u011Fenli / Naneli)",
+    "category": "beverage",
+    "categoryLabel": "\u0130\xE7ecekler",
+    "status": "approved",
+    "isApproved": true,
+    "approvedBy": "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    "standardPortionGrams": 250,
+    "servingsCount": 1,
+    "prepTimeMinutes": 5,
+    "cookingTimeMinutes": 30,
+    "storageTemp": "+4\xB0C (So\u011Fuk)",
+    "servingTemp": "+4\xB0C (So\u011Fuk)",
+    "caloriePerPortion": 98,
+    "proteinGrams": 5.5,
+    "carbGrams": 6.8,
+    "fatGrams": 5.2,
+    "nutritionalValues": {
+      "calories": 98,
+      "protein": 5.5,
+      "carbs": 6.8,
+      "fat": 5.2
+    },
+    "allergens": [
+      "Laktoz"
+    ],
+    "equipment": [
+      "Kazan",
+      "Kep\xE7e",
+      "F\u0131r\u0131n/Kuzine",
+      "Gastronom K\xFCvet"
+    ],
+    "instructions": "Yay\u0131k yo\u011Furdu, taze bah\xE7e fesle\u011Feni veya da\u011F nanesi ile blenderda y\xFCksek devirde k\xF6p\xFCrt\xFClerek haz\u0131rlan\u0131r.",
+    "cookingInstructions": "Yay\u0131k yo\u011Furdu, taze bah\xE7e fesle\u011Feni veya da\u011F nanesi ile blenderda y\xFCksek devirde k\xF6p\xFCrt\xFClerek haz\u0131rlan\u0131r.",
+    "portionCost": 8.6,
+    "laborCostPerPortion": 1.8,
+    "gasEnergyCostPerPortion": 2.2,
+    "overheadCostPerPortion": 0.3,
+    "laborAndOverheadPerPortion": 4.3,
+    "totalCostPerPortion": 12.9,
+    "targetGrossMarginPercent": 35,
+    "suggestedSalePrice": 20,
+    "actualGrossMarginPercent": 36,
+    "ingredients": [
+      {
+        "id": "ing_ice_15_1",
+        "name": "Tam Ya\u011Fl\u0131 K\xF6y Yo\u011Furdu",
+        "portionGrams": 130,
+        "unit": "g",
+        "unitCost": 55,
+        "portionCost": 7.15,
+        "wastagePercent": 0,
+        "allergen": "Laktoz"
+      },
+      {
+        "id": "ing_ice_15_2",
+        "name": "Taze Fesle\u011Fen & Nane Yapraklar\u0131",
+        "portionGrams": 10,
+        "unit": "g",
+        "unitCost": 120,
+        "portionCost": 1.2,
+        "wastagePercent": 10
+      },
+      {
+        "id": "ing_ice_15_3",
+        "name": "So\u011Fuk Kaynak Suyu & Kaya Tuzu",
+        "portionGrams": 120,
+        "unit": "ml",
+        "unitCost": 2,
+        "portionCost": 0.24,
+        "wastagePercent": 0
+      }
+    ],
+    "notes": "Standart fabrika re\xE7etesi",
+    "createdAt": "2026-09-01",
+    "updatedAt": "2026-09-18"
+  }
+];
+
+// src/data/recipes/breakfastRecipes.ts
+var breakfastRecipes = [
+  {
+    id: "rec_kahv_01",
+    recipeCode: "REC-KHV-001",
+    code: "REC-KHV-001",
+    name: "Geleneksel Tabldot Kahvalt\u0131 Taba\u011F\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 230,
+    servingsCount: 1,
+    portionCost: 24.5,
+    laborCostPerPortion: 3.5,
+    gasEnergyCostPerPortion: 1,
+    overheadCostPerPortion: 1,
+    laborAndOverheadPerPortion: 5.5,
+    totalCostPerPortion: 30,
+    suggestedSalePrice: 55,
+    cookingTimeMinutes: 10,
+    prepTimeMinutes: 15,
+    caloriePerPortion: 420,
+    proteinGrams: 16.5,
+    carbGrams: 32,
+    fatGrams: 24,
+    allergens: ["Laktoz (Peynir, Tereya\u011F\u0131)", "Gluten (Ekmek)"],
+    storageTemp: "+4\xB0C (So\u011Fuk)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "Tam ya\u011Fl\u0131 beyaz peynir, taze ka\u015Far, Gemlik siyah zeytin, \xE7izik ye\u015Fil zeytin, porsiyonluk pet bal ve tereya\u011F\u0131 ile taze \xE7engelk\xF6y salatal\u0131k ve domates dilimlenerek tabldot porsiyonlan\u0131r. Yan\u0131nda taze demli \xE7ay ve roll ekmek verilir.",
+    ingredients: [
+      { id: "ing_khv_01_1", name: "Tam Ya\u011Fl\u0131 Beyaz Peynir", portionGrams: 40, unit: "g", unitCost: 195, portionCost: 7.8, wastagePercent: 2 },
+      { id: "ing_khv_01_2", name: "Taze Ka\u015Far Peyniri", portionGrams: 30, unit: "g", unitCost: 260, portionCost: 7.8, wastagePercent: 0 },
+      { id: "ing_khv_01_3", name: "Gemlik Siyah Zeytin", portionGrams: 25, unit: "g", unitCost: 140, portionCost: 3.5, wastagePercent: 0 },
+      { id: "ing_khv_01_4", name: "\xC7izik Ye\u015Fil Zeytin", portionGrams: 20, unit: "g", unitCost: 150, portionCost: 3, wastagePercent: 0 },
+      { id: "ing_khv_01_5", name: "Porsiyon Pet Bal (20g)", portionGrams: 20, unit: "g", unitCost: 120, portionCost: 2.4, wastagePercent: 0 },
+      { id: "ing_khv_01_6", name: "Porsiyon Tereya\u011F\u0131 (10g)", portionGrams: 10, unit: "g", unitCost: 320, portionCost: 3.2, wastagePercent: 0 },
+      { id: "ing_khv_01_7", name: "Domates & Salatal\u0131k Dilimleri", portionGrams: 70, unit: "g", unitCost: 35, portionCost: 2.45, wastagePercent: 8 },
+      { id: "ing_khv_01_8", name: "Demleme \xC7ay & \u015Eeker", portionGrams: 200, unit: "ml", unitCost: 10, portionCost: 2, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_02",
+    recipeCode: "REC-KHV-002",
+    code: "REC-KHV-002",
+    name: "Geleneksel K\xF6y Menemeni",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 220,
+    servingsCount: 1,
+    portionCost: 18.8,
+    laborCostPerPortion: 3,
+    gasEnergyCostPerPortion: 2.2,
+    overheadCostPerPortion: 0.8,
+    laborAndOverheadPerPortion: 6,
+    totalCostPerPortion: 24.8,
+    suggestedSalePrice: 50,
+    cookingTimeMinutes: 20,
+    prepTimeMinutes: 15,
+    caloriePerPortion: 310,
+    proteinGrams: 14.2,
+    carbGrams: 12.5,
+    fatGrams: 21,
+    allergens: ["Yumurta", "Laktoz (Tereya\u011F\u0131)"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "\u0130nce do\u011Franm\u0131\u015F sivri biberler tereya\u011F\u0131 ve zeytinya\u011F\u0131nda sotelenir. Kabuklar\u0131 soyulup k\xFCp do\u011Franm\u0131\u015F tarla domatesleri eklenip suyunu \xE7ekene kadar pi\u015Firilir. Taze yumurtalar k\u0131r\u0131l\u0131p sulu k\u0131vamda hafif kar\u0131\u015Ft\u0131r\u0131larak s\u0131cak servis k\xFCvetine al\u0131n\u0131r.",
+    ingredients: [
+      { id: "ing_khv_02_1", name: "Taze Yumurta (M Boy)", portionGrams: 100, unit: "g", unitCost: 65, portionCost: 6.5, wastagePercent: 5 },
+      { id: "ing_khv_02_2", name: "Tarla Domatesi", portionGrams: 120, unit: "g", unitCost: 32, portionCost: 3.84, wastagePercent: 8 },
+      { id: "ing_khv_02_3", name: "Tatl\u0131 K\xF6y Biberi", portionGrams: 40, unit: "g", unitCost: 45, portionCost: 1.8, wastagePercent: 10 },
+      { id: "ing_khv_02_4", name: "Tereya\u011F\u0131 & S\u0131v\u0131 Ya\u011F Kar\u0131\u015F\u0131m\u0131", portionGrams: 15, unit: "g", unitCost: 220, portionCost: 3.3, wastagePercent: 0 },
+      { id: "ing_khv_02_5", name: "Tuz & Karabiber & Pul Biber", portionGrams: 4, unit: "g", unitCost: 80, portionCost: 0.32, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_03",
+    recipeCode: "REC-KHV-003",
+    code: "REC-KHV-003",
+    name: "F\u0131r\u0131nda Ka\u015Farl\u0131 Tepsi Omlet",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 180,
+    servingsCount: 1,
+    portionCost: 21.5,
+    laborCostPerPortion: 2.8,
+    gasEnergyCostPerPortion: 2.5,
+    overheadCostPerPortion: 0.7,
+    laborAndOverheadPerPortion: 6,
+    totalCostPerPortion: 27.5,
+    suggestedSalePrice: 52,
+    cookingTimeMinutes: 25,
+    prepTimeMinutes: 10,
+    caloriePerPortion: 345,
+    proteinGrams: 18,
+    carbGrams: 6,
+    fatGrams: 26.5,
+    allergens: ["Yumurta", "Laktoz (S\xFCt, Ka\u015Far)"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "Yumurtalar s\xFCt, tuz ve karabiber ile \xE7\u0131rp\u0131l\u0131r. Ya\u011Flanm\u0131\u015F gastronom f\u0131r\u0131n k\xFCvetlerine d\xF6k\xFCl\xFCp \xFCzerine rendelenmi\u015F ka\u015Far peyniri ve k\u0131y\u0131lm\u0131\u015F maydanoz serpilir. 175\xB0C buharl\u0131 f\u0131r\u0131nda alt\u0131n sar\u0131s\u0131 olana kadar pi\u015Firilir ve dilimlenir.",
+    ingredients: [
+      { id: "ing_khv_03_1", name: "Taze Yumurta (2 Adet)", portionGrams: 110, unit: "g", unitCost: 65, portionCost: 7.15, wastagePercent: 5 },
+      { id: "ing_khv_03_2", name: "Rendelenmi\u015F Ka\u015Far Peyniri", portionGrams: 35, unit: "g", unitCost: 260, portionCost: 9.1, wastagePercent: 0 },
+      { id: "ing_khv_03_3", name: "Tam Ya\u011Fl\u0131 S\xFCt", portionGrams: 30, unit: "ml", unitCost: 35, portionCost: 1.05, wastagePercent: 0 },
+      { id: "ing_khv_03_4", name: "Tereya\u011F\u0131", portionGrams: 10, unit: "g", unitCost: 320, portionCost: 3.2, wastagePercent: 0 },
+      { id: "ing_khv_03_5", name: "\u0130nce K\u0131y\u0131lm\u0131\u015F Maydanoz & Baharat", portionGrams: 5, unit: "g", unitCost: 50, portionCost: 0.25, wastagePercent: 5 }
+    ]
+  },
+  {
+    id: "rec_kahv_04",
+    recipeCode: "REC-KHV-004",
+    code: "REC-KHV-004",
+    name: "Ha\u015Flanm\u0131\u015F Yumurtal\u0131 \u015Eantiye Kahvalt\u0131s\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 240,
+    servingsCount: 1,
+    portionCost: 22,
+    laborCostPerPortion: 2.5,
+    gasEnergyCostPerPortion: 1.2,
+    overheadCostPerPortion: 0.8,
+    laborAndOverheadPerPortion: 4.5,
+    totalCostPerPortion: 26.5,
+    suggestedSalePrice: 48,
+    cookingTimeMinutes: 12,
+    prepTimeMinutes: 10,
+    caloriePerPortion: 390,
+    proteinGrams: 19.5,
+    carbGrams: 28,
+    fatGrams: 21,
+    allergens: ["Yumurta", "Laktoz (Beyaz Peynir)", "Gluten (Ekmek)"],
+    storageTemp: "+15\xB0C / +4\xB0C",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "Yumurtalar kaynar suda tam k\u0131vam\u0131nda (kay\u0131s\u0131/kat\u0131) 8-9 dakika ha\u015Flan\u0131r. Yan\u0131na beyaz peynir, siyah zeytin, porsiyon vi\u015Fne re\xE7eli, domates-salatal\u0131k dilimleri ve taze ekmekle servis edilir.",
+    ingredients: [
+      { id: "ing_khv_04_1", name: "Taze Yumurta (1 Adet Ha\u015Flanm\u0131\u015F)", portionGrams: 55, unit: "g", unitCost: 65, portionCost: 3.58, wastagePercent: 0 },
+      { id: "ing_khv_04_2", name: "Klasik Beyaz Peynir", portionGrams: 45, unit: "g", unitCost: 195, portionCost: 8.78, wastagePercent: 0 },
+      { id: "ing_khv_04_3", name: "Siyah Zeytin", portionGrams: 30, unit: "g", unitCost: 140, portionCost: 4.2, wastagePercent: 0 },
+      { id: "ing_khv_04_4", name: "Porsiyon Vi\u015Fne Re\xE7eli (20g)", portionGrams: 20, unit: "g", unitCost: 95, portionCost: 1.9, wastagePercent: 0 },
+      { id: "ing_khv_04_5", name: "Salatal\u0131k & Domates", portionGrams: 60, unit: "g", unitCost: 35, portionCost: 2.1, wastagePercent: 5 }
+    ]
+  },
+  {
+    id: "rec_kahv_05",
+    recipeCode: "REC-KHV-005",
+    code: "REC-KHV-005",
+    name: "Sucuklu Yumurta (Catering Usul\xFC)",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 190,
+    servingsCount: 1,
+    portionCost: 32.5,
+    laborCostPerPortion: 3.2,
+    gasEnergyCostPerPortion: 2,
+    overheadCostPerPortion: 1,
+    laborAndOverheadPerPortion: 6.2,
+    totalCostPerPortion: 38.7,
+    suggestedSalePrice: 70,
+    cookingTimeMinutes: 15,
+    prepTimeMinutes: 10,
+    caloriePerPortion: 440,
+    proteinGrams: 21,
+    carbGrams: 4.5,
+    fatGrams: 36,
+    allergens: ["Yumurta"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "Kangal dana sucuk halka do\u011Fran\u0131p f\u0131r\u0131n tepsisinde hafif terletilir. Taze yumurtalar \xFCzerine k\u0131r\u0131l\u0131p beyazlar\u0131 pi\u015Fene, sar\u0131lar\u0131 rafadan kalana kadar pi\u015Firilir. S\u0131cak servis edilir.",
+    ingredients: [
+      { id: "ing_khv_05_1", name: "Dana Kangal Sucuk", portionGrams: 45, unit: "g", unitCost: 380, portionCost: 17.1, wastagePercent: 2 },
+      { id: "ing_khv_05_2", name: "Taze Yumurta (2 Adet)", portionGrams: 110, unit: "g", unitCost: 65, portionCost: 7.15, wastagePercent: 5 },
+      { id: "ing_khv_05_3", name: "Tereya\u011F\u0131", portionGrams: 10, unit: "g", unitCost: 320, portionCost: 3.2, wastagePercent: 0 },
+      { id: "ing_khv_05_4", name: "Kekik & Pul Biber", portionGrams: 3, unit: "g", unitCost: 90, portionCost: 0.27, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_06",
+    recipeCode: "REC-KHV-006",
+    code: "REC-KHV-006",
+    name: "Peynirli Tepsi Su B\xF6re\u011Fi & Kahvalt\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 220,
+    servingsCount: 1,
+    portionCost: 26,
+    laborCostPerPortion: 4.5,
+    gasEnergyCostPerPortion: 3,
+    overheadCostPerPortion: 1.2,
+    laborAndOverheadPerPortion: 8.7,
+    totalCostPerPortion: 34.7,
+    suggestedSalePrice: 65,
+    cookingTimeMinutes: 45,
+    prepTimeMinutes: 20,
+    caloriePerPortion: 480,
+    proteinGrams: 16,
+    carbGrams: 46,
+    fatGrams: 24.5,
+    allergens: ["Gluten (Yufka)", "Laktoz (Beyaz Peynir, Tereya\u011F\u0131)", "Yumurta"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "Ha\u015Flanan yufkalar so\u011Fuk sudan ge\xE7irilip tereya\u011Flanm\u0131\u015F tepsiye serilir. Orta kata maydanozlu beyaz peynir ve ka\u015Far harc\u0131 yay\u0131l\u0131r. F\u0131r\u0131nda nar gibi k\u0131zarana kadar pi\u015Firilir. Yan\u0131nda siyah zeytin ve \xE7ay ile servis edilir.",
+    ingredients: [
+      { id: "ing_khv_06_1", name: "Su B\xF6re\u011Fi Yufkas\u0131", portionGrams: 100, unit: "g", unitCost: 75, portionCost: 7.5, wastagePercent: 0 },
+      { id: "ing_khv_06_2", name: "Ya\u011Fl\u0131 B\xF6reklik Beyaz Peynir & Lor", portionGrams: 50, unit: "g", unitCost: 160, portionCost: 8, wastagePercent: 0 },
+      { id: "ing_khv_06_3", name: "Tereya\u011F\u0131", portionGrams: 20, unit: "g", unitCost: 320, portionCost: 6.4, wastagePercent: 0 },
+      { id: "ing_khv_06_4", name: "Siyah Zeytin & Maydanoz", portionGrams: 25, unit: "g", unitCost: 120, portionCost: 3, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_07",
+    recipeCode: "REC-KHV-007",
+    code: "REC-KHV-007",
+    name: "K\u0131ymal\u0131 & Patatesli Kol B\xF6re\u011Fi Kahvalt\u0131s\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 230,
+    servingsCount: 1,
+    portionCost: 28.5,
+    laborCostPerPortion: 4,
+    gasEnergyCostPerPortion: 3,
+    overheadCostPerPortion: 1,
+    laborAndOverheadPerPortion: 8,
+    totalCostPerPortion: 36.5,
+    suggestedSalePrice: 65,
+    cookingTimeMinutes: 40,
+    prepTimeMinutes: 20,
+    caloriePerPortion: 510,
+    proteinGrams: 17.5,
+    carbGrams: 49,
+    fatGrams: 26,
+    allergens: ["Gluten", "Yumurta"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "\u0130nce el a\xE7mas\u0131 yufkalar dana k\u0131yma, patates, so\u011Fan ve karabiberli i\xE7 har\xE7 ile sar\u0131l\u0131p rulo yap\u0131l\u0131r. \xDCzerine yumurta sar\u0131s\u0131 ve \xE7\xF6rek otu s\xFCr\xFClerek 180\xB0C f\u0131r\u0131nda k\u0131zart\u0131l\u0131r.",
+    ingredients: [
+      { id: "ing_khv_07_1", name: "B\xF6rek Yufkas\u0131", portionGrams: 90, unit: "g", unitCost: 70, portionCost: 6.3, wastagePercent: 0 },
+      { id: "ing_khv_07_2", name: "Dana K\u0131yma (%20 Ya\u011Fl\u0131)", portionGrams: 40, unit: "g", unitCost: 340, portionCost: 13.6, wastagePercent: 5 },
+      { id: "ing_khv_07_3", name: "Patates & Kuru So\u011Fan", portionGrams: 50, unit: "g", unitCost: 22, portionCost: 1.1, wastagePercent: 10 },
+      { id: "ing_khv_07_4", name: "S\u0131v\u0131 Ya\u011F & Yumurta & \xC7\xF6rek Otu", portionGrams: 15, unit: "g", unitCost: 110, portionCost: 1.65, wastagePercent: 0 },
+      { id: "ing_khv_07_5", name: "Porsiyon Ayran (200ml)", portionGrams: 200, unit: "ml", unitCost: 22, portionCost: 4.4, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_08",
+    recipeCode: "REC-KHV-008",
+    code: "REC-KHV-008",
+    name: "S\u0131cak Ezogelin \xC7orbas\u0131 & Ha\u015Flanm\u0131\u015F Yumurta (Geleneksel Sabah Men\xFCs\xFC)",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 320,
+    servingsCount: 1,
+    portionCost: 16.5,
+    laborCostPerPortion: 2.8,
+    gasEnergyCostPerPortion: 1.8,
+    overheadCostPerPortion: 0.8,
+    laborAndOverheadPerPortion: 5.4,
+    totalCostPerPortion: 21.9,
+    suggestedSalePrice: 45,
+    cookingTimeMinutes: 35,
+    prepTimeMinutes: 15,
+    caloriePerPortion: 310,
+    proteinGrams: 15,
+    carbGrams: 32,
+    fatGrams: 12,
+    allergens: ["Gluten", "Laktoz", "Yumurta"],
+    storageTemp: "+70\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "\xD6zellikle k\u0131\u015F aylar\u0131nda \u015Fantiye ve fabrika \xE7al\u0131\u015Fanlar\u0131 i\xE7in s\u0131cak ezogelin \xE7orbas\u0131, yan\u0131nda ha\u015Flanm\u0131\u015F k\xF6y yumurtas\u0131, \xE7\u0131t\u0131r kruton ekmek ve limon dilimi ile servis edilir.",
+    ingredients: [
+      { id: "ing_khv_08_1", name: "Ezogelin \xC7orbas\u0131 Porsiyonu", portionGrams: 250, unit: "ml", unitCost: 35, portionCost: 8.75, wastagePercent: 0 },
+      { id: "ing_khv_08_2", name: "Taze Ha\u015Flanm\u0131\u015F Yumurta", portionGrams: 55, unit: "g", unitCost: 65, portionCost: 3.58, wastagePercent: 0 },
+      { id: "ing_khv_08_3", name: "Ekmek & Limon", portionGrams: 40, unit: "g", unitCost: 25, portionCost: 1, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_09",
+    recipeCode: "REC-KHV-009",
+    code: "REC-KHV-009",
+    name: "Taze Simit & Ka\u015Far Peyniri & Re\xE7el Kahvalt\u0131s\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 210,
+    servingsCount: 1,
+    portionCost: 21,
+    laborCostPerPortion: 2,
+    gasEnergyCostPerPortion: 0.8,
+    overheadCostPerPortion: 0.8,
+    laborAndOverheadPerPortion: 3.6,
+    totalCostPerPortion: 24.6,
+    suggestedSalePrice: 48,
+    cookingTimeMinutes: 5,
+    prepTimeMinutes: 10,
+    caloriePerPortion: 460,
+    proteinGrams: 16.8,
+    carbGrams: 54,
+    fatGrams: 18.5,
+    allergens: ["Susam", "Gluten", "Laktoz"],
+    storageTemp: "Oda S\u0131cakl\u0131\u011F\u0131 / +4\xB0C",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "F\u0131r\u0131ndan yeni \xE7\u0131km\u0131\u015F s\u0131cak susaml\u0131 ta\u015F f\u0131r\u0131n simidi, yan\u0131nda dilim taze ka\u015Far, \xFC\xE7gen peynir, porsiyon \xE7ilek re\xE7eli ve demli \xE7ay ile h\u0131zl\u0131 ve lezzetli servis.",
+    ingredients: [
+      { id: "ing_khv_09_1", name: "Ta\u015F F\u0131r\u0131n Susaml\u0131 Simit (1 Adet)", portionGrams: 100, unit: "g", unitCost: 80, portionCost: 8, wastagePercent: 0 },
+      { id: "ing_khv_09_2", name: "Taze Ka\u015Far Peyniri", portionGrams: 40, unit: "g", unitCost: 260, portionCost: 10.4, wastagePercent: 0 },
+      { id: "ing_khv_09_3", name: "Porsiyon \xC7ilek Re\xE7eli (20g)", portionGrams: 20, unit: "g", unitCost: 90, portionCost: 1.8, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_10",
+    recipeCode: "REC-KHV-010",
+    code: "REC-KHV-010",
+    name: "Patatesli Omlet & \xC7e\xE7il Peyniri Taba\u011F\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 210,
+    servingsCount: 1,
+    portionCost: 20.5,
+    laborCostPerPortion: 3,
+    gasEnergyCostPerPortion: 2,
+    overheadCostPerPortion: 0.8,
+    laborAndOverheadPerPortion: 5.8,
+    totalCostPerPortion: 26.3,
+    suggestedSalePrice: 50,
+    cookingTimeMinutes: 20,
+    prepTimeMinutes: 10,
+    caloriePerPortion: 360,
+    proteinGrams: 16,
+    carbGrams: 22,
+    fatGrams: 22,
+    allergens: ["Yumurta", "Laktoz"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "K\xFCp patatesler az ya\u011Fda kavrulup \xE7\u0131rp\u0131lm\u0131\u015F yumurtayla bulu\u015Fturulur. Yan\u0131nda Erzurum \xE7e\xE7il peyniri ve ye\u015Fil zeytin ile doyurucu tabldot sunumu.",
+    ingredients: [
+      { id: "ing_khv_10_1", name: "Taze Yumurta", portionGrams: 100, unit: "g", unitCost: 65, portionCost: 6.5, wastagePercent: 5 },
+      { id: "ing_khv_10_2", name: "Patates", portionGrams: 60, unit: "g", unitCost: 22, portionCost: 1.32, wastagePercent: 10 },
+      { id: "ing_khv_10_3", name: "Erzurum \xC7e\xE7il Peyniri", portionGrams: 35, unit: "g", unitCost: 240, portionCost: 8.4, wastagePercent: 0 },
+      { id: "ing_khv_10_4", name: "Ye\u015Fil Zeytin & Ya\u011F", portionGrams: 20, unit: "g", unitCost: 150, portionCost: 3, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_11",
+    recipeCode: "REC-KHV-011",
+    code: "REC-KHV-011",
+    name: "Ka\u015Farl\u0131 & Sucuklu Tost & Zeytin-Domates",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 200,
+    servingsCount: 1,
+    portionCost: 27,
+    laborCostPerPortion: 2.8,
+    gasEnergyCostPerPortion: 2.2,
+    overheadCostPerPortion: 0.9,
+    laborAndOverheadPerPortion: 5.9,
+    totalCostPerPortion: 32.9,
+    suggestedSalePrice: 60,
+    cookingTimeMinutes: 10,
+    prepTimeMinutes: 8,
+    caloriePerPortion: 470,
+    proteinGrams: 19.5,
+    carbGrams: 42,
+    fatGrams: 25,
+    allergens: ["Gluten", "Laktoz", "Susam"],
+    storageTemp: "+68\xB0C (S\u0131cak)",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "Tost ekme\u011Fine bol ka\u015Far ve kasap sucuk yerle\u015Ftirilerek end\xFCstriyel tost makinesinde tereya\u011Flanarak bas\u0131l\u0131r. Yan\u0131na siyah zeytin ve \xE7eri domates eklenir.",
+    ingredients: [
+      { id: "ing_khv_11_1", name: "B\xFCy\xFCk Tost Ekme\u011Fi (2 Dilim)", portionGrams: 75, unit: "g", unitCost: 55, portionCost: 4.12, wastagePercent: 0 },
+      { id: "ing_khv_11_2", name: "Ka\u015Far Peyniri", portionGrams: 45, unit: "g", unitCost: 260, portionCost: 11.7, wastagePercent: 0 },
+      { id: "ing_khv_11_3", name: "Dana Sucuk", portionGrams: 25, unit: "g", unitCost: 380, portionCost: 9.5, wastagePercent: 0 },
+      { id: "ing_khv_11_4", name: "Tereya\u011F\u0131 & Zeytin", portionGrams: 15, unit: "g", unitCost: 220, portionCost: 3.3, wastagePercent: 0 }
+    ]
+  },
+  {
+    id: "rec_kahv_12",
+    recipeCode: "REC-KHV-012",
+    code: "REC-KHV-012",
+    name: "Peynirli & Patatesli Po\u011Fa\xE7a / A\xE7ma & Peynir Taba\u011F\u0131",
+    category: "breakfast_ration",
+    categoryLabel: "Kahvalt\u0131 & Kumanya",
+    standardPortionGrams: 210,
+    servingsCount: 1,
+    portionCost: 19.5,
+    laborCostPerPortion: 3,
+    gasEnergyCostPerPortion: 2,
+    overheadCostPerPortion: 0.8,
+    laborAndOverheadPerPortion: 5.8,
+    totalCostPerPortion: 25.3,
+    suggestedSalePrice: 50,
+    cookingTimeMinutes: 25,
+    prepTimeMinutes: 20,
+    caloriePerPortion: 440,
+    proteinGrams: 14,
+    carbGrams: 52,
+    fatGrams: 20,
+    allergens: ["Gluten", "Laktoz", "Yumurta", "Susam"],
+    storageTemp: "Oda S\u0131cakl\u0131\u011F\u0131 / +4\xB0C",
+    isApproved: true,
+    approvedBy: "A\u015F\xE7\u0131ba\u015F\u0131 & G\u0131da M\xFChendisi",
+    cookingInstructions: "F\u0131r\u0131nda taze pi\u015Firilen mayal\u0131 peynirli ve patatesli po\u011Fa\xE7alar, yan\u0131nda \xFC\xE7gen krem peynir, siyah zeytin ve demli \xE7ay ile servis edilir.",
+    ingredients: [
+      { id: "ing_khv_12_1", name: "Taze Mayal\u0131 Po\u011Fa\xE7a (2 Adet)", portionGrams: 120, unit: "g", unitCost: 85, portionCost: 10.2, wastagePercent: 0 },
+      { id: "ing_khv_12_2", name: "\xDC\xE7gen Krem Peynir", portionGrams: 25, unit: "g", unitCost: 220, portionCost: 5.5, wastagePercent: 0 },
+      { id: "ing_khv_12_3", name: "Siyah Zeytin & \xC7ay", portionGrams: 30, unit: "g", unitCost: 120, portionCost: 3.6, wastagePercent: 0 }
+    ]
+  }
+];
+
+// src/data/foodFactoryRecipes.ts
+var initialFoodRecipes = [
+  ...breakfastRecipes,
+  ...soupRecipes,
+  ...meatRecipes,
+  ...vegRecipes,
+  ...sideRecipes,
+  ...saladRecipes,
+  ...dessertRecipes,
+  ...beverageRecipes
+];
+
+// src/data/oneMonthFoodMenuData.ts
+var ONE_MONTH_SCHEDULE_RAW = [
+  // ---------------- HAFTA 1 (1 - 7. Gün) ----------------
+  {
+    dayIndex: 1,
+    dayName: "Pazartesi",
+    date: "2026-09-01",
+    weekNumber: 1,
+    breakfast: {
+      title: "Geleneksel Tabldot Kahvalt\u0131",
+      mainItem: "Ha\u015Flanm\u0131\u015F K\xF6y Yumurtas\u0131",
+      sideItem: "Ezine Beyaz Peynir & Gemlik Zeytin",
+      extraItem: "Bal & Tereya\u011F\u0131 Porsiyon",
+      beverageItem: "Demli \xC7ay & Taze Ekmek",
+      calorie: 420,
+      cost: 26.5,
+      price: 55,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Klasik Tas Kebab\u0131 & Pilav Men\xFCs\xFC",
+      soup: "S\xFCzme K\u0131rm\u0131z\u0131 Mercimek \xC7orbas\u0131",
+      main: "Dana Tas Kebab\u0131 & Patates P\xFCresi",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Cevizli \u0130rmik Revanisi",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su 200ml"],
+      calorie: 1210,
+      cost: 138,
+      price: 275,
+      allergens: ["Gluten", "Laktoz", "Ceviz"]
+    },
+    dinner: {
+      title: "F\u0131r\u0131n Tavuk & Sebzeli Bulgur",
+      soup: "Kremal\u0131 Domates \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Sebzeli Tavuk But",
+      side: "Sebzeli Arpa \u015Eehriyeli Bulgur Pilav\u0131",
+      dessertOrSalad: "Akdeniz Mevsim Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 980,
+      cost: 92,
+      price: 210,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 2,
+    dayName: "Sal\u0131",
+    date: "2026-09-02",
+    weekNumber: 1,
+    breakfast: {
+      title: "K\xF6y Menemeni & \xC7e\xE7il Peynirli Kahvalt\u0131",
+      mainItem: "Tereya\u011Fl\u0131 Taze Menemen",
+      sideItem: "Erzurum \xC7e\xE7il Peyniri & Ye\u015Fil Zeytin",
+      extraItem: "Vi\u015Fne Re\xE7eli (Porsiyon)",
+      beverageItem: "Demleme \xC7ay & Somun Ekmek",
+      calorie: 450,
+      cost: 28,
+      price: 60,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Geleneksel Kuru Fasulye G\xFCn\xFC",
+      soup: "Yayla \xC7orbas\u0131 (Naneli)",
+      main: "Etli \u0130spir Kuru Fasulye",
+      side: "Tereya\u011Fl\u0131 \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "\xC7ubuk Tur\u015Fusu & Yay\u0131k Cac\u0131k",
+      extras: ["Somun Ekmek", "Ac\u0131 Biber Tur\u015Fusu"],
+      calorie: 1140,
+      cost: 104,
+      price: 230,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Kad\u0131nbudu K\xF6fte & F\u0131r\u0131n Makarna",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "Kad\u0131nbudu K\xF6fte (Patates Garnit\xFCrl\xFC)",
+      side: "F\u0131r\u0131nda Be\u015Famel Soslu Makarna",
+      dessertOrSalad: "Havu\xE7 Tarator & Yo\u011Furt",
+      extras: ["Somun Ekmek", "Meyve Suyu 200ml"],
+      calorie: 1050,
+      cost: 108,
+      price: 240,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 3,
+    dayName: "\xC7ar\u015Famba",
+    date: "2026-09-03",
+    weekNumber: 1,
+    breakfast: {
+      title: "F\u0131r\u0131nda Ka\u015Farl\u0131 Omlet Kahvalt\u0131s\u0131",
+      mainItem: "F\u0131r\u0131nda Ka\u015Farl\u0131 Tepsi Omlet",
+      sideItem: "Taze Ka\u015Far & Siyah Zeytin",
+      extraItem: "Domates & Salatal\u0131k S\xF6\u011F\xFC\u015F",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 430,
+      cost: 27.5,
+      price: 58,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "H\xFCnkar Be\u011Fendi & Komposto",
+      soup: "D\xFC\u011F\xFCn \xC7orbas\u0131 (Terbiyeli)",
+      main: "K\xF6z Patl\u0131canl\u0131 H\xFCnkar Be\u011Fendi (Dana Ku\u015Fba\u015F\u0131)",
+      side: "Domatesli Bulgur Pilav\u0131",
+      dessertOrSalad: "Kuru Kay\u0131s\u0131 & \xDCz\xFCm Kompostosu",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1240,
+      cost: 145,
+      price: 290,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Tavuk \u015Einitzel & P\xFCre",
+      soup: "Tel \u015Eehriye \xC7orbas\u0131",
+      main: "\xC7\u0131t\u0131r Tavuk \u015Einitzel & Taze Patates P\xFCresi",
+      side: "Kelebek Makarna (Napoliten Soslu)",
+      dessertOrSalad: "Gavurda\u011F\u0131 Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 960,
+      cost: 88,
+      price: 200,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 4,
+    dayName: "Per\u015Fembe",
+    date: "2026-09-04",
+    weekNumber: 1,
+    breakfast: {
+      title: "Taze Ta\u015F F\u0131r\u0131n Simit & Peynir Keyfi",
+      mainItem: "Susaml\u0131 Ta\u015F F\u0131r\u0131n Simidi (1 Adet)",
+      sideItem: "Krem Peynir & Klasik Beyaz Peynir",
+      extraItem: "\xC7ilek Re\xE7eli & Siyah Zeytin",
+      beverageItem: "Taze Demleme \xC7ay",
+      calorie: 460,
+      cost: 24,
+      price: 50,
+      allergens: ["Gluten", "Susam", "Laktoz"]
+    },
+    lunch: {
+      title: "\u0130zmir K\xF6fte & Kemalpa\u015Fa Tatl\u0131s\u0131",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Soslu \u0130zmir K\xF6fte (Patatesli)",
+      side: "Arpa \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "F\u0131nd\u0131kl\u0131 Kemalpa\u015Fa Tatl\u0131s\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1180,
+      cost: 116,
+      price: 245,
+      allergens: ["Gluten", "Laktoz", "F\u0131nd\u0131k"]
+    },
+    dinner: {
+      title: "Etli Taze Fasulye & Yo\u011Furt",
+      soup: "Tarhana \xC7orbas\u0131",
+      main: "Dana Etli Taze Fasulye Yeme\u011Fi",
+      side: "Tereya\u011Fl\u0131 Bulgur Pilav\u0131",
+      dessertOrSalad: "Kaymakl\u0131 Yo\u011Furt & Mor Lahana Salatas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 890,
+      cost: 82,
+      price: 195,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 5,
+    dayName: "Cuma",
+    date: "2026-09-05",
+    weekNumber: 1,
+    breakfast: {
+      title: "Cuma \xD6zel Peynirli Tepsi Su B\xF6re\u011Fi",
+      mainItem: "K\xF6y Peynirli Tepsi Su B\xF6re\u011Fi (Dilim)",
+      sideItem: "Sele Siyah Zeytin & Salk\u0131m Domates",
+      extraItem: "Tahin & Pekmez Porsiyon",
+      beverageItem: "Demleme \xC7ay",
+      calorie: 520,
+      cost: 32,
+      price: 65,
+      allergens: ["Gluten", "Laktoz", "Yumurta", "Susam"]
+    },
+    lunch: {
+      title: "Cuma \xD6zel \u0130skender Kebap Tabldot",
+      soup: "Tavuk Suyu \u015Eehriye \xC7orbas\u0131",
+      main: "Pideli Dana D\xF6ner \u0130skender Kebap (Tereya\u011Fl\u0131)",
+      side: "Tava Yo\u011Furdu & K\xF6z Biber-Domates",
+      dessertOrSalad: "F\u0131r\u0131n S\xFCtla\xE7 (Tar\xE7\u0131nl\u0131)",
+      extras: ["T\u0131rnak Pide", "Kapal\u0131 Su 200ml"],
+      calorie: 1320,
+      cost: 155,
+      price: 310,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Sebzeli Tavuk Sote & Pilav",
+      soup: "K\u0131rm\u0131z\u0131 Mercimek \xC7orbas\u0131",
+      main: "Renkli Biberli Tavuk Sote",
+      side: "M\u0131s\u0131rl\u0131 Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Mevsim \xC7oban Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 940,
+      cost: 84,
+      price: 190,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 6,
+    dayName: "Cumartesi",
+    date: "2026-09-06",
+    weekNumber: 1,
+    breakfast: {
+      title: "Sucuklu Yumurta & \u015Eantiye Hafta Sonu",
+      mainItem: "Dana Kangal Sucuklu Yumurta",
+      sideItem: "Ka\u015Far Peyniri & \xC7izik Ye\u015Fil Zeytin",
+      extraItem: "Bal & Tereya\u011F\u0131",
+      beverageItem: "Demli \xC7ay & Taze Ekmek",
+      calorie: 490,
+      cost: 36,
+      price: 75,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Orman Kebab\u0131 & Bulgur Pilav\u0131",
+      soup: "Un \xC7orbas\u0131 (Kavrulmu\u015F)",
+      main: "Bezelyeli Havu\xE7lu Dana Orman Kebab\u0131",
+      side: "Meyhane Usul\xFC Domatesli Bulgur",
+      dessertOrSalad: "Karpuz / Kavun Dilimleri (Mevsim Meyvesi)",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1100,
+      cost: 122,
+      price: 250,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "K\u0131ymal\u0131 Karnabahar & Makarna",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda K\u0131ymal\u0131 Karnabahar Graten",
+      side: "Sal\xE7al\u0131 Burgu Makarna",
+      dessertOrSalad: "Sar\u0131msakl\u0131 Yo\u011Furt & Roka Salatas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 910,
+      cost: 78,
+      price: 185,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 7,
+    dayName: "Pazar",
+    date: "2026-09-07",
+    weekNumber: 1,
+    breakfast: {
+      title: "Pazar Kahvalt\u0131 \u015E\xF6leni (Po\u011Fa\xE7a & Yumurta)",
+      mainItem: "F\u0131r\u0131ndan S\u0131cak Dereotlu Peynirli Po\u011Fa\xE7a",
+      sideItem: "Ha\u015Flanm\u0131\u015F Yumurta & Beyaz Peynir",
+      extraItem: "Domates, Salatal\u0131k, Siyah Zeytin",
+      beverageItem: "Demli \xC7ay",
+      calorie: 470,
+      cost: 26,
+      price: 55,
+      allergens: ["Gluten", "Yumurta", "Laktoz"]
+    },
+    lunch: {
+      title: "Pazar \xD6zel \xC7oban Kavurma & Revani",
+      soup: "Kelle Pa\xE7a / Ezogelin \xC7orbas\u0131",
+      main: "Sacda Tereya\u011Fl\u0131 Dana \xC7oban Kavurma",
+      side: "Bademli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Ha\u015Fha\u015Fl\u0131 \u0130rmik Tatl\u0131s\u0131",
+      extras: ["Lava\u015F Ekmek", "\u015Ealgam Suyu / Ayran"],
+      calorie: 1350,
+      cost: 152,
+      price: 310,
+      allergens: ["Gluten", "Laktoz", "Badem"]
+    },
+    dinner: {
+      title: "Hafif Pazar Ak\u015Fam\u0131: Tavuk But & Salata",
+      soup: "\u015Eehriye \xC7orbas\u0131",
+      main: "Ha\u015Flama Sebzeli Tavuk But (Patatesli-Havu\xE7lu)",
+      side: "Sade Tel \u015Eehriyeli Bulgur Pilav\u0131",
+      dessertOrSalad: "Mevsim G\xF6bek Salata & Limon",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 880,
+      cost: 76,
+      price: 180,
+      allergens: ["Gluten"]
+    }
+  },
+  // ---------------- HAFTA 2 (8 - 14. Gün) ----------------
+  {
+    dayIndex: 8,
+    dayName: "Pazartesi",
+    date: "2026-09-08",
+    weekNumber: 2,
+    breakfast: {
+      title: "Pazartesi Enerji Kahvalt\u0131s\u0131",
+      mainItem: "Ha\u015Flanm\u0131\u015F Yumurta (Kay\u0131s\u0131)",
+      sideItem: "Ka\u015Far Peyniri & Gemlik Siyah Zeytin",
+      extraItem: "Pet Bal & Tereya\u011F\u0131",
+      beverageItem: "Demli \xC7ay & Taze Ekmek",
+      calorie: 410,
+      cost: 25.5,
+      price: 55,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Etli Nohut Yeme\u011Fi & Tur\u015Fu G\xFCn\xFC",
+      soup: "Mercimek \xC7orbas\u0131",
+      main: "Dana Etli Ko\xE7ba\u015F\u0131 Nohut Yeme\u011Fi",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Kar\u0131\u015F\u0131k Tur\u015Fu & Taze Cac\u0131k",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1190,
+      cost: 110,
+      price: 235,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "F\u0131r\u0131n Sebzeli K\xF6fte & P\xFCre",
+      soup: "Kremal\u0131 Mantar \xC7orbas\u0131",
+      main: "Tepside Sebzeli F\u0131r\u0131n K\xF6fte",
+      side: "Kremams\u0131 Patates P\xFCresi",
+      dessertOrSalad: "Mevsim Ye\u015Fil Salata",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 990,
+      cost: 105,
+      price: 230,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 9,
+    dayName: "Sal\u0131",
+    date: "2026-09-09",
+    weekNumber: 2,
+    breakfast: {
+      title: "Biberli & Domatesli Menemen",
+      mainItem: "Geleneksel \xC7arliston Biberli Menemen",
+      sideItem: "Beyaz Peynir & \xC7izik Zeytin",
+      extraItem: "Ahududu Re\xE7eli",
+      beverageItem: "Demleme \xC7ay & Ekmek",
+      calorie: 440,
+      cost: 27,
+      price: 58,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Karn\u0131yar\u0131k & Cac\u0131k \u015E\xF6leni",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "K\u0131ymal\u0131 Hakiki Bostan Karn\u0131yar\u0131k",
+      side: "Tereya\u011Fl\u0131 Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Naneli Yay\u0131k Cac\u0131k & Salata",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1220,
+      cost: 128,
+      price: 265,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Tavuk K\xFClbast\u0131 & Eri\u015Fte",
+      soup: "Domates \xC7orbas\u0131 (Ka\u015Farl\u0131)",
+      main: "Izgara Terbiyeli Tavuk K\xFClbast\u0131",
+      side: "Cevizli & Tulum Peynirli K\xF6y Eri\u015Ftesi",
+      dessertOrSalad: "Pancar Salatas\u0131 & Yo\u011Furt",
+      extras: ["Somun Ekmek", "Meyve Suyu"],
+      calorie: 980,
+      cost: 96,
+      price: 215,
+      allergens: ["Gluten", "Laktoz", "Ceviz"]
+    }
+  },
+  {
+    dayIndex: 10,
+    dayName: "\xC7ar\u015Famba",
+    date: "2026-09-10",
+    weekNumber: 2,
+    breakfast: {
+      title: "Patatesli Omlet & Peynir Taba\u011F\u0131",
+      mainItem: "K\xFCp Patatesli F\u0131r\u0131n Omlet",
+      sideItem: "Tulum Peyniri & Siyah Zeytin",
+      extraItem: "Salatal\u0131k & \xC7eri Domates",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 430,
+      cost: 26.5,
+      price: 55,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Dalyan K\xF6fte & \u015Eekerpare",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "Garnit\xFCrl\xFC F\u0131r\u0131n Dalyan K\xF6fte (Yumurtal\u0131-Havu\xE7lu)",
+      side: "Sebzeli Bulgur Pilav\u0131",
+      dessertOrSalad: "F\u0131nd\u0131kl\u0131 \u015Eekerpare Tatl\u0131s\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1200,
+      cost: 124,
+      price: 260,
+      allergens: ["Gluten", "Laktoz", "Yumurta", "F\u0131nd\u0131k"]
+    },
+    dinner: {
+      title: "Etli Bezelye & Makarna",
+      soup: "Tarhana \xC7orbas\u0131",
+      main: "Havu\xE7lu Patatesli Dana Etli Bezelye",
+      side: "K\u0131ymal\u0131 / Domates Soslu Kalem Makarna",
+      dessertOrSalad: "S\xFCzme Yo\u011Furt & Kar\u0131\u015F\u0131k Tur\u015Fu",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 920,
+      cost: 86,
+      price: 195,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 11,
+    dayName: "Per\u015Fembe",
+    date: "2026-09-11",
+    weekNumber: 2,
+    breakfast: {
+      title: "Ka\u015Farl\u0131 Tost & \xC7ift Peynir",
+      mainItem: "End\xFCstriyel Ka\u015Farl\u0131 & Tereya\u011Fl\u0131 Tost",
+      sideItem: "\xDC\xE7gen Peynir & Siyah Zeytin",
+      extraItem: "Domates Dilimleri",
+      beverageItem: "Taze Demleme \xC7ay",
+      calorie: 460,
+      cost: 26,
+      price: 55,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    lunch: {
+      title: "Tavuk D\xF6ner & Ayran G\xFCn\xFC",
+      soup: "Tavuk Suyu \u015Eehriye \xC7orbas\u0131",
+      main: "Yaprak Tavuk D\xF6ner (\xD6zel Soslu & Biberli)",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "\xC7\u0131t\u0131r \xC7oban Salatas\u0131 & Lava\u015F",
+      extras: ["B\xFCy\xFCk Bardak Ayran 300ml", "Lava\u015F"],
+      calorie: 1150,
+      cost: 96,
+      price: 220,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Dana G\xFCve\xE7 & \u015Eehriyeli Pilav",
+      soup: "Mercimek \xC7orbas\u0131",
+      main: "Toprak G\xFCve\xE7te Arpac\u0131k So\u011Fanl\u0131 Dana Eti",
+      side: "Tel \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Mevsim Meyvesi (Elma / Mandalina)",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1040,
+      cost: 130,
+      price: 270,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 12,
+    dayName: "Cuma",
+    date: "2026-09-12",
+    weekNumber: 2,
+    breakfast: {
+      title: "K\u0131ymal\u0131 Kol B\xF6re\u011Fi & Ayran",
+      mainItem: "\xC7\u0131t\u0131r K\u0131ymal\u0131 & Patatesli Kol B\xF6re\u011Fi",
+      sideItem: "Siyah Zeytin & Domates",
+      extraItem: "Porsiyon Tahin & Pekmez",
+      beverageItem: "Demli \xC7ay & Ayran",
+      calorie: 510,
+      cost: 34,
+      price: 70,
+      allergens: ["Gluten", "Yumurta", "Susam"]
+    },
+    lunch: {
+      title: "Cuma \xD6zel Kuzu Gerdan / Ha\u015Flama",
+      soup: "S\xFCzme Mercimek \xC7orbas\u0131",
+      main: "Terbiyeli Sebzeli Et Ha\u015Flama (Kerevizli-Havu\xE7lu)",
+      side: "Sade \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Cevizli Tel Kaday\u0131f Tatl\u0131s\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1310,
+      cost: 158,
+      price: 320,
+      allergens: ["Gluten", "Laktoz", "Ceviz", "Kereviz"]
+    },
+    dinner: {
+      title: "Tavuk Pirzola & F\u0131r\u0131n Patates",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "Kekikli F\u0131r\u0131n Tavuk Pirzola",
+      side: "F\u0131r\u0131nda Baharatl\u0131 Elma Dilim Patates",
+      dessertOrSalad: "Gavurda\u011F\u0131 Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 960,
+      cost: 88,
+      price: 200,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 13,
+    dayName: "Cumartesi",
+    date: "2026-09-13",
+    weekNumber: 2,
+    breakfast: {
+      title: "Hafta Sonu Menemeni & Ka\u015Far",
+      mainItem: "Bol Domatesli K\xF6y Menemeni",
+      sideItem: "Taze Ka\u015Far & Ye\u015Fil K\u0131rma Zeytin",
+      extraItem: "Vi\u015Fne Re\xE7eli",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 440,
+      cost: 27.5,
+      price: 58,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "K\u0131ymal\u0131 Biber Dolmas\u0131 & Yo\u011Furt",
+      soup: "Domates \xC7orbas\u0131 (Krutonlu)",
+      main: "Zeytinya\u011Fl\u0131 & K\u0131ymal\u0131 Biber Dolmas\u0131",
+      side: "Soslu Fiyonk Makarna",
+      dessertOrSalad: "Tava Yo\u011Furdu & Salata",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1080,
+      cost: 98,
+      price: 220,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Kuru K\xF6fte & Patates K\u0131zartmas\u0131",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "Kasap Usul\xFC Izgara Kuru K\xF6fte",
+      side: "K\u0131zarm\u0131\u015F Patates & Biber",
+      dessertOrSalad: "Piyaz (Tahinli & Yumurtal\u0131)",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 1020,
+      cost: 115,
+      price: 250,
+      allergens: ["Gluten", "Yumurta", "Susam", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 14,
+    dayName: "Pazar",
+    date: "2026-09-14",
+    weekNumber: 2,
+    breakfast: {
+      title: "Pazar Ha\u015Flanm\u0131\u015F Yumurta & B\xF6rek",
+      mainItem: "Ha\u015Flanm\u0131\u015F Yumurta & Dilim Su B\xF6re\u011Fi",
+      sideItem: "Beyaz Peynir & Siyah Zeytin",
+      extraItem: "Bal & Tereya\u011F\u0131",
+      beverageItem: "Demli \xC7ay",
+      calorie: 480,
+      cost: 30,
+      price: 65,
+      allergens: ["Gluten", "Yumurta", "Laktoz"]
+    },
+    lunch: {
+      title: "Pazar Kuzu Tand\u0131r & \u0130\xE7 Pilav",
+      soup: "D\xFC\u011F\xFCn \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Nar Gibi Kuzu Tand\u0131r Eti",
+      side: "Ku\u015F\xFCz\xFCml\xFC & F\u0131st\u0131kl\u0131 \u0130\xE7 Pilav",
+      dessertOrSalad: "Karamelli Trile\xE7e Tatl\u0131s\u0131",
+      extras: ["T\u0131rnak Pide", "Kapal\u0131 Ayran"],
+      calorie: 1380,
+      cost: 165,
+      price: 340,
+      allergens: ["Gluten", "Laktoz", "F\u0131st\u0131k"]
+    },
+    dinner: {
+      title: "Tavuk \u015Einitzel & Mevsim Salata",
+      soup: "Tel \u015Eehriye \xC7orbas\u0131",
+      main: "F\u0131r\u0131n \u015Einitzel (\xD6zel Baharatl\u0131)",
+      side: "Tereya\u011Fl\u0131 Kuskus Pilav\u0131",
+      dessertOrSalad: "Havu\xE7 & Mor Lahana Salatas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 890,
+      cost: 82,
+      price: 190,
+      allergens: ["Gluten", "Yumurta"]
+    }
+  },
+  // ---------------- HAFTA 3 (15 - 21. Gün) ----------------
+  {
+    dayIndex: 15,
+    dayName: "Pazartesi",
+    date: "2026-09-15",
+    weekNumber: 3,
+    breakfast: {
+      title: "Hafta Ba\u015F\u0131 Klasik Kahvalt\u0131",
+      mainItem: "Ha\u015Flanm\u0131\u015F Yumurta & Ka\u015Far",
+      sideItem: "Tam Ya\u011Fl\u0131 Beyaz Peynir & Zeytin",
+      extraItem: "Vi\u015Fne Re\xE7eli Porsiyon",
+      beverageItem: "Demli \xC7ay & Taze Ekmek",
+      calorie: 410,
+      cost: 25,
+      price: 55,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Rosto K\xF6fte & P\xFCre \u015E\xF6leni",
+      soup: "S\xFCzme Mercimek \xC7orbas\u0131",
+      main: "Sal\xE7al\u0131 F\u0131r\u0131n Dana Rosto K\xF6fte",
+      side: "Tereya\u011Fl\u0131 Patates P\xFCresi",
+      dessertOrSalad: "F\u0131r\u0131n S\xFCtla\xE7",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1210,
+      cost: 126,
+      price: 265,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    },
+    dinner: {
+      title: "Tavuk Fajita / Sote & Bulgur",
+      soup: "Kremal\u0131 Domates \xC7orbas\u0131",
+      main: "Renkli Biberli Tavuk Sote (Kekikli)",
+      side: "Meyhane Bulgur Pilav\u0131",
+      dessertOrSalad: "Taze Cac\u0131k & Roka",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 950,
+      cost: 86,
+      price: 195,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 16,
+    dayName: "Sal\u0131",
+    date: "2026-09-16",
+    weekNumber: 3,
+    breakfast: {
+      title: "Ka\u015Farl\u0131 Omlet & Kahvalt\u0131 Taba\u011F\u0131",
+      mainItem: "F\u0131r\u0131nda Ka\u015Farl\u0131 Omlet",
+      sideItem: "\xC7e\xE7il Peyniri & Ye\u015Fil Zeytin",
+      extraItem: "Domates & Salatal\u0131k Dilimleri",
+      beverageItem: "Demleme \xC7ay",
+      calorie: 430,
+      cost: 27,
+      price: 58,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Etli \u0130spir Kuru Fasulye G\xFCn\xFC",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "Etli G\xFCve\xE7 Kuru Fasulye",
+      side: "Tereya\u011Fl\u0131 \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Korni\u015Fon Tur\u015Fu & Ayran",
+      extras: ["Somun Ekmek", "Ac\u0131 Biber"],
+      calorie: 1160,
+      cost: 106,
+      price: 235,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "K\u0131ymal\u0131 Musakka & Makarna",
+      soup: "Tarhana \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Patl\u0131can Musakka (Dana K\u0131yma)",
+      side: "Fiyonk Makarna (Domates Soslu)",
+      dessertOrSalad: "Sar\u0131msakl\u0131 Yo\u011Furt & Akdeniz Salatas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 980,
+      cost: 94,
+      price: 210,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 17,
+    dayName: "\xC7ar\u015Famba",
+    date: "2026-09-17",
+    weekNumber: 3,
+    breakfast: {
+      title: "Simit & \xDC\xE7gen Peynir & Re\xE7el",
+      mainItem: "Ta\u015F F\u0131r\u0131n Susaml\u0131 Simit",
+      sideItem: "\xDC\xE7gen Krem Peynir & Ka\u015Far",
+      extraItem: "\xC7ilek Re\xE7eli & Siyah Zeytin",
+      beverageItem: "Demli \xC7ay",
+      calorie: 460,
+      cost: 24.5,
+      price: 52,
+      allergens: ["Gluten", "Susam", "Laktoz"]
+    },
+    lunch: {
+      title: "Tavuk But F\u0131r\u0131n & \u0130rmik Helvas\u0131",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Sebzeli Tavuk But (Patates & Biber)",
+      side: "Arpa \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "F\u0131st\u0131kl\u0131 \u0130rmik Helvas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1190,
+      cost: 98,
+      price: 225,
+      allergens: ["Gluten", "Laktoz", "F\u0131st\u0131k"]
+    },
+    dinner: {
+      title: "K\u0131ymal\u0131 Mercimek K\xF6ftesi & Yo\u011Furt",
+      soup: "\u015Eehriye \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda \u0130zmir K\xF6fte (Patatesli)",
+      side: "Soslu Burgu Makarna",
+      dessertOrSalad: "Mevsim Meyvesi (Portakal / Muz)",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 990,
+      cost: 104,
+      price: 230,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 18,
+    dayName: "Per\u015Fembe",
+    date: "2026-09-18",
+    weekNumber: 3,
+    breakfast: {
+      title: "K\xF6y Menemeni & Beyaz Peynir",
+      mainItem: "Taze Domatesli & Biberli Menemen",
+      sideItem: "Klasik Beyaz Peynir & Siyah Zeytin",
+      extraItem: "Bal & Tereya\u011F\u0131 Porsiyon",
+      beverageItem: "Demleme \xC7ay & Ekmek",
+      calorie: 450,
+      cost: 28,
+      price: 60,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Kazan Dana Tas Kebab\u0131 & Pilav",
+      soup: "K\u0131rm\u0131z\u0131 Mercimek \xC7orbas\u0131",
+      main: "Kazan Tas Kebab\u0131 (Bezelyeli & Havu\xE7lu)",
+      side: "Tereya\u011Fl\u0131 \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Cevizli \u0130rmik Revanisi",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1220,
+      cost: 139,
+      price: 280,
+      allergens: ["Gluten", "Laktoz", "Ceviz"]
+    },
+    dinner: {
+      title: "Etli Taze Fasulye & Bulgur",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "Zeytinya\u011Fl\u0131 & Dana Etli Taze Fasulye",
+      side: "Tel \u015Eehriyeli Bulgur Pilav\u0131",
+      dessertOrSalad: "Tava Yo\u011Furdu & Mor Lahana Salatas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 890,
+      cost: 85,
+      price: 195,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 19,
+    dayName: "Cuma",
+    date: "2026-09-19",
+    weekNumber: 3,
+    breakfast: {
+      title: "Cuma Su B\xF6re\u011Fi & Zeytin",
+      mainItem: "Peynirli Dilim Su B\xF6re\u011Fi",
+      sideItem: "Sele Siyah Zeytin & Ka\u015Far",
+      extraItem: "Domates & Salatal\u0131k S\xF6\u011F\xFC\u015F",
+      beverageItem: "Demli \xC7ay",
+      calorie: 510,
+      cost: 32,
+      price: 65,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    },
+    lunch: {
+      title: "Cuma \xD6zel Adana/Urfa Kebap & Ayran",
+      soup: "Tavuk Suyu \xC7orbas\u0131",
+      main: "Lava\u015F \xDCst\xFC Dana Kebap (K\xF6z Domates & Biber)",
+      side: "Sumakl\u0131 So\u011Fan Salatas\u0131 & Bulgur Pilav\u0131",
+      dessertOrSalad: "K\xFCnefe / \u015Eekerpare Tatl\u0131s\u0131",
+      extras: ["Lava\u015F Ekmek", "B\xFCy\xFCk Ayran 300ml"],
+      calorie: 1340,
+      cost: 148,
+      price: 300,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "F\u0131r\u0131n Tavuk \u015Ei\u015F & Garnit\xFCr",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "Marine Edilmi\u015F F\u0131r\u0131n Tavuk \u015Ei\u015F",
+      side: "Sebzeli Arpa \u015Eehriye Pilav\u0131",
+      dessertOrSalad: "Mevsim Ye\u015Fil Salata",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 960,
+      cost: 90,
+      price: 205,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 20,
+    dayName: "Cumartesi",
+    date: "2026-09-20",
+    weekNumber: 3,
+    breakfast: {
+      title: "Sucuklu Yumurta \u015E\xF6leni",
+      mainItem: "Tavada Kangal Dana Sucuklu Yumurta",
+      sideItem: "Erzurum \xC7e\xE7il Peyniri & Zeytin",
+      extraItem: "Pet Bal & Tereya\u011F\u0131",
+      beverageItem: "Demleme \xC7ay & Ekmek",
+      calorie: 490,
+      cost: 36,
+      price: 75,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Etli T\xFCrl\xFC & Bulgur Pilav\u0131",
+      soup: "Tarhana \xC7orbas\u0131",
+      main: "Toprak Kapta Dana Etli Yaz T\xFCrl\xFCs\xFC",
+      side: "Domatesli Meyhane Bulgur Pilav\u0131",
+      dessertOrSalad: "Taze Karpuz / Kavun Dilimi",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1110,
+      cost: 115,
+      price: 245,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "K\u0131ymal\u0131 Ispanak & Yo\u011Furt",
+      soup: "Mercimek \xC7orbas\u0131",
+      main: "Pirin\xE7li & K\u0131ymal\u0131 Taze Ispanak Yeme\u011Fi",
+      side: "Peynirli Kalem Makarna",
+      dessertOrSalad: "Sar\u0131msakl\u0131 Yo\u011Furt",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 890,
+      cost: 78,
+      price: 185,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 21,
+    dayName: "Pazar",
+    date: "2026-09-21",
+    weekNumber: 3,
+    breakfast: {
+      title: "Pazar Kahvalt\u0131s\u0131 (Mayal\u0131 A\xE7ma & Peynir)",
+      mainItem: "F\u0131r\u0131n A\xE7ma / Po\u011Fa\xE7a (2 Adet)",
+      sideItem: "Beyaz Peynir & Siyah Zeytin",
+      extraItem: "Kay\u0131s\u0131 Re\xE7eli Porsiyon",
+      beverageItem: "Demli \xC7ay",
+      calorie: 470,
+      cost: 25.5,
+      price: 55,
+      allergens: ["Gluten", "Yumurta", "Laktoz", "Susam"]
+    },
+    lunch: {
+      title: "Pazar \xD6zel Et D\xF6ner & Baklava",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "T\u0131rnak Pide \xDCst\xFC Yaprak Et D\xF6ner",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131 & K\xF6z Biber",
+      dessertOrSalad: "Cevizli Ev Baklavas\u0131 (2 Dilim)",
+      extras: ["T\u0131rnak Pide", "Kapal\u0131 Ayran"],
+      calorie: 1390,
+      cost: 168,
+      price: 350,
+      allergens: ["Gluten", "Laktoz", "Ceviz"]
+    },
+    dinner: {
+      title: "Hafif Pazar Ak\u015Fam\u0131: F\u0131r\u0131n Tavuk & Salata",
+      soup: "\u015Eehriye \xC7orbas\u0131",
+      main: "Kekikli & Sal\xE7al\u0131 Tavuk Baget",
+      side: "Sade Bulgur Pilav\u0131",
+      dessertOrSalad: "\xC7oban Salata & Limon",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 870,
+      cost: 76,
+      price: 180,
+      allergens: ["Gluten"]
+    }
+  },
+  // ---------------- HAFTA 4 (22 - 28. Gün) ----------------
+  {
+    dayIndex: 22,
+    dayName: "Pazartesi",
+    date: "2026-09-22",
+    weekNumber: 4,
+    breakfast: {
+      title: "Geleneksel Tabldot Kahvalt\u0131",
+      mainItem: "Ha\u015Flanm\u0131\u015F Yumurta",
+      sideItem: "Tam Ya\u011Fl\u0131 Beyaz Peynir & Zeytin",
+      extraItem: "Pet Bal & Tereya\u011F\u0131",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 410,
+      cost: 25,
+      price: 55,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Hasanpa\u015Fa K\xF6fte & Tel Kaday\u0131f",
+      soup: "S\xFCzme K\u0131rm\u0131z\u0131 Mercimek \xC7orbas\u0131",
+      main: "P\xFCre Dolgulu F\u0131r\u0131n Hasanpa\u015Fa K\xF6fte",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "F\u0131st\u0131kl\u0131 Tel Kaday\u0131f",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1240,
+      cost: 132,
+      price: 275,
+      allergens: ["Gluten", "Laktoz", "Yumurta", "F\u0131st\u0131k"]
+    },
+    dinner: {
+      title: "Tavuk K\xFClbast\u0131 & Sebzeli Bulgur",
+      soup: "Kremal\u0131 Domates \xC7orbas\u0131",
+      main: "Tavuk G\xF6\u011Fs\xFC Izgara K\xFClbast\u0131",
+      side: "Sebzeli Arpa \u015Eehriyeli Bulgur",
+      dessertOrSalad: "Akdeniz Mevsim Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 940,
+      cost: 88,
+      price: 200,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 23,
+    dayName: "Sal\u0131",
+    date: "2026-09-23",
+    weekNumber: 4,
+    breakfast: {
+      title: "K\xF6y Menemeni & Ka\u015Far",
+      mainItem: "Taze Domatesli & K\xF6y Biberli Menemen",
+      sideItem: "Taze Ka\u015Far Peyniri & Ye\u015Fil Zeytin",
+      extraItem: "Vi\u015Fne Re\xE7eli Porsiyon",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 440,
+      cost: 27.5,
+      price: 58,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Etli Kuru Fasulye & Cac\u0131k",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "Dana Etli \u0130spir Kuru Fasulye",
+      side: "Tereya\u011Fl\u0131 Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Naneli Yay\u0131k Cac\u0131k & Tur\u015Fu",
+      extras: ["Somun Ekmek", "Ac\u0131 Biber"],
+      calorie: 1150,
+      cost: 105,
+      price: 230,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Kad\u0131nbudu K\xF6fte & Makarna",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "Kad\u0131nbudu K\xF6fte (Garnit\xFCrl\xFC)",
+      side: "F\u0131r\u0131n Makarna (Ka\u015Farl\u0131)",
+      dessertOrSalad: "Havu\xE7 Tarator",
+      extras: ["Somun Ekmek", "Meyve Suyu"],
+      calorie: 1030,
+      cost: 106,
+      price: 235,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 24,
+    dayName: "\xC7ar\u015Famba",
+    date: "2026-09-24",
+    weekNumber: 4,
+    breakfast: {
+      title: "F\u0131r\u0131nda Ka\u015Farl\u0131 Omlet",
+      mainItem: "Ka\u015Farl\u0131 & Maydanozlu Tepsi Omlet",
+      sideItem: "Erzurum \xC7e\xE7il Peyniri & Siyah Zeytin",
+      extraItem: "Domates & Salatal\u0131k",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 430,
+      cost: 27,
+      price: 58,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "H\xFCnkar Be\u011Fendi & Kemalpa\u015Fa",
+      soup: "D\xFC\u011F\xFCn \xC7orbas\u0131",
+      main: "K\xF6z Patl\u0131canl\u0131 H\xFCnkar Be\u011Fendi (Dana Ku\u015Fba\u015F\u0131)",
+      side: "Arpa \u015Eehriyeli Bulgur Pilav\u0131",
+      dessertOrSalad: "Kemalpa\u015Fa Tatl\u0131s\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1250,
+      cost: 144,
+      price: 290,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Tavuk \u015Einitzel & Patates P\xFCresi",
+      soup: "Tel \u015Eehriye \xC7orbas\u0131",
+      main: "\xC7\u0131t\u0131r Tavuk \u015Einitzel",
+      side: "Kremams\u0131 Patates P\xFCresi",
+      dessertOrSalad: "Gavurda\u011F\u0131 Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 950,
+      cost: 88,
+      price: 200,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 25,
+    dayName: "Per\u015Fembe",
+    date: "2026-09-25",
+    weekNumber: 4,
+    breakfast: {
+      title: "Ta\u015F F\u0131r\u0131n Simit & Beyaz Peynir",
+      mainItem: "Susaml\u0131 Ta\u015F F\u0131r\u0131n Simidi",
+      sideItem: "Ezine Beyaz Peynir & Siyah Zeytin",
+      extraItem: "\xC7ilek Re\xE7eli",
+      beverageItem: "Demli \xC7ay",
+      calorie: 450,
+      cost: 24,
+      price: 50,
+      allergens: ["Gluten", "Susam", "Laktoz"]
+    },
+    lunch: {
+      title: "F\u0131r\u0131n \u0130zmir K\xF6fte & S\xFCtla\xE7",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Soslu \u0130zmir K\xF6fte",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "F\u0131r\u0131n S\xFCtla\xE7",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1170,
+      cost: 114,
+      price: 245,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Etli Taze Fasulye & Yo\u011Furt",
+      soup: "Tarhana \xC7orbas\u0131",
+      main: "Dana Etli Taze Fasulye",
+      side: "Tereya\u011Fl\u0131 Bulgur Pilav\u0131",
+      dessertOrSalad: "Tava Yo\u011Furdu & Mor Lahana Salatas\u0131",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 890,
+      cost: 83,
+      price: 195,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 26,
+    dayName: "Cuma",
+    date: "2026-09-26",
+    weekNumber: 4,
+    breakfast: {
+      title: "Cuma Peynirli Su B\xF6re\u011Fi",
+      mainItem: "B\xF6rek\xE7i Usul\xFC Su B\xF6re\u011Fi",
+      sideItem: "Siyah Zeytin & Ka\u015Far",
+      extraItem: "Tahin & Pekmez",
+      beverageItem: "Demli \xC7ay",
+      calorie: 510,
+      cost: 32,
+      price: 65,
+      allergens: ["Gluten", "Laktoz", "Yumurta", "Susam"]
+    },
+    lunch: {
+      title: "Cuma \xD6zel \u0130skender Kebap",
+      soup: "Tavuk Suyu \xC7orbas\u0131",
+      main: "Pideli Dana \u0130skender Kebap (Tereya\u011Fl\u0131 & Yo\u011Furtlu)",
+      side: "K\xF6z Biber & Domates",
+      dessertOrSalad: "Cevizli Revani Tatl\u0131s\u0131",
+      extras: ["T\u0131rnak Pide", "Kapal\u0131 Su 200ml"],
+      calorie: 1310,
+      cost: 154,
+      price: 310,
+      allergens: ["Gluten", "Laktoz", "Ceviz"]
+    },
+    dinner: {
+      title: "Sebzeli Tavuk Sote & Pilav",
+      soup: "K\u0131rm\u0131z\u0131 Mercimek \xC7orbas\u0131",
+      main: "Mantar & Biberli Tavuk Sote",
+      side: "M\u0131s\u0131rl\u0131 Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Mevsim \xC7oban Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 930,
+      cost: 84,
+      price: 190,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 27,
+    dayName: "Cumartesi",
+    date: "2026-09-27",
+    weekNumber: 4,
+    breakfast: {
+      title: "Sucuklu Yumurta & Taze Ekmek",
+      mainItem: "Kangal Sucuklu Yumurta",
+      sideItem: "Ka\u015Far Peyniri & Ye\u015Fil Zeytin",
+      extraItem: "Bal & Tereya\u011F\u0131",
+      beverageItem: "Demli \xC7ay & Ekmek",
+      calorie: 490,
+      cost: 36,
+      price: 75,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Orman Kebab\u0131 & Bulgur Pilav\u0131",
+      soup: "Un \xC7orbas\u0131",
+      main: "Bezelyeli & Havu\xE7lu Dana Orman Kebab\u0131",
+      side: "Meyhane Bulgur Pilav\u0131",
+      dessertOrSalad: "Mevsim Meyvesi (\xDCz\xFCm / Kavun)",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1090,
+      cost: 120,
+      price: 250,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "K\u0131ymal\u0131 Karnabahar Graten",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda K\u0131ymal\u0131 Karnabahar Graten",
+      side: "Domatesli Burgu Makarna",
+      dessertOrSalad: "Sar\u0131msakl\u0131 Yo\u011Furt",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 910,
+      cost: 78,
+      price: 185,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  },
+  {
+    dayIndex: 28,
+    dayName: "Pazar",
+    date: "2026-09-28",
+    weekNumber: 4,
+    breakfast: {
+      title: "Pazar Kahvalt\u0131 \u015E\xF6leni (Po\u011Fa\xE7a & Yumurta)",
+      mainItem: "Peynirli Po\u011Fa\xE7a & Ha\u015Flanm\u0131\u015F Yumurta",
+      sideItem: "Beyaz Peynir & Siyah Zeytin",
+      extraItem: "Domates, Salatal\u0131k",
+      beverageItem: "Demli \xC7ay",
+      calorie: 470,
+      cost: 26,
+      price: 55,
+      allergens: ["Gluten", "Yumurta", "Laktoz"]
+    },
+    lunch: {
+      title: "Pazar \xC7oban Kavurma & Ha\u015Fha\u015Fl\u0131 Tatl\u0131",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "Sacda Tereya\u011Fl\u0131 Dana \xC7oban Kavurma",
+      side: "Bademli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Ha\u015Fha\u015Fl\u0131 \u0130rmik Tatl\u0131s\u0131",
+      extras: ["Lava\u015F", "\u015Ealgam Suyu / Ayran"],
+      calorie: 1340,
+      cost: 150,
+      price: 310,
+      allergens: ["Gluten", "Laktoz", "Badem"]
+    },
+    dinner: {
+      title: "Hafif Pazar Ak\u015Fam\u0131: Tavuk But & Salata",
+      soup: "\u015Eehriye \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Sebzeli Tavuk But",
+      side: "Sade Bulgur Pilav\u0131",
+      dessertOrSalad: "Mevsim G\xF6bek Salata",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 880,
+      cost: 76,
+      price: 180,
+      allergens: ["Gluten"]
+    }
+  },
+  // ---------------- HAFTA 5 (29 - 30. Gün Ay Kapanışı) ----------------
+  {
+    dayIndex: 29,
+    dayName: "Pazartesi",
+    date: "2026-09-29",
+    weekNumber: 5,
+    breakfast: {
+      title: "Ay Kapan\u0131\u015F\u0131 \xD6zel Kahvalt\u0131s\u0131",
+      mainItem: "K\xF6y Menemeni & Ka\u015Far",
+      sideItem: "Ezine Beyaz Peynir & \xC7izik Ye\u015Fil Zeytin",
+      extraItem: "Bal & Tereya\u011F\u0131",
+      beverageItem: "Demli \xC7ay & Taze Ekmek",
+      calorie: 450,
+      cost: 28,
+      price: 60,
+      allergens: ["Yumurta", "Laktoz", "Gluten"]
+    },
+    lunch: {
+      title: "Geleneksel Kuru Fasulye & Pilav G\xFCn\xFC",
+      soup: "S\xFCzme K\u0131rm\u0131z\u0131 Mercimek \xC7orbas\u0131",
+      main: "Etli \u0130spir Kuru Fasulye",
+      side: "Tereya\u011Fl\u0131 \u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Kar\u0131\u015F\u0131k \xC7ubuk Tur\u015Fusu & Yay\u0131k Cac\u0131k",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 1150,
+      cost: 104,
+      price: 230,
+      allergens: ["Gluten", "Laktoz"]
+    },
+    dinner: {
+      title: "Izgara K\xF6fte & Patates P\xFCresi",
+      soup: "Kremal\u0131 Domates \xC7orbas\u0131",
+      main: "Kasap Usul\xFC Izgara K\xF6fte",
+      side: "Patates P\xFCresi & Biber",
+      dessertOrSalad: "Akdeniz Mevsim Salatas\u0131",
+      extras: ["Somun Ekmek", "Ayran 200ml"],
+      calorie: 990,
+      cost: 112,
+      price: 245,
+      allergens: ["Gluten", "Laktoz", "Yumurta"]
+    }
+  },
+  {
+    dayIndex: 30,
+    dayName: "Sal\u0131",
+    date: "2026-09-30",
+    weekNumber: 5,
+    breakfast: {
+      title: "30. G\xFCn Kapan\u0131\u015F Tabldot Kahvalt\u0131s\u0131",
+      mainItem: "Ha\u015Flanm\u0131\u015F Yumurta & Su B\xF6re\u011Fi Dilimi",
+      sideItem: "Tam Ya\u011Fl\u0131 Beyaz Peynir & Siyah Zeytin",
+      extraItem: "Vi\u015Fne Re\xE7eli Porsiyon",
+      beverageItem: "Demleme \xC7ay & Ekmek",
+      calorie: 480,
+      cost: 29.5,
+      price: 65,
+      allergens: ["Gluten", "Yumurta", "Laktoz"]
+    },
+    lunch: {
+      title: "Ay Kapan\u0131\u015F\u0131 \xD6zel Dana Tas Kebab\u0131 & Baklava",
+      soup: "Yayla \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Garnit\xFCrl\xFC Dana Tas Kebab\u0131",
+      side: "\u015Eehriyeli Pirin\xE7 Pilav\u0131",
+      dessertOrSalad: "Antep F\u0131st\u0131kl\u0131 Ev Baklavas\u0131 (2 Dilim)",
+      extras: ["Somun Ekmek", "Kapal\u0131 Ayran"],
+      calorie: 1320,
+      cost: 162,
+      price: 330,
+      allergens: ["Gluten", "Laktoz", "F\u0131st\u0131k"]
+    },
+    dinner: {
+      title: "F\u0131r\u0131n Sebzeli Tavuk Pirzola & \u0130rmik Tatl\u0131s\u0131",
+      soup: "Ezogelin \xC7orbas\u0131",
+      main: "F\u0131r\u0131nda Baharatl\u0131 Tavuk Pirzola",
+      side: "Meyhane Bulgur Pilav\u0131",
+      dessertOrSalad: "Havu\xE7 Tarator & Meyve",
+      extras: ["Somun Ekmek", "Kapal\u0131 Su"],
+      calorie: 960,
+      cost: 90,
+      price: 205,
+      allergens: ["Gluten", "Laktoz"]
+    }
+  }
+];
+function generateOneMonthFoodMenuPlans(targetPortions = 250) {
+  const result = [];
+  ONE_MONTH_SCHEDULE_RAW.forEach((item) => {
+    const padDay = String(item.dayIndex).padStart(2, "0");
+    result.push({
+      id: `mnu_month_d${padDay}_b`,
+      menuCode: `MNU-2026-D${padDay}-K`,
+      date: item.date,
+      dayOfWeek: item.dayName,
+      mealType: "breakfast",
+      menuTier: "standard_4_course",
+      title: `${item.dayIndex}. G\xFCn Kahvalt\u0131: ${item.breakfast.title}`,
+      items: {
+        soupRecipeName: item.breakfast.mainItem,
+        // Sıcak / Yumurta
+        mainRecipeId: "rec_kahv_01",
+        mainRecipeName: item.breakfast.sideItem,
+        // Peynir & Şarküteri
+        sideRecipeName: item.breakfast.extraItem,
+        // Bal / Reçel / Tatlı
+        dessertOrSaladRecipeName: item.breakfast.beverageItem,
+        // İçecek & Ekmek
+        additionalItemNames: ["Taze Demli \xC7ay", "Roll Ekmek (2 Adet)"]
+      },
+      totalCalorie: item.breakfast.calorie,
+      totalCostPerPortion: item.breakfast.cost,
+      sellingPricePerPortion: item.breakfast.price,
+      targetPortionsTotal: targetPortions,
+      totalPlannedPortions: targetPortions,
+      allergensList: item.breakfast.allergens,
+      isLocked: item.dayIndex <= 7,
+      // İlk hafta kilitli
+      notes: `250 ki\u015Filik kahvalt\u0131 paketi. Servis saati: 07:00 - 08:30.`
+    });
+    result.push({
+      id: `mnu_month_d${padDay}_l`,
+      menuCode: `MNU-2026-D${padDay}-O`,
+      date: item.date,
+      dayOfWeek: item.dayName,
+      mealType: "lunch",
+      menuTier: "standard_4_course",
+      title: `${item.dayIndex}. G\xFCn \xD6\u011Fle: ${item.lunch.title}`,
+      items: {
+        soupRecipeName: item.lunch.soup,
+        mainRecipeId: "rec_ana_01",
+        mainRecipeName: item.lunch.main,
+        sideRecipeName: item.lunch.side,
+        dessertOrSaladRecipeName: item.lunch.dessertOrSalad,
+        additionalItemNames: item.lunch.extras
+      },
+      totalCalorie: item.lunch.calorie,
+      totalCostPerPortion: item.lunch.cost,
+      sellingPricePerPortion: item.lunch.price,
+      targetPortionsTotal: targetPortions,
+      totalPlannedPortions: targetPortions,
+      allergensList: item.lunch.allergens,
+      isLocked: item.dayIndex <= 7,
+      notes: `250 ki\u015Filik 4 kap standart tabldot \xF6\u011Fle men\xFCs\xFC. S\u0131cak termobox teslimat saati: 11:30.`
+    });
+    result.push({
+      id: `mnu_month_d${padDay}_d`,
+      menuCode: `MNU-2026-D${padDay}-A`,
+      date: item.date,
+      dayOfWeek: item.dayName,
+      mealType: "dinner",
+      menuTier: "standard_4_course",
+      title: `${item.dayIndex}. G\xFCn Ak\u015Fam: ${item.dinner.title}`,
+      items: {
+        soupRecipeName: item.dinner.soup,
+        mainRecipeId: "rec_ana_02",
+        mainRecipeName: item.dinner.main,
+        sideRecipeName: item.dinner.side,
+        dessertOrSaladRecipeName: item.dinner.dessertOrSalad,
+        additionalItemNames: item.dinner.extras
+      },
+      totalCalorie: item.dinner.calorie,
+      totalCostPerPortion: item.dinner.cost,
+      sellingPricePerPortion: item.dinner.price,
+      targetPortionsTotal: targetPortions,
+      totalPlannedPortions: targetPortions,
+      allergensList: item.dinner.allergens,
+      isLocked: item.dayIndex <= 7,
+      notes: `250 ki\u015Filik doyurucu ak\u015Fam tabldot men\xFCs\xFC. Teslimat saati: 17:30.`
+    });
+  });
+  return result;
+}
+var oneMonthFullMenuPlans = generateOneMonthFoodMenuPlans(250);
+
+// src/data/productionSectorData.ts
+var initialFoodMenus = [
+  ...oneMonthFullMenuPlans
+];
+
+// src/utils/storage.ts
+var STORAGE_KEYS = {
+  SETTINGS: "muavin_company_settings",
+  CONTACTS: "muavin_contacts",
+  ACCOUNTS: "muavin_accounts",
+  INVOICES: "muavin_invoices",
+  TRANSACTIONS: "muavin_transactions",
+  PRODUCTS: "muavin_products",
+  QUOTES: "muavin_quotes",
+  ORDERS: "muavin_orders",
+  WAYBILLS: "muavin_waybills",
+  CHEQUES: "muavin_cheques",
+  PROMISSORY_NOTES: "muavin_promissory_notes",
+  BRANCHES: "muavin_branches",
+  WAREHOUSES: "muavin_warehouses",
+  EMPLOYEES: "muavin_employees",
+  LEAVE_REQUESTS: "muavin_leave_requests",
+  ADVANCE_REQUESTS: "muavin_advance_requests",
+  LEGAL_DEDUCTIONS: "muavin_legal_deductions",
+  COST_PROJECTS: "muavin_cost_projects",
+  ASSET_CUSTODIES: "muavin_asset_custodies",
+  EDOCUMENTS: "muavin_e_documents",
+  BOMS: "muavin_boms",
+  WORKSTATIONS: "muavin_workstations",
+  ROUTINGS: "muavin_routings",
+  WORK_ORDERS: "muavin_work_orders",
+  SUBCONTRACT_ORDERS: "muavin_subcontract_orders",
+  AUTO_SERVICES: "muavin_auto_services",
+  IT_SERVICES: "muavin_it_services",
+  APPLIANCE_SERVICES: "muavin_appliance_services",
+  CONSTRUCTION_PROJECTS: "muavin_construction_projects",
+  SECTORS: "muavin_production_sectors",
+  ACTIVE_SECTOR: "muavin_active_production_sector",
+  FOOD_RECIPES: "muavin_food_recipes",
+  FOOD_MENUS: "muavin_food_menus",
+  FOOD_PRODUCTION_ORDERS: "muavin_food_production_orders",
+  FOOD_DISPATCHES: "muavin_food_dispatches",
+  FOOD_SAMPLES: "muavin_food_samples",
+  FIXED_ASSETS: "muavin_fixed_assets",
+  ASSET_MAINTENANCES: "muavin_asset_maintenances",
+  ASSET_DISPOSALS: "muavin_asset_disposals",
+  PAYROLL_CUSTOMIZATIONS: "muavin_payroll_customizations",
+  COMPANIES_LIST: "muavin_companies_list",
+  ACTIVE_COMPANY_ID: "muavin_active_company_id"
+};
+var DEFAULT_COMPANY = {
+  id: "comp_default",
+  companyName: "MUAV\u0130N B\u0130L\u0130\u015E\u0130M TEKN.DAN.A.\u015E. (TEST)",
+  companyTitle: "MUAV\u0130N B\u0130L\u0130\u015E\u0130M TEKNOLOJ\u0130LER\u0130 VE DANI\u015EMANLIK A.\u015E.",
+  taxOffice: "Mecidiyek\xF6y",
+  taxNumber: "6220542314",
+  vkn: "6220542314",
+  tckn: "",
+  mysoftMatchedType: "vkn",
+  tenantIdentifierNumber: "6220542314",
+  mysoftStatus: "verified",
+  eFaturaPrefix: "GIB",
+  eFaturaNextNumber: "GIB2026000000001",
+  eArsivPrefix: "EAR",
+  eArsivNextNumber: "EAR2026000000001",
+  companyType: "anonim",
+  loginUsername: "muavin_test",
+  loginPasswordPlain: "Muavin2026!",
+  loginEmail: "test@muavin.com",
+  loginFullName: "Muavin Test Y\xF6neticisi",
+  loginRole: "Firma Y\xF6neticisi",
+  isDefault: true,
+  createdAt: "2024-01-01T00:00:00.000Z"
+};
+var PROTECTED_COMPANY_IDS = /* @__PURE__ */ new Set([
+  DEFAULT_COMPANY.id
+]);
+function pruneDayPuantajDetail(day) {
+  if (!day) return { code: "N" };
+  if (typeof day === "string") return { code: day };
+  const pruned = { code: day.code || "N" };
+  if (day.overtimeHours && Number(day.overtimeHours) > 0) {
+    pruned.overtimeHours = Number(day.overtimeHours);
+  }
+  if (day.isHolidayOvertime) {
+    pruned.isHolidayOvertime = true;
+  }
+  if (day.leaveReason && typeof day.leaveReason === "string" && day.leaveReason.trim()) {
+    pruned.leaveReason = day.leaveReason.trim();
+  }
+  if (day.leaveType && typeof day.leaveType === "string" && day.leaveType.trim()) {
+    pruned.leaveType = day.leaveType.trim();
+  }
+  return pruned;
+}
+function pruneAdjustmentForStorage(adj) {
+  if (!adj || typeof adj !== "object") return {};
+  const pruned = {};
+  const scalarKeys = [
+    "month",
+    "salaryType",
+    "baseSalary",
+    "bonusAmount",
+    "allowanceAmount",
+    "unpaidLeaveDays",
+    "advanceDeduction",
+    "icraDeduction",
+    "alimonyDeduction",
+    "otherDeductions",
+    "isRetired",
+    "isCustomized",
+    "notes",
+    "alimonyReason",
+    "otherReason",
+    "deductionReason",
+    "customPaymentsTotal"
+  ];
+  scalarKeys.forEach((k) => {
+    if (adj[k] !== void 0 && adj[k] !== null && adj[k] !== "") {
+      pruned[k] = adj[k];
+    }
+  });
+  if (Array.isArray(adj.customPayments) && adj.customPayments.length > 0) {
+    pruned.customPayments = adj.customPayments;
+  }
+  if (adj.puantajDays && typeof adj.puantajDays === "object") {
+    const prunedDays = {};
+    let hasEntries = false;
+    Object.entries(adj.puantajDays).forEach(([dStr, dayVal]) => {
+      const dNum = Number(dStr);
+      if (!dNum || isNaN(dNum)) return;
+      const dayPruned = pruneDayPuantajDetail(dayVal);
+      prunedDays[dNum] = dayPruned;
+      hasEntries = true;
+    });
+    if (hasEntries) {
+      pruned.puantajDays = prunedDays;
+    }
+  }
+  return pruned;
+}
+function sanitizePayrollCustomizations(data) {
+  if (!data || typeof data !== "object") return {};
+  const cleaned = {};
+  const isMonthKey = (k) => /^\d{4}-\d{2}$/.test(k);
+  const isMonthEmpKey = (k) => /^\d{4}-\d{2}_.+/.test(k);
+  Object.entries(data).forEach(([key, val]) => {
+    if (isMonthKey(key)) {
+      if (val && typeof val === "object" && !Array.isArray(val)) {
+        const monthGroup = {};
+        Object.entries(val).forEach(([subKey, subVal]) => {
+          if (isMonthKey(subKey) || subKey.includes("_")) return;
+          if (subVal && typeof subVal === "object") {
+            monthGroup[subKey] = pruneAdjustmentForStorage(subVal);
+          }
+        });
+        cleaned[key] = monthGroup;
+      }
+    }
+  });
+  Object.entries(data).forEach(([key, val]) => {
+    if (isMonthKey(key)) return;
+    if (isMonthEmpKey(key)) {
+      if (val && typeof val === "object") {
+        cleaned[key] = pruneAdjustmentForStorage(val);
+      }
+    } else if (val && typeof val === "object" && val.isCustomized) {
+      cleaned[key] = pruneAdjustmentForStorage(val);
+    }
+  });
+  return cleaned;
+}
+function compactEDocumentsForStorage(docs, maxCount = 200) {
+  if (!Array.isArray(docs)) return [];
+  return docs.slice(0, maxCount).map((doc) => {
+    if (!doc || typeof doc !== "object") return doc;
+    const { raw, lines, ...rest } = doc;
+    return rest;
+  });
+}
+function cleanupOversizedStorage(aggressive = false) {
+  if (typeof window === "undefined") return;
+  try {
+    const keysToRemove = [];
+    const activeCompId = (() => {
+      try {
+        return window.localStorage?.getItem(STORAGE_KEYS.ACTIVE_COMPANY_ID) || DEFAULT_COMPANY.id;
+      } catch {
+        return DEFAULT_COMPANY.id;
+      }
+    })();
+    const len = window.localStorage?.length || 0;
+    for (let i = 0; i < len; i++) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      if (key.startsWith("muavin_font_") || key.startsWith("muavin_pdf_")) {
+        keysToRemove.push(key);
+      } else if (key.startsWith("muavinn_tradres_") || key.startsWith("muavin_tradres_")) {
+        keysToRemove.push(key);
+      } else if (key === "muavin_cloud_branding" || key === "muavin_cloud_logo_url") {
+        try {
+          const val = window.localStorage.getItem(key);
+          if (val && (val.length > 4e4 || aggressive)) {
+            keysToRemove.push(key);
+          }
+        } catch (_) {
+        }
+      } else if (key.startsWith("muavin_company_settings")) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (raw && raw.length > 4e5) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object" && typeof parsed.logoUrl === "string" && parsed.logoUrl.length > 35e4) {
+              parsed.logoUrl = "/logo.svg";
+              window.localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          }
+        } catch (_) {
+        }
+      } else if (key.startsWith("muavin_e_documents")) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (raw && (raw.length > 15e4 || aggressive)) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const compacted = compactEDocumentsForStorage(parsed, aggressive ? 60 : 180);
+              window.localStorage.setItem(key, JSON.stringify(compacted));
+            } else {
+              keysToRemove.push(key);
+            }
+          }
+        } catch (_) {
+          keysToRemove.push(key);
+        }
+      } else if (key === "muavin_payroll_customizations") {
+        try {
+          const raw = window.localStorage.getItem("muavin_payroll_customizations");
+          if (raw && (raw.length > 6e4 || aggressive)) {
+            const parsed = JSON.parse(raw);
+            const sanitized = sanitizePayrollCustomizations(parsed);
+            window.localStorage.setItem("muavin_payroll_customizations", JSON.stringify(sanitized));
+          }
+        } catch (_) {
+          keysToRemove.push(key);
+        }
+      } else if (aggressive) {
+        if (key.startsWith("muavin_col_widths_") || key.startsWith("muavin_col_vis_") || key.startsWith("muavin_table_row_height") || key.startsWith("tradres_")) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try {
+        window.localStorage.removeItem(k);
+      } catch (_) {
+      }
+    });
+    try {
+      window.sessionStorage?.removeItem("muavin_font_roboto_reg_v2");
+      window.sessionStorage?.removeItem("muavin_font_roboto_bold_v2");
+    } catch (_) {
+    }
+  } catch (e) {
+    console.warn("Storage cleanup error:", e);
+  }
+}
+if (typeof window !== "undefined") {
+  cleanupOversizedStorage();
+}
+var DEMO_ACCOUNT_IDS = new Set(initialAccounts.map((a) => a.id));
+var DEMO_CONTACT_IDS = new Set(initialContacts.map((c) => c.id));
+var DEMO_PRODUCT_IDS = new Set(initialProducts.map((p) => p.id));
+var DEMO_INVOICE_IDS = new Set(initialInvoices.map((i) => i.id));
+var DEMO_TRANSACTION_IDS = new Set(initialTransactions.map((t) => t.id));
+
 // src/services/mysoftInvoicePayload.ts
 function digits(value) {
   return String(value || "").replace(/\D/g, "");
@@ -1770,6 +25427,9 @@ function getMysoftConfig(env = process.env) {
   const tenantIdentifierNumber = normalizeMysoftTenantIdentifier(
     env.MYSOFT_TENANT_IDENTIFIER_NUMBER
   );
+  const hasCredentials = Boolean(clientId && clientSecret || username && password);
+  const rawMock = (env.MYSOFT_MOCK_MODE || "").trim().toLowerCase();
+  const explicitDisableMock = ["0", "false", "no", "off"].includes(rawMock);
   return {
     baseUrl,
     tokenUrl,
@@ -1784,8 +25444,8 @@ function getMysoftConfig(env = process.env) {
     tenantIdentifierNumber,
     connectorGuid: env.MYSOFT_CONNECTOR_GUID?.trim() || void 0,
     timeoutMs: Math.max(1e3, Number(env.MYSOFT_TIMEOUT_MS || 3e4) || 3e4),
-    // Mock is opt-in. Missing credentials alone must never silently write data.
-    mockMode: envBoolean(env.MYSOFT_MOCK_MODE)
+    // Default to simulation/mock mode when no credentials are configured unless explicitly disabled.
+    mockMode: envBoolean(env.MYSOFT_MOCK_MODE) || !hasCredentials && !explicitDisableMock
   };
 }
 function environmentFor(config) {
@@ -1887,6 +25547,8 @@ function resultHasTenantRows(payload) {
 }
 var MysoftEdocumentClient = class {
   constructor(config = getMysoftConfig()) {
+    this.mockOutboxDocs = [];
+    this.mockSeqCounter = 100;
     this.config = config;
   }
   get status() {
@@ -2086,8 +25748,221 @@ var MysoftEdocumentClient = class {
     if (!this.sentTenant(options) || !isMysoftTenantScopeError(error)) return false;
     return !/\/api\/Tenant\//i.test(path6);
   }
-  mockResponse(path6, _options) {
-    const emptyList = path6.toLowerCase().includes("list") ? { data: [], succeed: true, message: "Mysoft mock mode: no remote records", afterValue: 0 } : { data: null, succeed: true, message: "Mysoft mock mode", afterValue: 0 };
+  mockResponse(path6, options) {
+    const lowerPath = path6.toLowerCase();
+    const query = options.query || {};
+    const bodyObj = isObject(options.body) && !Array.isArray(options.body) ? options.body : {};
+    if (lowerPath.includes("/api/tenant/gettenantwithidentifier") || lowerPath.includes("/api/tenant/gettenantinfo")) {
+      const vkn = normalizeMysoftTenantIdentifier(query.identifierNumber ?? query.vknTckn ?? query.tenantIdentifierNumber ?? bodyObj.identifierNumber ?? bodyObj.vknTckn) || this.config.tenantIdentifierNumber || "4840847211";
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: {
+          vknTckn: vkn,
+          identifierNumber: vkn,
+          tenantIdentifierNumber: vkn,
+          accountName: vkn === "37756832708" ? "ABDURRAHMAN \u015E\u0130M\u015EEK" : vkn === "7600924362" ? "SEM\u0130H YAPI OTOMOT\u0130V L\u0130M\u0130TED \u015E\u0130RKET\u0130" : "MERKEZ F\u0130RMA A.\u015E.",
+          title: vkn === "37756832708" ? "ABDURRAHMAN \u015E\u0130M\u015EEK" : vkn === "7600924362" ? "SEM\u0130H YAPI OTOMOT\u0130V L\u0130M\u0130TED \u015E\u0130RKET\u0130" : "MERKEZ F\u0130RMA A.\u015E.",
+          taxOfficeName: "Merkez V.D.",
+          cityName: "\u0130stanbul",
+          townName: "Kad\u0131k\xF6y",
+          pkAlias: `urn:mail:defaultpk@${vkn}.com.tr`,
+          gbAlias: `urn:mail:defaultgb@${vkn}.com.tr`,
+          isEFatura: true,
+          isEArsiv: true
+        }
+      };
+    }
+    if (lowerPath.includes("/api/tenant/gettenant")) {
+      const defaultVkn = this.config.tenantIdentifierNumber || "37756832708";
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: [
+          {
+            vknTckn: defaultVkn,
+            identifierNumber: defaultVkn,
+            tenantIdentifierNumber: defaultVkn,
+            accountName: "ABDURRAHMAN \u015E\u0130M\u015EEK",
+            title: "ABDURRAHMAN \u015E\u0130M\u015EEK",
+            taxOfficeName: "Sel\xE7uk V.D.",
+            cityName: "Konya",
+            townName: "Sel\xE7uklu",
+            pkAlias: "urn:mail:faturapk@ababdurrahmansimsek.com",
+            gbAlias: "urn:mail:faturagb@ababdurrahmansimsek.com"
+          }
+        ]
+      };
+    }
+    if (lowerPath.includes("/api/generalcard/edocumentnumber")) {
+      const year = (/* @__PURE__ */ new Date()).getFullYear();
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: [
+          {
+            id: 1,
+            eDocumentType: "EFATURA",
+            prefix: "GIB",
+            year,
+            lastSequence: this.mockSeqCounter,
+            isDefault: true,
+            numeratorSetCode: "GIB_DEFAULT"
+          },
+          {
+            id: 2,
+            eDocumentType: "EARSIVFATURA",
+            prefix: "EAR",
+            year,
+            lastSequence: this.mockSeqCounter,
+            isDefault: true,
+            numeratorSetCode: "EAR_DEFAULT"
+          }
+        ]
+      };
+    }
+    if (lowerPath.includes("/api/generalcard/edocumentxslt")) {
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: [
+          {
+            id: 1,
+            name: "Genel Tasar\u0131m",
+            xsltName: "Genel Tasar\u0131m",
+            eDocumentType: "EFATURA",
+            isDefault: true
+          },
+          {
+            id: 2,
+            name: "Genel Tasar\u0131m",
+            xsltName: "Genel Tasar\u0131m",
+            eDocumentType: "EARSIVFATURA",
+            isDefault: true
+          }
+        ]
+      };
+    }
+    if (lowerPath.includes("/api/invoiceoutbox/invoiceoutbox") && !lowerPath.includes("draft") && !lowerPath.includes("status") && !lowerPath.includes("list") && !lowerPath.includes("model") && !lowerPath.includes("pdf") && !lowerPath.includes("xml") && !lowerPath.includes("cancel")) {
+      this.mockSeqCounter += 1;
+      const year = (/* @__PURE__ */ new Date()).getFullYear();
+      const isArchive = String(bodyObj.eDocumentType || "").toUpperCase().includes("EARSIV");
+      const rawPrefix = String(bodyObj.prefix || (isArchive ? "EAR" : "GIB")).replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 3).padEnd(3, "X");
+      const existingDocNo = typeof bodyObj.docNo === "string" && /^[A-Z0-9]{3}20\d{2}\d{9}$/i.test(bodyObj.docNo.trim()) ? bodyObj.docNo.trim().toUpperCase() : `${rawPrefix}${year}${String(this.mockSeqCounter).padStart(9, "0")}`;
+      const generatedEttn = typeof bodyObj.ettn === "string" && bodyObj.ettn.trim() || (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `00000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, "0")}`);
+      const acc = isObject(bodyObj.invoiceAccount) ? bodyObj.invoiceAccount : {};
+      const calc = isObject(bodyObj.invoiceCalculation) ? bodyObj.invoiceCalculation : {};
+      const statusText = bodyObj.isDraft ? "Taslak" : "G\u0130B'e G\xF6nderildi";
+      const createdRecord = {
+        ...bodyObj,
+        id: generatedEttn,
+        ettn: generatedEttn,
+        invoiceETTN: generatedEttn,
+        docNo: existingDocNo,
+        docDate: bodyObj.docDate || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+        accountName: acc.accountName || bodyObj.accountName || "Al\u0131c\u0131 Cari",
+        vknTckn: acc.vknTckn || bodyObj.vknTckn || "",
+        taxExclusiveAmount: Number(calc.taxExclusiveAmount ?? calc.lineExtensionAmount ?? 0),
+        taxTotalTra: Number(calc.taxInclusiveAmount ?? 0) - Number(calc.taxExclusiveAmount ?? 0),
+        payableAmount: Number(calc.payableAmount ?? calc.taxInclusiveAmount ?? 0),
+        invoiceStatusText: statusText,
+        createDate: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      this.mockOutboxDocs = [
+        createdRecord,
+        ...this.mockOutboxDocs.filter((d) => d.ettn !== generatedEttn)
+      ];
+      return {
+        succeed: true,
+        message: "Fatura ba\u015Far\u0131yla olu\u015Fturuldu (Sim\xFClasyon Modu)",
+        data: {
+          id: generatedEttn,
+          ettn: generatedEttn,
+          invoiceETTN: generatedEttn,
+          docNo: existingDocNo,
+          invoiceStatusText: statusText
+        }
+      };
+    }
+    if (lowerPath.includes("getinvoiceoutboxdrafthtml") || lowerPath.includes("getinvoiceoutboxdraftpdfaszip")) {
+      const acc = isObject(bodyObj.invoiceAccount) ? bodyObj.invoiceAccount : {};
+      const calc = isObject(bodyObj.invoiceCalculation) ? bodyObj.invoiceCalculation : {};
+      const details = Array.isArray(bodyObj.invoiceDetail) ? bodyObj.invoiceDetail : [];
+      const docNo = String(bodyObj.docNo || "TASLAK");
+      const docDate = String(bodyObj.docDate || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10));
+      const rowsHtml = details.map((item, idx) => {
+        const name = String(item?.productName || item?.description || `Kalem ${idx + 1}`);
+        const qty = Number(item?.qty ?? item?.quantity ?? 1);
+        const price = Number(item?.unitPriceTra ?? item?.unitPrice ?? 0);
+        const lineAmt = Number(item?.amtTra ?? qty * price);
+        const vatAmt = Number(item?.amtVatTra ?? 0);
+        return `<tr><td style="padding:6px;border:1px solid #cbd5e1;">${idx + 1}</td><td style="padding:6px;border:1px solid #cbd5e1;">${name}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${qty}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${price.toFixed(2)}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${vatAmt.toFixed(2)}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${(lineAmt + vatAmt).toFixed(2)}</td></tr>`;
+      }).join("");
+      const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>e-Belge Taslak \xD6nizleme - ${docNo}</title></head><body style="font-family:Arial,sans-serif;padding:24px;color:#0f172a;"><div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e293b;padding-bottom:12px;margin-bottom:16px;"><div><h2 style="margin:0;">${String(bodyObj.eDocumentType || "EFATURA")} TASLAK \xD6N\u0130ZLEME</h2><p style="margin:4px 0 0;font-size:12px;color:#475569;">Senaryo: ${String(bodyObj.profile || "TICARIFATURA")} | Tip: ${String(bodyObj.invoiceType || "SATIS")}</p></div><div style="text-align:right;"><p style="margin:0;font-weight:bold;">Belge No: ${docNo}</p><p style="margin:4px 0 0;font-size:12px;">Tarih: ${docDate}</p></div></div><div style="margin-bottom:16px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;"><strong>SAYIN:</strong> ${String(acc.accountName || "Al\u0131c\u0131")}<br/><span style="font-size:12px;">VKN/TCKN: ${String(acc.vknTckn || "-")} | Vergi Dairesi: ${String(acc.taxOfficeName || "-")}</span><br/><span style="font-size:12px;">Adres: ${String(acc.streetName || "")} ${String(acc.citySubdivisionName || "")} / ${String(acc.cityName || "")}</span></div><table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;"><thead><tr style="background:#f1f5f9;"><th style="padding:6px;border:1px solid #cbd5e1;text-align:left;">#</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:left;">Mal / Hizmet</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">Miktar</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">Birim Fiyat</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">KDV</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">Toplam</th></tr></thead><tbody>${rowsHtml}</tbody></table><div style="text-align:right;font-size:14px;"><p style="margin:4px 0;">Mal/Hizmet Toplam: <strong>${Number(calc.taxExclusiveAmount ?? 0).toFixed(2)} ${String(bodyObj.currencyCode || "TRY")}</strong></p><p style="margin:4px 0;">\xD6denecek Tutar: <strong style="font-size:16px;">${Number(calc.payableAmount ?? 0).toFixed(2)} ${String(bodyObj.currencyCode || "TRY")}</strong></p></div></body></html>`;
+      return {
+        succeed: true,
+        message: "Mysoft mock draft preview",
+        data: html
+      };
+    }
+    if (lowerPath.includes("getinvoiceoutboxwithheaderinfolistforperiod")) {
+      return {
+        data: this.mockOutboxDocs,
+        succeed: true,
+        message: "Mysoft mock mode",
+        afterValue: this.mockOutboxDocs.length
+      };
+    }
+    if (lowerPath.includes("getinvoiceoutboxmodel") || lowerPath.includes("getinvoiceinboxmodel")) {
+      const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
+      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      if (found) {
+        return { succeed: true, message: "Mysoft mock mode", data: found };
+      }
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: {
+          id: ettn,
+          ettn,
+          invoiceETTN: ettn,
+          invoiceStatusText: "Onayland\u0131"
+        }
+      };
+    }
+    if (lowerPath.includes("xmlaszip")) {
+      const ettn = String(query.invoiceETTN || query.despatchETTN || "BELGE");
+      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const docNo = String(found?.docNo || ettn);
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+  <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
+  <cbc:ProfileID>${String(found?.profile || "TICARIFATURA")}</cbc:ProfileID>
+  <cbc:ID>${docNo}</cbc:ID>
+  <cbc:UUID>${ettn}</cbc:UUID>
+  <cbc:IssueDate>${String(found?.docDate || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10))}</cbc:IssueDate>
+  <cbc:InvoiceTypeCode>${String(found?.invoiceType || "SATIS")}</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>${String(found?.currencyCode || "TRY")}</cbc:DocumentCurrencyCode>
+</Invoice>`;
+      return {
+        succeed: true,
+        message: "Mysoft mock xml",
+        data: xml
+      };
+    }
+    if (lowerPath.includes("pdfaszip")) {
+      const ettn = String(query.invoiceETTN || query.despatchETTN || "BELGE");
+      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const docNo = String(found?.docNo || ettn);
+      const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>e-Belge ${docNo}</title></head><body style="font-family:Arial,sans-serif;padding:24px;"><h2>e-Belge G\xF6r\xFCnt\xFCs\xFC (${docNo})</h2><p>ETTN: ${ettn}</p><p>Al\u0131c\u0131: ${String(found?.accountName || "-")}</p><p>Tutar: ${Number(found?.payableAmount || 0).toFixed(2)} ${String(found?.currencyCode || "TRY")}</p></body></html>`;
+      return {
+        succeed: true,
+        message: "Mysoft mock pdf",
+        data: html
+      };
+    }
+    const emptyList = lowerPath.includes("list") ? { data: [], succeed: true, message: "Mysoft mock mode: no remote records", afterValue: 0 } : { data: { succeed: true }, succeed: true, message: "Mysoft mock mode", afterValue: 0 };
     return emptyList;
   }
   /** Resolve an optional request tenant against the server-side default.
@@ -3081,12 +26956,16 @@ var MysoftEdocumentClient = class {
       }
     }
     const rawDocNo = stringOrEmpty(body.docNo).toUpperCase();
-    if (rawDocNo && (/^(GIB|FYS|GLF|GDF|TED|FAT)/i.test(rawDocNo) || !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo))) {
+    if (!this.config.mockMode) {
+      if (rawDocNo && (/^(GIB|FYS|GLF|GDF|TED|FAT)/i.test(rawDocNo) || !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo))) {
+        body.docNo = "";
+      }
+      const rawPrefix = stringOrEmpty(body.prefix).toUpperCase();
+      if (rawPrefix && /^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawPrefix)) {
+        delete body.prefix;
+      }
+    } else if (rawDocNo && !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo)) {
       body.docNo = "";
-    }
-    const rawPrefix = stringOrEmpty(body.prefix).toUpperCase();
-    if (rawPrefix && /^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawPrefix)) {
-      delete body.prefix;
     }
     let tenant = typeof body.tenantIdentifierNumber === "string" ? normalizeMysoftTenantIdentifier(body.tenantIdentifierNumber) || body.tenantIdentifierNumber.trim() : "";
     if (!tenant) {

@@ -590,28 +590,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       onSaveSettings(cleanedProfile);
 
-      // Merkez şube adresini de Resmi Şirket Kimlik / Merkez Adresi ile senkronize et
-      const mainBranch = branches.find((b) => b.isMain);
-      if (mainBranch && cleanedProfile.address) {
-        onUpdateBranch({
-          ...mainBranch,
-          phone: cleanedProfile.phone || mainBranch.phone,
-          email: cleanedProfile.email || mainBranch.email,
-          address: {
-            ...mainBranch.address,
-            country: cleanedProfile.country || mainBranch.address?.country || "Türkiye",
-            city: cleanedProfile.city || mainBranch.address?.city || "İstanbul",
-            district: cleanedProfile.district ?? mainBranch.address?.district ?? "",
-            neighborhood: cleanedProfile.neighborhood ?? mainBranch.address?.neighborhood ?? "",
-            street: cleanedProfile.street ?? mainBranch.address?.street ?? "",
-            buildingNo: cleanedProfile.buildingNo ?? mainBranch.address?.buildingNo ?? "",
-            doorNo: cleanedProfile.doorNo ?? mainBranch.address?.doorNo ?? "",
-            postalCode: cleanedProfile.postalCode ?? mainBranch.address?.postalCode ?? "",
-            fullAddress: cleanedProfile.address,
-          },
-        });
-      }
-
       const activeComp = effectiveCompanies.find((c) => c.id === currentActiveCompanyId);
       if (activeComp) {
         const updatedComp: CompanyItem = {
@@ -780,9 +758,9 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         status: "active",
         address: {
           country: "Türkiye",
-          city: "İstanbul",
-          district: "Şişli",
-          neighborhood: "Mecidiyeköy",
+          city: "",
+          district: "",
+          neighborhood: "",
           street: "",
           buildingNo: "",
           doorNo: "",
@@ -802,19 +780,22 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
     const rawAddr = (branchForm.address as AddressDetails) || {
       country: "Türkiye",
-      city: "İstanbul",
-      district: "Şişli",
+      city: "",
+      district: "",
     };
-    const finalFullAddr =
-      compileStructuredAddress(
-        rawAddr.neighborhood,
-        rawAddr.street,
-        rawAddr.district,
-        rawAddr.city,
-        rawAddr.buildingNo,
-        rawAddr.doorNo,
-        rawAddr.postalCode
-      ) || rawAddr.fullAddress || "";
+    const explicitFull = String(rawAddr.fullAddress || "").trim();
+    const compiledFull = compileStructuredAddress(
+      rawAddr.neighborhood,
+      rawAddr.street,
+      rawAddr.district,
+      rawAddr.city,
+      rawAddr.buildingNo,
+      rawAddr.doorNo,
+      rawAddr.postalCode
+    );
+    const finalFullAddr = explicitFull
+      ? appendCityDistrictToAddress(explicitFull, rawAddr.city, rawAddr.district) || explicitFull
+      : compiledFull || "";
     const normalizedAddr: AddressDetails = {
       ...rawAddr,
       fullAddress: finalFullAddr,

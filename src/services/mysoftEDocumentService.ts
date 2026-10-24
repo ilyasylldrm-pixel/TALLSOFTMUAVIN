@@ -20,6 +20,7 @@ import { auth } from "../lib/firebase";
 import {
   normalizeMysoftTenantIdentifier,
 } from "./mysoftTenant";
+import { extractFirstFileFromZip } from "../utils/mysoftZip";
 import {
   getRecentMysoftDiagnosticLogs,
   MysoftPayloadValidationError,
@@ -537,6 +538,7 @@ export function normalizeMysoftEDocument(
     "buyer",
     "receiver",
     "alici",
+    "invoiceAccount",
   ]);
   const supplier = nestedRecord(raw, [
     "supplierInfo",
@@ -671,6 +673,7 @@ export function normalizeMysoftEDocument(
     "legalMonetaryTotal",
     "legalTotal",
     "monetaryTotal",
+    "invoiceCalculation",
   ]);
   const taxTotals = nestedRecords(raw, ["taxTotal", "taxTotals"]);
   const subtotal = firstNumber(
@@ -680,13 +683,7 @@ export function normalizeMysoftEDocument(
       "subtotal",
       "totalWithoutVat",
     ]),
-    pickField(legalTotal, ["lineExtensionAmount", "taxExclusiveAmount"]),
-  );
-  const vatTotal = firstNumber(
-    pickField(raw, ["taxTotalTra", "totalVat", "vatTotal", "taxAmount"]),
-    ...taxTotals.flatMap((tax) => [
-      pickField(tax, ["taxAmount", "taxTotal", "total"]),
-    ]),
+    pickField(legalTotal, ["taxExclusiveAmount", "lineExtensionAmount"]),
   );
   const grandTotal = firstNumber(
     pickField(raw, [
@@ -696,6 +693,15 @@ export function normalizeMysoftEDocument(
       "totalAmount",
     ]),
     pickField(legalTotal, ["payableAmount", "taxInclusiveAmount"]),
+  );
+  const vatTotal = firstNumber(
+    pickField(raw, ["taxTotalTra", "totalVat", "vatTotal", "taxAmount"]),
+    ...taxTotals.flatMap((tax) => [
+      pickField(tax, ["taxAmount", "taxTotal", "total"]),
+    ]),
+    grandTotal !== undefined && subtotal !== undefined && grandTotal >= subtotal
+      ? Number((grandTotal - subtotal).toFixed(2))
+      : undefined,
   );
   const currencyRate = firstNumber(
     pickField(raw, ["currencyRate", "currencyRateInfo"]),
@@ -790,11 +796,11 @@ export function normalizeMysoftEDocument(
     downloadUrl: firstString(
       pickField(raw, ["downloadUrl", "pdfUrl", "publicUrl"]),
     ),
-    items: Array.isArray(pickField(raw, ["items", "detailList", "lines"]))
-      ? (pickField(raw, ["items", "detailList", "lines"]) as unknown[])
+    items: Array.isArray(pickField(raw, ["items", "detailList", "lines", "invoiceDetail"]))
+      ? (pickField(raw, ["items", "detailList", "lines", "invoiceDetail"]) as unknown[])
       : undefined,
-    lines: Array.isArray(pickField(raw, ["lines", "detailList", "items"]))
-      ? (pickField(raw, ["lines", "detailList", "items"]) as unknown[])
+    lines: Array.isArray(pickField(raw, ["lines", "detailList", "items", "invoiceDetail"]))
+      ? (pickField(raw, ["lines", "detailList", "items", "invoiceDetail"]) as unknown[])
       : undefined,
     partyName:
       canonical === "incoming"
@@ -2371,22 +2377,43 @@ function binaryDownloadShape(
 ): MysoftDocumentDownload | undefined {
   const decoded = decodeBase64Payload(data);
   if (!decoded || typeof Blob === "undefined") return undefined;
-  const bytes = decoded.bytes;
+  let bytes = decoded.bytes;
   const isZip = bytes.length >= 4 &&
     bytes[0] === 0x50 && bytes[1] === 0x4b &&
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
+
+  let extractedFilename: string | undefined;
+  let unpackedFromZip = false;
+  if (isZip) {
+    try {
+      const inner = extractFirstFileFromZip(bytes);
+      if (inner && inner.bytes.length > 0) {
+        bytes = inner.bytes;
+        extractedFilename = inner.fileName;
+        unpackedFromZip = true;
+      }
+    } catch {
+      // Keep original ZIP bytes if extraction fails
+    }
+  }
+
+  const isStillZip = !unpackedFromZip && isZip;
   const isPdf = bytes.length >= 4 &&
     bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
-  const mimeType = isZip
+  const mimeType = isStillZip
     ? "application/zip"
     : isPdf
       ? "application/pdf"
-      : decoded.mediaType ||
-        (format === "xml" ? "application/xml" : format === "html" ? "text/html" : contentType);
-  const outputFilename = isZip && !/\.zip$/i.test(filename)
+      : format === "xml"
+        ? "application/xml"
+        : format === "html"
+          ? "text/html"
+          : decoded.mediaType || contentType;
+  const cleanBaseFilename = filename.replace(/\.zip$/i, "");
+  const outputFilename = isStillZip && !/\.zip$/i.test(filename)
     ? `${filename}.zip`
-    : filename;
+    : extractedFilename || cleanBaseFilename;
   return {
     id,
     format,
@@ -2435,8 +2462,31 @@ export async function downloadMysoftEDocument(
       ? decodeURIComponent(filenameMatch[1].replace(/[\"]/g, ""))
       : `${id}.${fallbackExt}`;
     if (payload instanceof ArrayBuffer) {
-      const blob = new Blob([payload], { type: contentType });
-      return { id, format, filename, mimeType: contentType, blob };
+      let bytes = new Uint8Array(payload);
+      let finalMime = contentType;
+      let finalFilename = filename;
+      const isZip = bytes.length >= 4 &&
+        bytes[0] === 0x50 && bytes[1] === 0x4b &&
+        (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
+        (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
+      if (isZip) {
+        try {
+          const inner = extractFirstFileFromZip(bytes);
+          if (inner && inner.bytes.length > 0) {
+            bytes = inner.bytes;
+            finalFilename = inner.fileName || filename.replace(/\.zip$/i, "");
+            finalMime = format === "xml"
+              ? "application/xml"
+              : format === "html"
+                ? "text/html"
+                : "application/pdf";
+          }
+        } catch {
+          // Keep original bytes if extraction fails
+        }
+      }
+      const blob = new Blob([bytes], { type: finalMime });
+      return { id, format, filename: finalFilename, mimeType: finalMime, blob };
     }
     if (typeof payload === "string") {
       const isUrl = /^https?:\/\//i.test(payload) || /^data:/i.test(payload);

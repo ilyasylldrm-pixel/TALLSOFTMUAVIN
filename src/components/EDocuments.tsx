@@ -530,6 +530,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           family,
           startDate: range.startDate,
           endDate: range.endDate,
+          fallback: true,
           // Numbered paging accepts multi-day ranges; day-chunked legacy list does not.
           ...(normalizeDirection(requestedDirection) === "inbox"
             ? { pageSize: 100, pageNumber: 1 }
@@ -596,6 +597,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
         family,
+        fallback: true,
         // Prefer paging so "Bu ay" is one multi-day range, not day-by-day calls.
         ...(activeDirection === "inbox"
           ? { pageSize: 100, pageNumber: 1 }
@@ -644,8 +646,29 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
         family,
+        fallback: true,
       });
-      if (detailed) setSelectedDocument(detailed);
+      if (detailed) {
+        setSelectedDocument((prev) => {
+          if (!prev) return detailed;
+          const prevRec = asRecord(prev);
+          const detRec = asRecord(detailed);
+          return {
+            ...prev,
+            ...detailed,
+            senderName: detailed.senderName || prev.senderName,
+            receiverName: detailed.receiverName || prev.receiverName,
+            accountName: detailed.accountName || prev.accountName,
+            partyName: detailed.partyName || prev.partyName,
+            subtotal: detailed.subtotal ?? prev.subtotal,
+            vatTotal: detailed.vatTotal ?? prev.vatTotal,
+            grandTotal: detailed.grandTotal ?? prev.grandTotal,
+            amount: detailed.amount ?? prev.amount,
+            items: (Array.isArray(detRec.items) && detRec.items.length > 0 ? detRec.items : prevRec.items) as any,
+            lines: (Array.isArray(detRec.lines) && detRec.lines.length > 0 ? detRec.lines : prevRec.lines) as any,
+          };
+        });
+      }
     } catch (detailLoadError) {
       setDetailError(getErrorMessage(detailLoadError));
     } finally {
@@ -666,6 +689,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
         family,
+        fallback: true,
       });
       const fallbackUrl =
         asRecord(document).downloadUrl || asRecord(document)[`${format}Url`];
@@ -1063,10 +1087,17 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         (docData.ettn && inv.eDocumentEttn === docData.ettn)
     );
 
-    const rawLines = Array.isArray(docData.items)
+    const rawPayloadObj = asRecord(docData.raw);
+    const rawLines = Array.isArray(docData.items) && docData.items.length > 0
       ? docData.items
-      : Array.isArray(docData.lines)
+      : Array.isArray(docData.lines) && docData.lines.length > 0
       ? docData.lines
+      : Array.isArray(docData.invoiceDetail) && docData.invoiceDetail.length > 0
+      ? docData.invoiceDetail
+      : Array.isArray(rawPayloadObj.invoiceDetail) && rawPayloadObj.invoiceDetail.length > 0
+      ? rawPayloadObj.invoiceDetail
+      : Array.isArray(rawPayloadObj.items) && rawPayloadObj.items.length > 0
+      ? rawPayloadObj.items
       : Array.isArray(docData.invoiceLine)
       ? docData.invoiceLine
       : [];
@@ -1077,16 +1108,16 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         : rawLines.length > 0
         ? rawLines.map((ln: any, idx: number) => {
             const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
-            const price = Number(ln.unitPrice ?? ln.price ?? ln.amount ?? 0) || 0;
-            const vatRate = Number(ln.vatRate ?? ln.taxPercent ?? ln.kdvPercent ?? 20);
-            const totalWithoutVat = Number(ln.totalWithoutVat ?? ln.lineExtensionAmount ?? qty * price);
-            const vatAmount = Number(ln.vatAmount ?? ln.taxAmount ?? (totalWithoutVat * vatRate) / 100);
+            const price = Number(ln.unitPrice ?? ln.unitPriceTra ?? ln.price ?? ln.amount ?? 0) || 0;
+            const vatRate = Number(ln.vatRate ?? ln.taxRate ?? ln.taxPercent ?? ln.kdvPercent ?? 20);
+            const totalWithoutVat = Number(ln.totalWithoutVat ?? ln.amtTra ?? ln.lineExtensionAmount ?? qty * price);
+            const vatAmount = Number(ln.vatAmount ?? ln.amtVatTra ?? ln.taxAmount ?? (totalWithoutVat * vatRate) / 100);
             return {
               id: String(ln.id || `line_${idx}`),
               productCode: ln.productCode || ln.itemCode || undefined,
-              description: String(ln.description || ln.productName || ln.itemName || "Mal / Hizmet Kalemi"),
+              description: String(ln.description || ln.productName || ln.itemName || ln.note || "Mal / Hizmet Kalemi"),
               quantity: qty,
-              unit: String(ln.unit || ln.unitCode || "Adet"),
+              unit: String(ln.unit || ln.unitName || ln.unitCode || "Adet"),
               unitPrice: price,
               vatRate,
               totalWithoutVat,

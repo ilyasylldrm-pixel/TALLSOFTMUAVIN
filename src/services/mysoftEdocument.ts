@@ -569,6 +569,10 @@ export function getMysoftConfig(env: NodeJS.ProcessEnv = process.env): MysoftCon
     env.MYSOFT_TENANT_IDENTIFIER_NUMBER,
   );
 
+  const hasCredentials = Boolean((clientId && clientSecret) || (username && password));
+  const rawMock = (env.MYSOFT_MOCK_MODE || "").trim().toLowerCase();
+  const explicitDisableMock = ["0", "false", "no", "off"].includes(rawMock);
+
   return {
     baseUrl,
     tokenUrl,
@@ -585,8 +589,8 @@ export function getMysoftConfig(env: NodeJS.ProcessEnv = process.env): MysoftCon
     tenantIdentifierNumber,
     connectorGuid: env.MYSOFT_CONNECTOR_GUID?.trim() || undefined,
     timeoutMs: Math.max(1_000, Number(env.MYSOFT_TIMEOUT_MS || 30_000) || 30_000),
-    // Mock is opt-in. Missing credentials alone must never silently write data.
-    mockMode: envBoolean(env.MYSOFT_MOCK_MODE),
+    // Default to simulation/mock mode when no credentials are configured unless explicitly disabled.
+    mockMode: envBoolean(env.MYSOFT_MOCK_MODE) || (!hasCredentials && !explicitDisableMock),
   };
 }
 
@@ -727,6 +731,8 @@ export class MysoftEdocumentClient {
   private accessToken?: { value: string; expiresAt: number };
   private tokenRequest?: Promise<string>;
   private tokenIdentity?: MysoftTokenIdentity;
+  private mockOutboxDocs: Array<Record<string, unknown>> = [];
+  private mockSeqCounter = 100;
 
   constructor(config: MysoftConfig = getMysoftConfig()) {
     this.config = config;
@@ -980,10 +986,250 @@ export class MysoftEdocumentClient {
     return !/\/api\/Tenant\//i.test(path);
   }
 
-  private mockResponse<T>(path: string, _options: MysoftRequestOptions): T {
-    const emptyList = path.toLowerCase().includes("list")
+  private mockResponse<T>(path: string, options: MysoftRequestOptions): T {
+    const lowerPath = path.toLowerCase();
+    const query = options.query || {};
+    const bodyObj = isObject(options.body) && !Array.isArray(options.body)
+      ? (options.body as Record<string, unknown>)
+      : {};
+
+    if (lowerPath.includes("/api/tenant/gettenantwithidentifier") || lowerPath.includes("/api/tenant/gettenantinfo")) {
+      const vkn =
+        normalizeMysoftTenantIdentifier(query.identifierNumber ?? query.vknTckn ?? query.tenantIdentifierNumber ?? bodyObj.identifierNumber ?? bodyObj.vknTckn) ||
+        this.config.tenantIdentifierNumber ||
+        "4840847211";
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: {
+          vknTckn: vkn,
+          identifierNumber: vkn,
+          tenantIdentifierNumber: vkn,
+          accountName: vkn === "37756832708" ? "ABDURRAHMAN ŞİMŞEK" : vkn === "7600924362" ? "SEMİH YAPI OTOMOTİV LİMİTED ŞİRKETİ" : "MERKEZ FİRMA A.Ş.",
+          title: vkn === "37756832708" ? "ABDURRAHMAN ŞİMŞEK" : vkn === "7600924362" ? "SEMİH YAPI OTOMOTİV LİMİTED ŞİRKETİ" : "MERKEZ FİRMA A.Ş.",
+          taxOfficeName: "Merkez V.D.",
+          cityName: "İstanbul",
+          townName: "Kadıköy",
+          pkAlias: `urn:mail:defaultpk@${vkn}.com.tr`,
+          gbAlias: `urn:mail:defaultgb@${vkn}.com.tr`,
+          isEFatura: true,
+          isEArsiv: true,
+        },
+      } as T;
+    }
+
+    if (lowerPath.includes("/api/tenant/gettenant")) {
+      const defaultVkn = this.config.tenantIdentifierNumber || "37756832708";
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: [
+          {
+            vknTckn: defaultVkn,
+            identifierNumber: defaultVkn,
+            tenantIdentifierNumber: defaultVkn,
+            accountName: "ABDURRAHMAN ŞİMŞEK",
+            title: "ABDURRAHMAN ŞİMŞEK",
+            taxOfficeName: "Selçuk V.D.",
+            cityName: "Konya",
+            townName: "Selçuklu",
+            pkAlias: "urn:mail:faturapk@ababdurrahmansimsek.com",
+            gbAlias: "urn:mail:faturagb@ababdurrahmansimsek.com",
+          },
+        ],
+      } as T;
+    }
+
+    if (lowerPath.includes("/api/generalcard/edocumentnumber")) {
+      const year = new Date().getFullYear();
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: [
+          {
+            id: 1,
+            eDocumentType: "EFATURA",
+            prefix: "GIB",
+            year,
+            lastSequence: this.mockSeqCounter,
+            isDefault: true,
+            numeratorSetCode: "GIB_DEFAULT",
+          },
+          {
+            id: 2,
+            eDocumentType: "EARSIVFATURA",
+            prefix: "EAR",
+            year,
+            lastSequence: this.mockSeqCounter,
+            isDefault: true,
+            numeratorSetCode: "EAR_DEFAULT",
+          },
+        ],
+      } as T;
+    }
+
+    if (lowerPath.includes("/api/generalcard/edocumentxslt")) {
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: [
+          {
+            id: 1,
+            name: "Genel Tasarım",
+            xsltName: "Genel Tasarım",
+            eDocumentType: "EFATURA",
+            isDefault: true,
+          },
+          {
+            id: 2,
+            name: "Genel Tasarım",
+            xsltName: "Genel Tasarım",
+            eDocumentType: "EARSIVFATURA",
+            isDefault: true,
+          },
+        ],
+      } as T;
+    }
+
+    if (
+      lowerPath.includes("/api/invoiceoutbox/invoiceoutbox") &&
+      !lowerPath.includes("draft") &&
+      !lowerPath.includes("status") &&
+      !lowerPath.includes("list") &&
+      !lowerPath.includes("model") &&
+      !lowerPath.includes("pdf") &&
+      !lowerPath.includes("xml") &&
+      !lowerPath.includes("cancel")
+    ) {
+      this.mockSeqCounter += 1;
+      const year = new Date().getFullYear();
+      const isArchive = String(bodyObj.eDocumentType || "").toUpperCase().includes("EARSIV");
+      const rawPrefix = String(bodyObj.prefix || (isArchive ? "EAR" : "GIB"))
+        .replace(/[^A-Za-z0-9]/g, "")
+        .toUpperCase()
+        .slice(0, 3)
+        .padEnd(3, "X");
+      const existingDocNo = typeof bodyObj.docNo === "string" && /^[A-Z0-9]{3}20\d{2}\d{9}$/i.test(bodyObj.docNo.trim())
+        ? bodyObj.docNo.trim().toUpperCase()
+        : `${rawPrefix}${year}${String(this.mockSeqCounter).padStart(9, "0")}`;
+      const generatedEttn =
+        (typeof bodyObj.ettn === "string" && bodyObj.ettn.trim()) ||
+        (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `00000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, "0")}`);
+      const acc = isObject(bodyObj.invoiceAccount) ? bodyObj.invoiceAccount : {};
+      const calc = isObject(bodyObj.invoiceCalculation) ? bodyObj.invoiceCalculation : {};
+      const statusText = bodyObj.isDraft ? "Taslak" : "GİB'e Gönderildi";
+      const createdRecord: Record<string, unknown> = {
+        ...bodyObj,
+        id: generatedEttn,
+        ettn: generatedEttn,
+        invoiceETTN: generatedEttn,
+        docNo: existingDocNo,
+        docDate: bodyObj.docDate || new Date().toISOString().slice(0, 10),
+        accountName: acc.accountName || bodyObj.accountName || "Alıcı Cari",
+        vknTckn: acc.vknTckn || bodyObj.vknTckn || "",
+        taxExclusiveAmount: Number(calc.taxExclusiveAmount ?? calc.lineExtensionAmount ?? 0),
+        taxTotalTra: Number(calc.taxInclusiveAmount ?? 0) - Number(calc.taxExclusiveAmount ?? 0),
+        payableAmount: Number(calc.payableAmount ?? calc.taxInclusiveAmount ?? 0),
+        invoiceStatusText: statusText,
+        createDate: new Date().toISOString(),
+      };
+      this.mockOutboxDocs = [
+        createdRecord,
+        ...this.mockOutboxDocs.filter((d) => d.ettn !== generatedEttn),
+      ];
+      return {
+        succeed: true,
+        message: "Fatura başarıyla oluşturuldu (Simülasyon Modu)",
+        data: {
+          id: generatedEttn,
+          ettn: generatedEttn,
+          invoiceETTN: generatedEttn,
+          docNo: existingDocNo,
+          invoiceStatusText: statusText,
+        },
+      } as T;
+    }
+
+    if (lowerPath.includes("getinvoiceoutboxdrafthtml") || lowerPath.includes("getinvoiceoutboxdraftpdfaszip")) {
+      const acc = isObject(bodyObj.invoiceAccount) ? bodyObj.invoiceAccount : {};
+      const calc = isObject(bodyObj.invoiceCalculation) ? bodyObj.invoiceCalculation : {};
+      const details = Array.isArray(bodyObj.invoiceDetail) ? bodyObj.invoiceDetail : [];
+      const docNo = String(bodyObj.docNo || "TASLAK");
+      const docDate = String(bodyObj.docDate || new Date().toISOString().slice(0, 10));
+      const rowsHtml = details
+        .map((item: any, idx: number) => {
+          const name = String(item?.productName || item?.description || `Kalem ${idx + 1}`);
+          const qty = Number(item?.qty ?? item?.quantity ?? 1);
+          const price = Number(item?.unitPriceTra ?? item?.unitPrice ?? 0);
+          const lineAmt = Number(item?.amtTra ?? qty * price);
+          const vatAmt = Number(item?.amtVatTra ?? 0);
+          return `<tr><td style="padding:6px;border:1px solid #cbd5e1;">${idx + 1}</td><td style="padding:6px;border:1px solid #cbd5e1;">${name}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${qty}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${price.toFixed(2)}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${vatAmt.toFixed(2)}</td><td style="padding:6px;border:1px solid #cbd5e1;text-align:right;">${(lineAmt + vatAmt).toFixed(2)}</td></tr>`;
+        })
+        .join("");
+      const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>e-Belge Taslak Önizleme - ${docNo}</title></head><body style="font-family:Arial,sans-serif;padding:24px;color:#0f172a;"><div style="display:flex;justify-content:space-between;border-bottom:2px solid #1e293b;padding-bottom:12px;margin-bottom:16px;"><div><h2 style="margin:0;">${String(bodyObj.eDocumentType || "EFATURA")} TASLAK ÖNİZLEME</h2><p style="margin:4px 0 0;font-size:12px;color:#475569;">Senaryo: ${String(bodyObj.profile || "TICARIFATURA")} | Tip: ${String(bodyObj.invoiceType || "SATIS")}</p></div><div style="text-align:right;"><p style="margin:0;font-weight:bold;">Belge No: ${docNo}</p><p style="margin:4px 0 0;font-size:12px;">Tarih: ${docDate}</p></div></div><div style="margin-bottom:16px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;"><strong>SAYIN:</strong> ${String(acc.accountName || "Alıcı")}<br/><span style="font-size:12px;">VKN/TCKN: ${String(acc.vknTckn || "-")} | Vergi Dairesi: ${String(acc.taxOfficeName || "-")}</span><br/><span style="font-size:12px;">Adres: ${String(acc.streetName || "")} ${String(acc.citySubdivisionName || "")} / ${String(acc.cityName || "")}</span></div><table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;"><thead><tr style="background:#f1f5f9;"><th style="padding:6px;border:1px solid #cbd5e1;text-align:left;">#</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:left;">Mal / Hizmet</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">Miktar</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">Birim Fiyat</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">KDV</th><th style="padding:6px;border:1px solid #cbd5e1;text-align:right;">Toplam</th></tr></thead><tbody>${rowsHtml}</tbody></table><div style="text-align:right;font-size:14px;"><p style="margin:4px 0;">Mal/Hizmet Toplam: <strong>${Number(calc.taxExclusiveAmount ?? 0).toFixed(2)} ${String(bodyObj.currencyCode || "TRY")}</strong></p><p style="margin:4px 0;">Ödenecek Tutar: <strong style="font-size:16px;">${Number(calc.payableAmount ?? 0).toFixed(2)} ${String(bodyObj.currencyCode || "TRY")}</strong></p></div></body></html>`;
+      return {
+        succeed: true,
+        message: "Mysoft mock draft preview",
+        data: html,
+      } as T;
+    }
+
+    if (lowerPath.includes("getinvoiceoutboxwithheaderinfolistforperiod")) {
+      return {
+        data: this.mockOutboxDocs,
+        succeed: true,
+        message: "Mysoft mock mode",
+        afterValue: this.mockOutboxDocs.length,
+      } as T;
+    }
+
+    if (lowerPath.includes("getinvoiceoutboxmodel") || lowerPath.includes("getinvoiceinboxmodel")) {
+      const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
+      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      if (found) {
+        return { succeed: true, message: "Mysoft mock mode", data: found } as T;
+      }
+      return {
+        succeed: true,
+        message: "Mysoft mock mode",
+        data: {
+          id: ettn,
+          ettn,
+          invoiceETTN: ettn,
+          invoiceStatusText: "Onaylandı",
+        },
+      } as T;
+    }
+
+    if (lowerPath.includes("xmlaszip")) {
+      const ettn = String(query.invoiceETTN || query.despatchETTN || "BELGE");
+      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const docNo = String(found?.docNo || ettn);
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">\n  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>\n  <cbc:CustomizationID>TR1.2</cbc:CustomizationID>\n  <cbc:ProfileID>${String(found?.profile || "TICARIFATURA")}</cbc:ProfileID>\n  <cbc:ID>${docNo}</cbc:ID>\n  <cbc:UUID>${ettn}</cbc:UUID>\n  <cbc:IssueDate>${String(found?.docDate || new Date().toISOString().slice(0, 10))}</cbc:IssueDate>\n  <cbc:InvoiceTypeCode>${String(found?.invoiceType || "SATIS")}</cbc:InvoiceTypeCode>\n  <cbc:DocumentCurrencyCode>${String(found?.currencyCode || "TRY")}</cbc:DocumentCurrencyCode>\n</Invoice>`;
+      return {
+        succeed: true,
+        message: "Mysoft mock xml",
+        data: xml,
+      } as T;
+    }
+
+    if (lowerPath.includes("pdfaszip")) {
+      const ettn = String(query.invoiceETTN || query.despatchETTN || "BELGE");
+      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const docNo = String(found?.docNo || ettn);
+      const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>e-Belge ${docNo}</title></head><body style="font-family:Arial,sans-serif;padding:24px;"><h2>e-Belge Görüntüsü (${docNo})</h2><p>ETTN: ${ettn}</p><p>Alıcı: ${String(found?.accountName || "-")}</p><p>Tutar: ${Number(found?.payableAmount || 0).toFixed(2)} ${String(found?.currencyCode || "TRY")}</p></body></html>`;
+      return {
+        succeed: true,
+        message: "Mysoft mock pdf",
+        data: html,
+      } as T;
+    }
+
+    const emptyList = lowerPath.includes("list")
       ? { data: [], succeed: true, message: "Mysoft mock mode: no remote records", afterValue: 0 }
-      : { data: null, succeed: true, message: "Mysoft mock mode", afterValue: 0 };
+      : { data: { succeed: true }, succeed: true, message: "Mysoft mock mode", afterValue: 0 };
     return emptyList as T;
   }
 
@@ -2469,19 +2715,23 @@ export class MysoftEdocumentClient {
       }
     }
 
-    // 3. Sanitize forbidden docNo / prefix ("GIB", "FYS", internal Muavin prefixes)
+    // 3. Sanitize forbidden docNo / prefix ("GIB", "FYS", internal Muavin prefixes) in live API mode
     const rawDocNo = stringOrEmpty(body.docNo).toUpperCase();
-    if (
-      rawDocNo &&
-      (/^(GIB|FYS|GLF|GDF|TED|FAT)/i.test(rawDocNo) ||
-        !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo))
-    ) {
-      body.docNo = "";
-    }
+    if (!this.config.mockMode) {
+      if (
+        rawDocNo &&
+        (/^(GIB|FYS|GLF|GDF|TED|FAT)/i.test(rawDocNo) ||
+          !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo))
+      ) {
+        body.docNo = "";
+      }
 
-    const rawPrefix = stringOrEmpty(body.prefix).toUpperCase();
-    if (rawPrefix && /^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawPrefix)) {
-      delete body.prefix;
+      const rawPrefix = stringOrEmpty(body.prefix).toUpperCase();
+      if (rawPrefix && /^(GIB|FYS|GLF|GDF|TED|FAT)$/i.test(rawPrefix)) {
+        delete body.prefix;
+      }
+    } else if (rawDocNo && !/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(rawDocNo)) {
+      body.docNo = "";
     }
 
     let tenant =
