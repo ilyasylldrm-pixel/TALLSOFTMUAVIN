@@ -26,6 +26,7 @@ import {
   AlignCenter,
   AlignRight,
   CloudUpload,
+  Download,
 } from "lucide-react";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import {
@@ -2020,6 +2021,614 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
   );
 };
 
+function escapeXmlText(val: unknown): string {
+  return String(val ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/**
+ * Generates an official GİB UBL-TR 1.2 & Mysoft e-Belge compatible XSLT 1.0 stylesheet
+ * containing all visual customizations (colors, logo, GİB seal, stamp/signature, CSS offsets, bank IBAN table, footer notes).
+ */
+export function generateOfficialGibXsltStylesheet(
+  companySettings: CompanySettings,
+  designInput?: Partial<InvoiceDesignSettings>,
+  docType: "e_fatura" | "e_arsiv" = "e_fatura"
+): string {
+  const design = resolveInvoiceDesignSettings(companySettings, designInput);
+  const palette = resolveInvoiceThemePalette(design);
+  const cid = resolveTargetCompanyId(companySettings?.id);
+  const cssCfg = getIndependentInvoiceCssConfig(design.cssConfig, cid);
+  const scopedCss = buildInvoicePreviewScopedCss("gib-xslt-paper", cssCfg);
+
+  const isEArsiv = docType === "e_arsiv";
+  const docTitle = isEArsiv ? "e-Arşiv Fatura" : "e-Fatura";
+  const defaultPrefix = isEArsiv
+    ? (companySettings.eArsivPrefix || "EAR").toUpperCase().slice(0, 3)
+    : (companySettings.eFaturaPrefix || companySettings.defaultInvoicePrefix || "GIB")
+        .toUpperCase()
+        .slice(0, 3);
+
+  const sellerName = escapeXmlText(
+    companySettings.companyTitle || companySettings.companyName || "KURUMSAL ŞİRKET UNVANI"
+  );
+  const sellerAddress = escapeXmlText(
+    getCompanyHeadquartersAddress(companySettings) ||
+      companySettings.address ||
+      "Merkez Adres"
+  );
+  const sellerCityDistrict = escapeXmlText(
+    [companySettings.district, companySettings.city].filter(Boolean).join(" / ") || "İstanbul"
+  );
+  const sellerTaxOffice = escapeXmlText(companySettings.taxOffice || "Merkez");
+  const sellerTaxNumber = escapeXmlText(
+    companySettings.vkn ||
+      companySettings.tckn ||
+      companySettings.taxNumber ||
+      companySettings.tenantIdentifierNumber ||
+      ""
+  );
+  const sellerPhone = escapeXmlText(companySettings.phone || "");
+  const sellerEmail = escapeXmlText(companySettings.email || "");
+  const sellerWeb = escapeXmlText(companySettings.website || "");
+  const sellerMersis = escapeXmlText(companySettings.mersisNo || "");
+  const sellerTicaretSicil = escapeXmlText(companySettings.tradeRegisterNo || "");
+
+  const bankHolder = escapeXmlText(
+    companySettings.defaultBankAccountName ||
+      companySettings.companyTitle ||
+      companySettings.companyName ||
+      ""
+  );
+  const bankName = escapeXmlText(companySettings.defaultBankName || "");
+  const bankIban = escapeXmlText(companySettings.defaultBankIban || companySettings.iban || "");
+
+  const footerNote = escapeXmlText(
+    isEArsiv
+      ? design.eArsivFooterNote || DEFAULT_INVOICE_DESIGN.eArsivFooterNote
+      : design.eFaturaFooterNote || DEFAULT_INVOICE_DESIGN.eFaturaFooterNote
+  );
+
+  const logoUrl =
+    design.showCompanyLogo !== false && companySettings.logoUrl
+      ? escapeXmlText(companySettings.logoUrl)
+      : "";
+  const stampUrl =
+    design.showSignatureStamp !== false && design.stampImageUrl
+      ? escapeXmlText(design.stampImageUrl)
+      : "";
+  const logoHeightPx =
+    design.logoSize === "sm" ? 42 : design.logoSize === "lg" ? 72 : 56;
+  const gibSealSize = Number(cssCfg.gibLogoSize) || 76;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:n1="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+  exclude-result-prefixes="n1 cac cbc">
+
+  <xsl:output method="html" encoding="UTF-8" indent="yes" doctype-public="-//W3C//DTD HTML 4.01 Transitional//EN" />
+
+  <xsl:template match="/">
+    <html>
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>${docTitle} - ${sellerName}</title>
+        <style type="text/css">
+          @page { size: A4 portrait; margin: 10mm; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 0;
+          }
+          #gib-xslt-paper {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: ${design.templateStyle === "gib_compact" ? "12px" : "20px"};
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+          }
+          .header-grid {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            border-bottom: 2px solid ${palette.border};
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+          }
+          .header-col {
+            display: table-cell;
+            vertical-align: top;
+            width: 33.33%;
+          }
+          .party-box {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 8px 10px;
+            background: #f8fafc;
+            font-size: 10px;
+            line-height: 1.45;
+          }
+          .party-title {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: ${palette.primary};
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 3px;
+            margin-bottom: 5px;
+            letter-spacing: 0.4px;
+          }
+          .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-top: 6px;
+          }
+          .meta-table th {
+            background: ${palette.headerBg};
+            color: ${palette.headerText};
+            text-align: left;
+            padding: 4px 7px;
+            border: 1px solid ${palette.border};
+            font-weight: 700;
+            width: 44%;
+          }
+          .meta-table td {
+            padding: 4px 7px;
+            border: 1px solid #cbd5e1;
+            font-weight: 700;
+            color: #0f172a;
+            background: #ffffff;
+          }
+          .lines-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 10px;
+          }
+          .lines-table thead th {
+            background: ${palette.headerBg};
+            color: ${palette.headerText};
+            border: 1px solid ${palette.border};
+            padding: 6px 6px;
+            font-weight: 800;
+            text-transform: uppercase;
+            font-size: 9.5px;
+          }
+          .lines-table tbody td {
+            border: 1px solid #cbd5e1;
+            padding: 5px 6px;
+            vertical-align: top;
+          }
+          .lines-table tbody tr:nth-child(even) {
+            background: #f8fafc;
+          }
+          .totals-wrap {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+          }
+          .notes-col {
+            display: table-cell;
+            width: 58%;
+            vertical-align: top;
+            padding-right: 12px;
+          }
+          .totals-col {
+            display: table-cell;
+            width: 42%;
+            vertical-align: top;
+          }
+          .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+          }
+          .totals-table th {
+            text-align: left;
+            padding: 5px 8px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            font-weight: 700;
+          }
+          .totals-table td {
+            text-align: right;
+            padding: 5px 8px;
+            border: 1px solid #cbd5e1;
+            font-weight: 700;
+          }
+          .totals-table tr.grand-row th,
+          .totals-table tr.grand-row td {
+            background: ${palette.headerBg};
+            color: ${palette.headerText};
+            border-color: ${palette.border};
+            font-size: 11.5px;
+            font-weight: 900;
+          }
+          .bank-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5px;
+            margin-top: 8px;
+          }
+          .bank-table th {
+            background: ${palette.primaryLight};
+            color: ${palette.primary};
+            border: 1px solid #cbd5e1;
+            padding: 4px 6px;
+            text-align: left;
+          }
+          .bank-table td {
+            border: 1px solid #cbd5e1;
+            padding: 4px 6px;
+            font-family: monospace;
+            font-weight: 700;
+          }
+          .signature-box {
+            border: 1px ${cssCfg.signatureBorderStyle || "solid"} #94a3b8;
+            border-radius: 6px;
+            padding: 6px 10px;
+            margin-top: 8px;
+            background: #ffffff;
+          }
+          ${scopedCss}
+        </style>
+      </head>
+      <body>
+        <div id="gib-xslt-paper">
+          <!-- ÜST BAŞLIK: DÜZENLEYEN / GİB MÜHÜR & BAŞLIK / BELGE METAVERİSİ -->
+          <div class="header-grid">
+            <!-- SOL SÜTUN: SATICI (DÜZENLEYEN) BİLGİLERİ -->
+            <div class="header-col" style="padding-right: 10px;">
+              ${
+                logoUrl
+                  ? `<div style="margin-bottom: 6px;"><img src="${logoUrl}" alt="Logo" style="max-height: ${logoHeightPx}px; max-width: 190px; object-fit: contain;" /></div>`
+                  : ""
+              }
+              <div class="party-box issuer-seller-css-target">
+                <div class="party-title">DÜZENLEYEN (SATICI) BİLGİLERİ</div>
+                <div style="font-weight: 800; font-size: 10.5px; margin-bottom: 2px;">
+                  <xsl:choose>
+                    <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name)">
+                      <xsl:value-of select="//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name" />
+                    </xsl:when>
+                    <xsl:otherwise>${sellerName}</xsl:otherwise>
+                  </xsl:choose>
+                </div>
+                <div>
+                  <xsl:choose>
+                    <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PostalAddress/cbc:StreetName)">
+                      <xsl:value-of select="//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PostalAddress/cbc:StreetName" />
+                      <xsl:text> </xsl:text>
+                      <xsl:value-of select="//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PostalAddress/cbc:CitySubdivisionName" />
+                      <xsl:text> / </xsl:text>
+                      <xsl:value-of select="//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PostalAddress/cbc:CityName" />
+                    </xsl:when>
+                    <xsl:otherwise>${sellerAddress} (${sellerCityDistrict})</xsl:otherwise>
+                  </xsl:choose>
+                </div>
+                <div>
+                  <strong>Vergi Dairesi: </strong>
+                  <xsl:choose>
+                    <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:Name)">
+                      <xsl:value-of select="//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:Name" />
+                    </xsl:when>
+                    <xsl:otherwise>${sellerTaxOffice}</xsl:otherwise>
+                  </xsl:choose>
+                </div>
+                <div>
+                  <strong>VKN / TCKN: </strong>
+                  <xsl:choose>
+                    <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID)">
+                      <xsl:value-of select="//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID" />
+                    </xsl:when>
+                    <xsl:otherwise>${sellerTaxNumber}</xsl:otherwise>
+                  </xsl:choose>
+                </div>
+                ${sellerMersis ? `<div><strong>MERSİS No: </strong>${sellerMersis}</div>` : ""}
+                ${sellerTicaretSicil ? `<div><strong>Tic. Sicil No: </strong>${sellerTicaretSicil}</div>` : ""}
+                ${sellerPhone ? `<div><strong>Tel: </strong>${sellerPhone}</div>` : ""}
+                ${sellerEmail ? `<div><strong>E-Posta: </strong>${sellerEmail}</div>` : ""}
+                ${sellerWeb ? `<div><strong>Web: </strong>${sellerWeb}</div>` : ""}
+              </div>
+            </div>
+
+            <!-- ORTA SÜTUN: GİB RESMİ MÜHÜR & BELGE TİPİ BAŞLIĞI -->
+            <div class="header-col" style="text-align: center; padding: 0 6px;">
+              <div class="gib-logo-css-target">
+                ${
+                  design.showGibSeal !== false
+                    ? `<svg width="${gibSealSize}" height="${gibSealSize}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="50" cy="50" r="47.5" stroke="#b91c1c" stroke-width="2.2" fill="#ffffff" />
+                        <circle cx="50" cy="50" r="43.5" stroke="#b91c1c" stroke-width="0.9" stroke-dasharray="2 1.5" fill="none" />
+                        <circle cx="50" cy="50" r="34" stroke="#b91c1c" stroke-width="1.4" fill="#ffffff" />
+                        <circle cx="50" cy="50" r="22" fill="#b91c1c" />
+                        <text x="50" y="55" text-anchor="middle" fill="#ffffff" font-size="13.5" font-weight="900" font-family="Arial">GİB</text>
+                        <text x="50" y="63.5" text-anchor="middle" fill="#fde68a" font-size="4.6" font-weight="800" font-family="Arial">e-BELGE</text>
+                      </svg>`
+                    : ""
+                }
+                <div style="margin-top: 6px; font-size: 15px; font-weight: 900; color: ${palette.primary}; letter-spacing: 0.5px;">
+                  ${docTitle}
+                </div>
+              </div>
+              ${
+                design.showSignatureStamp !== false
+                  ? `<div class="signature-box issuer-signature-css-target">
+                      <div style="font-size: 8.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 3px;">
+                        Düzenleyen Kaşe / Elektronik İmza
+                      </div>
+                      ${
+                        stampUrl
+                          ? `<img src="${stampUrl}" alt="Kaşe İmza" style="max-height: 54px; max-width: 170px; object-fit: contain; margin: 0 auto;" />`
+                          : `<div style="font-size: 9px; font-weight: 800; color: ${palette.primary};">${sellerName}</div>
+                             <div style="font-size: 8px; color: #334155;">${sellerTaxOffice} V.D. • ${sellerTaxNumber}</div>`
+                      }
+                    </div>`
+                  : ""
+              }
+            </div>
+
+            <!-- SAĞ SÜTUN: ETTN & BELGE METAVERİ TABLOSU -->
+            <div class="header-col" style="padding-left: 10px;">
+              <table class="meta-table">
+                <tr>
+                  <th>Özelleştirme No</th>
+                  <td>TR1.2</td>
+                </tr>
+                <tr>
+                  <th>Senaryo</th>
+                  <td>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cbc:ProfileID)">
+                        <xsl:value-of select="//n1:Invoice/cbc:ProfileID" />
+                      </xsl:when>
+                      <xsl:otherwise>${isEArsiv ? "EARSIVFATURA" : "TICARIFATURA"}</xsl:otherwise>
+                    </xsl:choose>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Fatura Tipi</th>
+                  <td>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cbc:InvoiceTypeCode)">
+                        <xsl:value-of select="//n1:Invoice/cbc:InvoiceTypeCode" />
+                      </xsl:when>
+                      <xsl:otherwise>SATIS</xsl:otherwise>
+                    </xsl:choose>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Fatura No</th>
+                  <td style="font-family: monospace; font-size: 10.5px;">
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cbc:ID)">
+                        <xsl:value-of select="//n1:Invoice/cbc:ID" />
+                      </xsl:when>
+                      <xsl:otherwise>${defaultPrefix}${new Date().getFullYear()}000000001</xsl:otherwise>
+                    </xsl:choose>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Düzenleme Tarihi</th>
+                  <td>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cbc:IssueDate)">
+                        <xsl:value-of select="//n1:Invoice/cbc:IssueDate" />
+                      </xsl:when>
+                      <xsl:otherwise>${new Date().toISOString().slice(0, 10)}</xsl:otherwise>
+                    </xsl:choose>
+                  </td>
+                </tr>
+                <tr>
+                  <th>ETTN</th>
+                  <td style="font-family: monospace; font-size: 8.5px; word-break: break-all;">
+                    <xsl:value-of select="//n1:Invoice/cbc:UUID" />
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- ALICI (SAYIN) BİLGİLERİ -->
+          <div class="party-box" style="margin-bottom: 10px;">
+            <div class="party-title">SAYIN (ALICI BİLGİLERİ)</div>
+            <div style="font-weight: 800; font-size: 11px;">
+              <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyName/cbc:Name" />
+              <xsl:if test="not(string(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyName/cbc:Name))">
+                <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:Person/cbc:FirstName" />
+                <xsl:text> </xsl:text>
+                <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:Person/cbc:FamilyName" />
+              </xsl:if>
+            </div>
+            <div>
+              <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PostalAddress/cbc:StreetName" />
+              <xsl:text> </xsl:text>
+              <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PostalAddress/cbc:CitySubdivisionName" />
+              <xsl:text> / </xsl:text>
+              <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PostalAddress/cbc:CityName" />
+            </div>
+            <div>
+              <strong>Vergi Dairesi: </strong>
+              <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:Name" />
+              <xsl:text> • </xsl:text>
+              <strong>VKN / TCKN: </strong>
+              <xsl:value-of select="//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID" />
+            </div>
+          </div>
+
+          <!-- MAL / HİZMET KALEMLERİ TABLOSU -->
+          <table class="lines-table">
+            <thead>
+              <tr>
+                <th style="width: 5%;">#</th>
+                ${design.showProductCode !== false ? `<th style="width: 12%;">Stok/Hizmet Kodu</th>` : ""}
+                <th>Mal / Hizmet Açıklaması</th>
+                <th style="width: 10%; text-align: right;">Miktar</th>
+                <th style="width: 13%; text-align: right;">Birim Fiyat</th>
+                <th style="width: 8%; text-align: right;">KDV %</th>
+                <th style="width: 13%; text-align: right;">KDV Tutarı</th>
+                <th style="width: 15%; text-align: right;">Mal/Hizmet Tutarı</th>
+              </tr>
+            </thead>
+            <tbody>
+              <xsl:for-each select="//n1:Invoice/cac:InvoiceLine">
+                <tr>
+                  <td style="text-align: center;"><xsl:value-of select="cbc:ID" /></td>
+                  ${
+                    design.showProductCode !== false
+                      ? `<td><xsl:value-of select="cac:Item/cac:SellersItemIdentification/cbc:ID" /></td>`
+                      : ""
+                  }
+                  <td>
+                    <strong><xsl:value-of select="cac:Item/cbc:Name" /></strong>
+                    <xsl:if test="string(cac:Item/cbc:Description) and cac:Item/cbc:Description != cac:Item/cbc:Name">
+                      <div style="font-size: 9px; color: #475569;"><xsl:value-of select="cac:Item/cbc:Description" /></div>
+                    </xsl:if>
+                  </td>
+                  <td style="text-align: right;">
+                    <xsl:value-of select="cbc:InvoicedQuantity" />
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select="cbc:InvoicedQuantity/@unitCode" />
+                  </td>
+                  <td style="text-align: right;"><xsl:value-of select="cac:Price/cbc:PriceAmount" /></td>
+                  <td style="text-align: right;">%<xsl:value-of select="cac:TaxTotal/cac:TaxSubtotal/cbc:Percent" /></td>
+                  <td style="text-align: right;"><xsl:value-of select="cac:TaxTotal/cbc:TaxAmount" /></td>
+                  <td style="text-align: right; font-weight: 700;"><xsl:value-of select="cbc:LineExtensionAmount" /></td>
+                </tr>
+              </xsl:for-each>
+            </tbody>
+          </table>
+
+          <!-- ALT BÖLÜM: NOTLAR, BANKA/IBAN VE TOPLAMLAR TABLOSU -->
+          <div class="totals-wrap">
+            <div class="notes-col">
+              <div class="party-box">
+                <div class="party-title">NOTLAR &amp; AÇIKLAMALAR</div>
+                <xsl:for-each select="//n1:Invoice/cbc:Note">
+                  <div style="margin-bottom: 3px;"><xsl:value-of select="." /></div>
+                </xsl:for-each>
+                ${
+                  design.irsaliyeYerineGecer !== false
+                    ? `<div style="margin-top: 4px; font-weight: 700;">İrsaliye yerine geçer.</div>`
+                    : ""
+                }
+                <div style="margin-top: 4px; color: #475569; font-size: 9px;">${footerNote}</div>
+              </div>
+
+              ${
+                design.showBankIbanTable !== false && (bankName || bankIban || bankHolder)
+                  ? `<table class="bank-table">
+                      <thead>
+                        <tr>
+                          <th>Banka Adı</th>
+                          <th>Hesap Sahibi</th>
+                          <th>IBAN Numarası</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>${bankName || "-"}</td>
+                          <td>${bankHolder || sellerName}</td>
+                          <td>${bankIban || "-"}</td>
+                        </tr>
+                      </tbody>
+                    </table>`
+                  : ""
+              }
+            </div>
+
+            <div class="totals-col">
+              <table class="totals-table">
+                <tr>
+                  <th>Mal / Hizmet Toplam Tutarı</th>
+                  <td>
+                    <xsl:value-of select="//n1:Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount" />
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select="//n1:Invoice/cbc:DocumentCurrencyCode" />
+                  </td>
+                </tr>
+                <tr>
+                  <th>Toplam İskonto</th>
+                  <td>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount)">
+                        <xsl:value-of select="//n1:Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount" />
+                      </xsl:when>
+                      <xsl:otherwise>0.00</xsl:otherwise>
+                    </xsl:choose>
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select="//n1:Invoice/cbc:DocumentCurrencyCode" />
+                  </td>
+                </tr>
+                <tr>
+                  <th>Hesaplanan KDV</th>
+                  <td>
+                    <xsl:value-of select="//n1:Invoice/cac:TaxTotal/cbc:TaxAmount" />
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select="//n1:Invoice/cbc:DocumentCurrencyCode" />
+                  </td>
+                </tr>
+                <tr>
+                  <th>Vergiler Dahil Toplam Tutar</th>
+                  <td>
+                    <xsl:value-of select="//n1:Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount" />
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select="//n1:Invoice/cbc:DocumentCurrencyCode" />
+                  </td>
+                </tr>
+                <tr class="grand-row">
+                  <th>ÖDENECEK TUTAR</th>
+                  <td>
+                    <xsl:value-of select="//n1:Invoice/cac:LegalMonetaryTotal/cbc:PayableAmount" />
+                    <xsl:text> </xsl:text>
+                    <xsl:value-of select="//n1:Invoice/cbc:DocumentCurrencyCode" />
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
+}
+
+export function downloadOfficialGibXslt(
+  companySettings: CompanySettings,
+  designInput?: Partial<InvoiceDesignSettings>,
+  docType: "e_fatura" | "e_arsiv" = "e_fatura"
+): void {
+  const xsltContent = generateOfficialGibXsltStylesheet(companySettings, designInput, docType);
+  const blob = new Blob([xsltContent], { type: "application/xslt+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const rawCompName = (companySettings.companyName || companySettings.companyTitle || "Sirket")
+    .replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ_-]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 32);
+  const docLabel = docType === "e_arsiv" ? "eArsiv" : "eFatura";
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${rawCompName}_${docLabel}_Resmi_Tasarim.xslt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 /* ============================================================================
    INTERACTIVE E-FATURA & E-ARŞİV DESIGN CUSTOMIZER PANEL
    ============================================================================ */
@@ -2030,6 +2639,7 @@ export interface InvoiceDesignCustomizerBarProps {
   onChangePreviewDocType: (mode: "auto" | "e_fatura" | "e_arsiv") => void;
   onChangeDesign: (next: Partial<InvoiceDesignSettings>) => void;
   onSaveToCompanySettings?: (updatedSettings: CompanySettings) => void;
+  isAdmin?: boolean;
 }
 
 export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProps> = ({
@@ -2039,6 +2649,7 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
   onChangePreviewDocType,
   onChangeDesign,
   onSaveToCompanySettings,
+  isAdmin = false,
 }) => {
   const activeCompanyId = useMemo(
     () => resolveTargetCompanyId(companySettings?.id),
@@ -2323,6 +2934,26 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
             <Sliders className="w-3.5 h-3.5" />
             <span>{isExpanded ? "Tasarım Ayarlarını Gizle" : "Detaylı Tasarım & Kaşe / Logo"}</span>
           </button>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() =>
+                downloadOfficialGibXslt(
+                  companySettings,
+                  { ...design, cssConfig },
+                  previewDocType === "e_arsiv" ? "e_arsiv" : "e_fatura"
+                )
+              }
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-red-700 hover:bg-red-800 text-white flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
+              title="Tasarlanan faturayı GİB UBL-TR 1.2 ve Mysoft uyumlu resmi .xslt şablon dosyası olarak indir"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>
+                XSLT İndir ({previewDocType === "e_arsiv" ? "e-Arşiv" : "e-Fatura"} .xslt)
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
