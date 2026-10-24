@@ -19,7 +19,6 @@ import { NavItem } from "./Sidebar";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import {
   OfficialGIBInvoicePaper,
-  InvoiceDesignCustomizerBar,
   resolveInvoiceDesignSettings,
   resolveOfficialEDocumentKind,
 } from "./OfficialGIBInvoicePaper";
@@ -369,16 +368,6 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Interactive e-Fatura & e-Arşiv Design Customizer Bar */}
-        <InvoiceDesignCustomizerBar
-          companySettings={companySettings}
-          design={localDesign}
-          previewDocType={previewDocType}
-          onChangePreviewDocType={setPreviewDocType}
-          onChangeDesign={(patch) => setLocalDesign((prev) => ({ ...prev, ...patch }))}
-          onSaveToCompanySettings={onSaveCompanySettings}
-        />
 
         {/* Official GİB e-Fatura / e-Arşiv Paper Container */}
         <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center print:bg-white print:p-0 print:border-none print:shadow-none">

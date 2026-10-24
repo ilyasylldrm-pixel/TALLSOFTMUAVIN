@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { CompanySettings, CompanyItem, isAdminOrSysAdmin, isCompanyMysoftMatched } from "../types";
+import {
+  CompanySettings,
+  CompanyItem,
+  Invoice,
+  InvoiceDesignConfig,
+  isAdminOrSysAdmin,
+  isCompanyMysoftMatched,
+} from "../types";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
@@ -43,6 +50,7 @@ import {
   AlertTriangle,
   Clock,
   History,
+  Hash,
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
 import { Logo } from "./Logo";
@@ -54,7 +62,17 @@ import {
   snoozeManualBackupReminder,
   simulateOverdueManualBackup,
   ManualBackupStatus,
+  updateCompanyItem,
 } from "../utils/storage";
+import {
+  getMysoftMappingDefaults,
+  getNextMysoftInvoiceNumber,
+  getLocalNextSequentialInvoiceNumber,
+} from "../services/mysoftEDocumentService";
+import {
+  OfficialGIBInvoicePaper,
+  InvoiceDesignCustomizerBar,
+} from "./OfficialGIBInvoicePaper";
 
 interface SettingsProps {
   settings: CompanySettings;
@@ -63,7 +81,7 @@ interface SettingsProps {
   onImportBackup?: (jsonStr: string) => boolean;
   onResetDemoData?: () => void;
   embedded?: boolean;
-  initialTab?: "theme" | "system" | "backup" | "cloud" | "github";
+  initialTab?: "theme" | "system" | "invoice_design" | "backup" | "cloud" | "github";
   companiesCount?: number;
   onOpenSubModule?: (sub: "companies" | "mysoft" | "logs") => void;
   currentUser?: UserProfile | null;
@@ -85,10 +103,20 @@ export const Settings: React.FC<SettingsProps> = ({
 }) => {
   const isAdmin = isAdminOrSysAdmin(currentUser);
   const isMysoftMatched = isCompanyMysoftMatched(activeCompany, settings);
-  const [activeTab, setActiveTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">(
+  const [activeTab, setActiveTab] = useState<"theme" | "system" | "invoice_design" | "backup" | "cloud" | "github">(
     initialTab === "github" && !isAdmin ? (embedded ? "system" : "theme") : initialTab || (embedded ? "system" : "theme")
   );
   const [formData, setFormData] = useState<CompanySettings>(settings);
+  const [invoiceDesign, setInvoiceDesign] = useState<InvoiceDesignConfig>(() => ({
+    template: settings.invoiceDesign?.template || "classic_gib",
+    primaryColor: settings.invoiceDesign?.primaryColor || "#8B0000",
+    showLogo: settings.invoiceDesign?.showLogo ?? Boolean(settings.logoUrl),
+    logoUrl: settings.invoiceDesign?.logoUrl || settings.logoUrl,
+    showStamp: settings.invoiceDesign?.showStamp ?? Boolean(settings.stampUrl),
+    stampUrl: settings.invoiceDesign?.stampUrl || settings.stampUrl,
+    customCss: settings.invoiceDesign?.customCss,
+  }));
+  const [previewDocType, setPreviewDocType] = useState<"e_fatura" | "e_arsiv">("e_fatura");
   const [backupStatus, setBackupStatus] = useState<ManualBackupStatus>(() =>
     getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings)
   );
@@ -102,6 +130,15 @@ export const Settings: React.FC<SettingsProps> = ({
 
   React.useEffect(() => {
     setFormData(settings);
+    setInvoiceDesign({
+      template: settings.invoiceDesign?.template || "classic_gib",
+      primaryColor: settings.invoiceDesign?.primaryColor || "#8B0000",
+      showLogo: settings.invoiceDesign?.showLogo ?? Boolean(settings.logoUrl),
+      logoUrl: settings.invoiceDesign?.logoUrl || settings.logoUrl,
+      showStamp: settings.invoiceDesign?.showStamp ?? Boolean(settings.stampUrl),
+      stampUrl: settings.invoiceDesign?.stampUrl || settings.stampUrl,
+      customCss: settings.invoiceDesign?.customCss,
+    });
     setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings));
   }, [settings, activeCompany?.id]);
 
@@ -169,9 +206,271 @@ export const Settings: React.FC<SettingsProps> = ({
   // Theme Context
   const { theme, setTheme, resetTheme } = useTheme();
 
+  // Mysoft Portaldaki Seriler & Ardışık Fatura Numarası state (Eşleştirilen Kullanıcı İçin)
+  const [availablePrefixes, setAvailablePrefixes] = useState<
+    Array<{ prefix: string; edocumentType?: string | number; year?: number; currentNumber?: number }>
+  >([]);
+  const [isLoadingSeries, setIsLoadingSeries] = useState(false);
+  const [eFaturaLastNumber, setEFaturaLastNumber] = useState<string>("");
+  const [eArsivLastNumber, setEArsivLastNumber] = useState<string>("");
+
+  const syncMatchedCompanyPrefixes = React.useCallback(
+    async (overrideVkn?: string) => {
+      const rawVkn =
+        overrideVkn ||
+        formData.tenantIdentifierNumber ||
+        formData.vkn ||
+        formData.tckn ||
+        formData.taxNumber ||
+        formData.vknTckn ||
+        activeCompany?.tenantIdentifierNumber ||
+        activeCompany?.vkn ||
+        activeCompany?.tckn ||
+        activeCompany?.taxNumber ||
+        "";
+      const cleanVkn = String(rawVkn).replace(/\D/g, "");
+      const currentYear = new Date().getFullYear();
+
+      const localEFat = getLocalNextSequentialInvoiceNumber("e_fatura");
+      const localEArs = getLocalNextSequentialInvoiceNumber("e_arsiv");
+
+      const baseEFatPrefix = (
+        formData.eFaturaPrefix ||
+        activeCompany?.eFaturaPrefix ||
+        (formData.defaultInvoicePrefix &&
+        formData.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+          ? formData.defaultInvoicePrefix
+          : "") ||
+        localEFat.prefix ||
+        "GIB"
+      )
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 3) || "GIB";
+
+      const baseEArsPrefix = (
+        formData.eArsivPrefix ||
+        activeCompany?.eArsivPrefix ||
+        localEArs.prefix ||
+        "EAR"
+      )
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 3) || "EAR";
+
+      if (cleanVkn.length !== 10 && cleanVkn.length !== 11) {
+        const defaultEFatNext =
+          formData.eFaturaNextNumber ||
+          activeCompany?.eFaturaNextNumber ||
+          `${baseEFatPrefix}${currentYear}${String(localEFat.nextSequence || 1).padStart(9, "0")}`;
+        const defaultEArsNext =
+          formData.eArsivNextNumber ||
+          activeCompany?.eArsivNextNumber ||
+          `${baseEArsPrefix}${currentYear}${String(localEArs.nextSequence || 1).padStart(9, "0")}`;
+        setAvailablePrefixes([
+          { prefix: baseEFatPrefix, edocumentType: "EFATURA", year: currentYear },
+          { prefix: baseEArsPrefix, edocumentType: "EARSIVFATURA", year: currentYear },
+        ]);
+        setEFaturaLastNumber(localEFat.lastInvoiceNumber || "");
+        setEArsivLastNumber(localEArs.lastInvoiceNumber || "");
+        setFormData((prev) => ({
+          ...prev,
+          eFaturaPrefix: prev.eFaturaPrefix || baseEFatPrefix,
+          eFaturaNextNumber: prev.eFaturaNextNumber || defaultEFatNext,
+          eArsivPrefix: prev.eArsivPrefix || baseEArsPrefix,
+          eArsivNextNumber: prev.eArsivNextNumber || defaultEArsNext,
+          defaultInvoicePrefix: prev.eFaturaPrefix || baseEFatPrefix,
+        }));
+        return;
+      }
+
+      setIsLoadingSeries(true);
+      try {
+        const [defaultsSettled, efatNextSettled, earsNextSettled] = await Promise.allSettled([
+          getMysoftMappingDefaults(cleanVkn),
+          getNextMysoftInvoiceNumber({
+            tenantIdentifierNumber: cleanVkn,
+            eDocumentType: "EFATURA",
+            year: currentYear,
+          }),
+          getNextMysoftInvoiceNumber({
+            tenantIdentifierNumber: cleanVkn,
+            eDocumentType: "EARSIVFATURA",
+            year: currentYear,
+          }),
+        ]);
+
+        const defaults = defaultsSettled.status === "fulfilled" ? defaultsSettled.value : null;
+        const efatNext = efatNextSettled.status === "fulfilled" ? efatNextSettled.value : null;
+        const earsNext = earsNextSettled.status === "fulfilled" ? earsNextSettled.value : null;
+
+        const resolvedEFatPrefix = (
+          (formData.eFaturaPrefix && formData.eFaturaPrefix !== "GIB" ? formData.eFaturaPrefix : "") ||
+          (activeCompany?.eFaturaPrefix && activeCompany.eFaturaPrefix !== "GIB"
+            ? activeCompany.eFaturaPrefix
+            : "") ||
+          (efatNext?.prefix && efatNext.prefix !== "GIB" ? efatNext.prefix : "") ||
+          (defaults?.eFaturaPrefix && defaults.eFaturaPrefix !== "GIB" ? defaults.eFaturaPrefix : "") ||
+          formData.eFaturaPrefix ||
+          activeCompany?.eFaturaPrefix ||
+          efatNext?.prefix ||
+          defaults?.eFaturaPrefix ||
+          baseEFatPrefix ||
+          "GIB"
+        )
+          .trim()
+          .toUpperCase()
+          .slice(0, 3);
+
+        const resolvedEArsPrefix = (
+          (formData.eArsivPrefix && formData.eArsivPrefix !== "EAR" ? formData.eArsivPrefix : "") ||
+          (activeCompany?.eArsivPrefix && activeCompany.eArsivPrefix !== "EAR"
+            ? activeCompany.eArsivPrefix
+            : "") ||
+          (earsNext?.prefix && earsNext.prefix !== "EAR" ? earsNext.prefix : "") ||
+          (defaults?.eArsivPrefix && defaults.eArsivPrefix !== "EAR" ? defaults.eArsivPrefix : "") ||
+          formData.eArsivPrefix ||
+          activeCompany?.eArsivPrefix ||
+          earsNext?.prefix ||
+          defaults?.eArsivPrefix ||
+          baseEArsPrefix ||
+          "EAR"
+        )
+          .trim()
+          .toUpperCase()
+          .slice(0, 3);
+
+        // Parse saved sequence if same prefix
+        const parseSavedSeq = (docNo?: string, pfx?: string) => {
+          if (!docNo || !pfx) return 0;
+          const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(docNo.trim());
+          if (m && m[1].toUpperCase() === pfx.toUpperCase() && Number(m[2]) === currentYear) {
+            return parseInt(m[3], 10) || 0;
+          }
+          return 0;
+        };
+
+        const efatSeq = Math.max(
+          1,
+          efatNext?.prefix?.toUpperCase() === resolvedEFatPrefix ? efatNext.nextSequence || 1 : 1,
+          defaults?.eFaturaPrefix?.toUpperCase() === resolvedEFatPrefix ? defaults.eFaturaSequence || 1 : 1,
+          localEFat.prefix?.toUpperCase() === resolvedEFatPrefix ? localEFat.nextSequence || 1 : 1,
+          parseSavedSeq(formData.eFaturaNextNumber || activeCompany?.eFaturaNextNumber, resolvedEFatPrefix),
+        );
+        const finalEFatNextNo = `${resolvedEFatPrefix}${currentYear}${String(efatSeq).padStart(9, "0")}`;
+        const finalEFatLastNo =
+          efatSeq > 1
+            ? `${resolvedEFatPrefix}${currentYear}${String(efatSeq - 1).padStart(9, "0")}`
+            : efatNext?.lastInvoiceNumber || defaults?.eFaturaLastNumber || localEFat.lastInvoiceNumber || "";
+
+        const earsSeq = Math.max(
+          1,
+          earsNext?.prefix?.toUpperCase() === resolvedEArsPrefix ? earsNext.nextSequence || 1 : 1,
+          defaults?.eArsivPrefix?.toUpperCase() === resolvedEArsPrefix ? defaults.eArsivSequence || 1 : 1,
+          localEArs.prefix?.toUpperCase() === resolvedEArsPrefix ? localEArs.nextSequence || 1 : 1,
+          parseSavedSeq(formData.eArsivNextNumber || activeCompany?.eArsivNextNumber, resolvedEArsPrefix),
+        );
+        const finalEArsNextNo = `${resolvedEArsPrefix}${currentYear}${String(earsSeq).padStart(9, "0")}`;
+        const finalEArsLastNo =
+          earsSeq > 1
+            ? `${resolvedEArsPrefix}${currentYear}${String(earsSeq - 1).padStart(9, "0")}`
+            : earsNext?.lastInvoiceNumber || defaults?.eArsivLastNumber || localEArs.lastInvoiceNumber || "";
+
+        const mergedBadges: Array<{
+          prefix: string;
+          edocumentType?: string | number;
+          year?: number;
+          currentNumber?: number;
+        }> = [...(defaults?.prefixes || [])];
+        if (!mergedBadges.some((b) => String(b.prefix || "").toUpperCase() === resolvedEFatPrefix)) {
+          mergedBadges.unshift({
+            prefix: resolvedEFatPrefix,
+            edocumentType: "EFATURA",
+            year: currentYear,
+            currentNumber: efatSeq > 1 ? efatSeq - 1 : 0,
+          });
+        }
+        if (!mergedBadges.some((b) => String(b.prefix || "").toUpperCase() === resolvedEArsPrefix)) {
+          mergedBadges.push({
+            prefix: resolvedEArsPrefix,
+            edocumentType: "EARSIVFATURA",
+            year: currentYear,
+            currentNumber: earsSeq > 1 ? earsSeq - 1 : 0,
+          });
+        }
+
+        setAvailablePrefixes(mergedBadges);
+        setEFaturaLastNumber(finalEFatLastNo);
+        setEArsivLastNumber(finalEArsLastNo);
+
+        setFormData((prev) => ({
+          ...prev,
+          eFaturaPrefix: resolvedEFatPrefix,
+          eFaturaNextNumber: finalEFatNextNo,
+          eArsivPrefix: resolvedEArsPrefix,
+          eArsivNextNumber: finalEArsNextNo,
+          defaultInvoicePrefix: resolvedEFatPrefix,
+        }));
+      } catch {
+        // Fallback silently
+      } finally {
+        setIsLoadingSeries(false);
+      }
+    },
+    [
+      formData.tenantIdentifierNumber,
+      formData.vkn,
+      formData.tckn,
+      formData.taxNumber,
+      formData.vknTckn,
+      formData.eFaturaPrefix,
+      formData.eArsivPrefix,
+      formData.eFaturaNextNumber,
+      formData.eArsivNextNumber,
+      formData.defaultInvoicePrefix,
+      activeCompany?.id,
+      activeCompany?.tenantIdentifierNumber,
+      activeCompany?.vkn,
+      activeCompany?.tckn,
+      activeCompany?.taxNumber,
+      activeCompany?.eFaturaPrefix,
+      activeCompany?.eArsivPrefix,
+      activeCompany?.eFaturaNextNumber,
+      activeCompany?.eArsivNextNumber,
+    ]
+  );
+
+  React.useEffect(() => {
+    void syncMatchedCompanyPrefixes();
+  }, [activeCompany?.id]);
+
+  const persistFormatParamsToCompanyAndSettings = (nextForm: CompanySettings) => {
+    setFormData(nextForm);
+    onSaveSettings(nextForm);
+    if (activeCompany?.id) {
+      updateCompanyItem({
+        ...activeCompany,
+        eFaturaPrefix: (nextForm.eFaturaPrefix || "GIB").trim().toUpperCase().slice(0, 3),
+        eFaturaNextNumber: nextForm.eFaturaNextNumber,
+        eArsivPrefix: (nextForm.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3),
+        eArsivNextNumber: nextForm.eArsivNextNumber,
+        defaultInvoicePrefix: (
+          nextForm.eFaturaPrefix ||
+          nextForm.defaultInvoicePrefix ||
+          "GIB"
+        )
+          .trim()
+          .toUpperCase()
+          .slice(0, 3),
+      });
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveSettings(formData);
+    persistFormatParamsToCompanyAndSettings(formData);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -300,6 +599,20 @@ export const Settings: React.FC<SettingsProps> = ({
         >
           <Sliders className="w-4 h-4" />
           <span>Ticari Parametreler (Yol & Yemek Yardımı)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("invoice_design")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === "invoice_design"
+              ? "text-white shadow-2xs"
+              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+          }`}
+          style={activeTab === "invoice_design" ? { backgroundColor: theme.primaryColor } : {}}
+        >
+          <LayoutTemplate className="w-4 h-4" />
+          <span>e-Fatura & e-Arşiv Tasarım</span>
         </button>
 
         <button
@@ -738,7 +1051,14 @@ export const Settings: React.FC<SettingsProps> = ({
                 <FileText className="w-4 h-4 text-purple-600" />
                 Fatura & Belge Format Parametreleri
               </span>
-              <span className="text-[10px] text-slate-500 font-normal">Varsayılan ticari parametreler</span>
+              <button
+                type="button"
+                onClick={() => setActiveTab("invoice_design")}
+                className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <LayoutTemplate className="w-3.5 h-3.5 text-red-700" />
+                <span>e-Fatura & e-Arşiv Tasarım Stüdyosunu Aç</span>
+              </button>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -760,14 +1080,43 @@ export const Settings: React.FC<SettingsProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  E-Fatura Seri Öneki
+                  E-Fatura Seri Öneki (Varsayılan)
                 </label>
                 <input
                   type="text"
-                  placeholder="ör: MUV2026"
-                  value={formData.defaultInvoicePrefix || "MUV2026"}
-                  onChange={(e) => setFormData({ ...formData, defaultInvoicePrefix: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold"
+                  maxLength={3}
+                  placeholder="ör: GIB"
+                  value={
+                    (
+                      formData.eFaturaPrefix ||
+                      (formData.defaultInvoicePrefix &&
+                      formData.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+                        ? formData.defaultInvoicePrefix
+                        : "GIB")
+                    )
+                      .trim()
+                      .toUpperCase()
+                      .slice(0, 3)
+                  }
+                  onChange={(e) => {
+                    const p = e.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9]/g, "")
+                      .slice(0, 3);
+                    const yr = new Date().getFullYear();
+                    const prevSeq =
+                      (formData.eFaturaNextNumber || "").length >= 7
+                        ? (formData.eFaturaNextNumber || "").slice(7)
+                        : "000000001";
+                    const nextNum = `${p.padEnd(3, "X")}${yr}${prevSeq}`;
+                    setFormData({
+                      ...formData,
+                      eFaturaPrefix: p,
+                      defaultInvoicePrefix: p,
+                      eFaturaNextNumber: nextNum,
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold uppercase"
                 />
               </div>
 
@@ -785,6 +1134,256 @@ export const Settings: React.FC<SettingsProps> = ({
                   <option value="1">%1 (Temel Gıda / Tarım)</option>
                   <option value="0">%0 (KDV İstisnası)</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Mysoft VKN & TCKN Eşleştirme -> Portaldaki Seriler & Ardışık Fatura Numaraları */}
+            <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-extrabold text-purple-950 flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5 text-purple-600" />
+                    <span>
+                      Portaldaki Seriler — Mysoft e-Fatura &amp; e-Arşiv Ön Ekleri ve Ardışık Fatura Numarası
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-purple-800/80 mt-0.5">
+                    Mysoft VKN &amp; TCKN Eşleştirme masasından eşleştirilen kullanıcının resmi e-Fatura ve e-Arşiv ön ekleri. Fatura kesilirken &ldquo;Resmi e-fatura / e-arşiv olarak kes (Mysoft)&rdquo; seçildiğinde bu ön ekler ve ardışık sıra numarası otomatik kullanılır.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void syncMatchedCompanyPrefixes()}
+                  disabled={isLoadingSeries}
+                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-purple-100 text-purple-800 border border-purple-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingSeries ? "animate-spin" : ""}`} />
+                  <span>{isLoadingSeries ? "Sorgulanıyor..." : "Portaldaki Serileri Yenile"}</span>
+                </button>
+              </div>
+
+              {/* Portaldaki Seriler Rozetleri */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] font-bold text-purple-800">
+                  Portaldaki Seriler:
+                </span>
+                {(availablePrefixes.length > 0
+                  ? availablePrefixes
+                  : [
+                      {
+                        prefix: (formData.eFaturaPrefix || "GIB").trim().toUpperCase().slice(0, 3),
+                        edocumentType: "EFATURA",
+                      },
+                      {
+                        prefix: (formData.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3),
+                        edocumentType: "EARSIVFATURA",
+                      },
+                    ]
+                ).map((p, idx) => {
+                  const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                  const isEArs =
+                    Number(p.edocumentType) === 2 ||
+                    String(p.edocumentType || "").toUpperCase().includes("ARSIV") ||
+                    pfx === (formData.eArsivPrefix || "EAR").toUpperCase();
+                  const isSelected = isEArs
+                    ? (formData.eArsivPrefix || "EAR").toUpperCase() === pfx
+                    : (formData.eFaturaPrefix || "GIB").toUpperCase() === pfx;
+                  return (
+                    <button
+                      key={`${pfx}_${idx}`}
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        const rowSeq =
+                          p.currentNumber !== undefined ? Number(p.currentNumber) + 1 : 1;
+                        if (isEArs) {
+                          const localSeq = getLocalNextSequentialInvoiceNumber("e_arsiv");
+                          const nextSeq = Math.max(
+                            rowSeq,
+                            localSeq.prefix?.toUpperCase() === pfx ? localSeq.nextSequence : 1
+                          );
+                          const nextDocNo = `${pfx}${yr}${String(nextSeq).padStart(9, "0")}`;
+                          const updated: CompanySettings = {
+                            ...formData,
+                            eArsivPrefix: pfx,
+                            eArsivNextNumber: nextDocNo,
+                          };
+                          persistFormatParamsToCompanyAndSettings(updated);
+                        } else {
+                          const localSeq = getLocalNextSequentialInvoiceNumber("e_fatura");
+                          const nextSeq = Math.max(
+                            rowSeq,
+                            localSeq.prefix?.toUpperCase() === pfx ? localSeq.nextSequence : 1
+                          );
+                          const nextDocNo = `${pfx}${yr}${String(nextSeq).padStart(9, "0")}`;
+                          const updated: CompanySettings = {
+                            ...formData,
+                            eFaturaPrefix: pfx,
+                            defaultInvoicePrefix: pfx,
+                            eFaturaNextNumber: nextDocNo,
+                          };
+                          persistFormatParamsToCompanyAndSettings(updated);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border cursor-pointer transition-all flex items-center gap-1 ${
+                        isSelected
+                          ? isEArs
+                            ? "bg-sky-600 text-white border-sky-600 shadow-2xs"
+                            : "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                          : "bg-white hover:bg-purple-100 text-purple-900 border-purple-200"
+                      }`}
+                    >
+                      <span>{pfx}</span>
+                      <span className="opacity-85">({isEArs ? "e-Arşiv" : "e-Fatura"})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {/* e-Fatura Ön Eki & Sıradaki Ardışık No */}
+                <div className="p-3 rounded-xl bg-white border border-emerald-200 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>e-Fatura Ön Eki &amp; Sıradaki Ardışık No</span>
+                    </span>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                      e-Fatura
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={3}
+                      value={(formData.eFaturaPrefix || "GIB").toUpperCase()}
+                      onChange={(e) => {
+                        const p = e.target.value
+                          .toUpperCase()
+                          .replace(/[^A-Z0-9]/g, "")
+                          .slice(0, 3);
+                        const yr = new Date().getFullYear();
+                        const prevSeq =
+                          (formData.eFaturaNextNumber || "").length >= 7
+                            ? (formData.eFaturaNextNumber || "").slice(7)
+                            : "000000001";
+                        const updated: CompanySettings = {
+                          ...formData,
+                          eFaturaPrefix: p,
+                          defaultInvoicePrefix: p,
+                          eFaturaNextNumber: `${p.padEnd(3, "X")}${yr}${prevSeq}`,
+                        };
+                        persistFormatParamsToCompanyAndSettings(updated);
+                      }}
+                      className="w-16 bg-emerald-50/50 border border-emerald-300 rounded-lg px-2 py-1.5 text-xs font-mono font-extrabold text-center text-emerald-950 uppercase"
+                      title="3 Haneli e-Fatura Ön Eki"
+                    />
+                    <input
+                      type="text"
+                      value={
+                        formData.eFaturaNextNumber ||
+                        `${(formData.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase().trim();
+                        const pfx =
+                          val.length >= 3
+                            ? val.slice(0, 3).replace(/[^A-Z0-9]/g, "")
+                            : formData.eFaturaPrefix || "GIB";
+                        const updated: CompanySettings = {
+                          ...formData,
+                          eFaturaPrefix: pfx || formData.eFaturaPrefix,
+                          defaultInvoicePrefix: pfx || formData.defaultInvoicePrefix,
+                          eFaturaNextNumber: val,
+                        };
+                        persistFormatParamsToCompanyAndSettings(updated);
+                      }}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900"
+                      placeholder="GIB2026000000001"
+                    />
+                  </div>
+                  <p className="text-[10px] text-emerald-700 font-mono">
+                    {eFaturaLastNumber
+                      ? `Son Kesilen: ${eFaturaLastNumber} → Sıradaki: ${
+                          formData.eFaturaNextNumber || ""
+                        }`
+                      : `Sıradaki Ardışık e-Fatura No: ${
+                          formData.eFaturaNextNumber ||
+                          `${(formData.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
+                        }`}
+                  </p>
+                </div>
+
+                {/* e-Arşiv Ön Eki & Sıradaki Ardışık No */}
+                <div className="p-3 rounded-xl bg-white border border-sky-200 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-sky-950 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-sky-500" />
+                      <span>e-Arşiv Ön Eki &amp; Sıradaki Ardışık No</span>
+                    </span>
+                    <span className="text-[9px] font-extrabold bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded">
+                      e-Arşiv
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={3}
+                      value={(formData.eArsivPrefix || "EAR").toUpperCase()}
+                      onChange={(e) => {
+                        const p = e.target.value
+                          .toUpperCase()
+                          .replace(/[^A-Z0-9]/g, "")
+                          .slice(0, 3);
+                        const yr = new Date().getFullYear();
+                        const prevSeq =
+                          (formData.eArsivNextNumber || "").length >= 7
+                            ? (formData.eArsivNextNumber || "").slice(7)
+                            : "000000001";
+                        const updated: CompanySettings = {
+                          ...formData,
+                          eArsivPrefix: p,
+                          eArsivNextNumber: `${p.padEnd(3, "X")}${yr}${prevSeq}`,
+                        };
+                        persistFormatParamsToCompanyAndSettings(updated);
+                      }}
+                      className="w-16 bg-sky-50/50 border border-sky-300 rounded-lg px-2 py-1.5 text-xs font-mono font-extrabold text-center text-sky-950 uppercase"
+                      title="3 Haneli e-Arşiv Ön Eki"
+                    />
+                    <input
+                      type="text"
+                      value={
+                        formData.eArsivNextNumber ||
+                        `${(formData.eArsivPrefix || "EAR").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase().trim();
+                        const pfx =
+                          val.length >= 3
+                            ? val.slice(0, 3).replace(/[^A-Z0-9]/g, "")
+                            : formData.eArsivPrefix || "EAR";
+                        const updated: CompanySettings = {
+                          ...formData,
+                          eArsivPrefix: pfx || formData.eArsivPrefix,
+                          eArsivNextNumber: val,
+                        };
+                        persistFormatParamsToCompanyAndSettings(updated);
+                      }}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900"
+                      placeholder="EAR2026000000001"
+                    />
+                  </div>
+                  <p className="text-[10px] text-sky-700 font-mono">
+                    {eArsivLastNumber
+                      ? `Son Kesilen: ${eArsivLastNumber} → Sıradaki: ${
+                          formData.eArsivNextNumber || ""
+                        }`
+                      : `Sıradaki Ardışık e-Arşiv No: ${
+                          formData.eArsivNextNumber ||
+                          `${(formData.eArsivPrefix || "EAR").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
+                        }`}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -1242,6 +1841,92 @@ export const Settings: React.FC<SettingsProps> = ({
             </button>
           </div>
         </form>
+      )}
+
+      {/* ─── TAB 2.5: E-FATURA & E-ARŞİV TASARIM STÜDYOSU ─── */}
+      {activeTab === "invoice_design" && (
+        <div className="space-y-6">
+          <div className="bg-linear-to-r from-red-900 via-slate-900 to-indigo-950 text-white p-5 rounded-2xl border border-red-800/60 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-400/30 flex items-center justify-center text-red-300 shrink-0">
+                <LayoutTemplate className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-red-800/80 text-red-100 border border-red-700">
+                    Sistem Ayarları • Resmi e-Belge XSLT & Tasarım Stüdyosu
+                  </span>
+                </div>
+                <h2 className="text-base font-bold mt-1">
+                  e-Fatura & e-Arşiv Tasarım Ayarları
+                </h2>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Şirketinizin e-Fatura ve e-Arşiv Fatura şablonunu, kurumsal logosunu, kaşe/imza görselini, tema rengini ve GİB amblemi / imza kutusu konumlarını buradan özelleştirip kaydedebilirsiniz.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <InvoiceDesignCustomizerBar
+            companySettings={formData}
+            design={invoiceDesign}
+            previewDocType={previewDocType}
+            onChangePreviewDocType={setPreviewDocType}
+            onChangeDesign={(patch) => setInvoiceDesign((prev) => ({ ...prev, ...patch }))}
+            onSaveToCompanySettings={(updatedSettings) => {
+              setFormData(updatedSettings);
+              onSaveSettings(updatedSettings);
+            }}
+          />
+
+          <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
+            <OfficialGIBInvoicePaper
+              invoice={
+                {
+                  id: "sample_preview_inv",
+                  invoiceNumber:
+                    previewDocType === "e_arsiv"
+                      ? formData.eArsivNextNumber || `${formData.eArsivPrefix || "EAR"}${new Date().getFullYear()}000000001`
+                      : formData.eFaturaNextNumber || `${formData.eFaturaPrefix || "GIB"}${new Date().getFullYear()}000000001`,
+                  type: "sales",
+                  eDocumentType: previewDocType,
+                  invoiceScenario: previewDocType === "e_arsiv" ? "EARSIVFATURA" : "TICARIFATURA",
+                  invoiceProfileType: "SATIS",
+                  contactId: "sample_contact",
+                  contactName: "ÖRNEK ALICI KURUMSAL TEKNOLOJİ A.Ş.",
+                  issueDate: new Date().toISOString().split("T")[0],
+                  dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+                  items: [
+                    {
+                      id: "sample_item_1",
+                      description: "Kurumsal Yazılım Lisans ve Entegrasyon Hizmeti",
+                      quantity: 1,
+                      unit: "Adet",
+                      unitPrice: 15000,
+                      vatRate: 20,
+                      totalWithoutVat: 15000,
+                      vatAmount: 3000,
+                      totalWithVat: 18000,
+                    },
+                  ],
+                  subtotal: 15000,
+                  totalVat: 3000,
+                  grandTotal: 18000,
+                  paidAmount: 0,
+                  remainingAmount: 18000,
+                  status: "sent",
+                  currency: "TRY",
+                  notes: "İşbu belge Sistem Ayarları > e-Fatura & e-Arşiv Tasarım canlı önizleme şablonudur.",
+                  createdAt: new Date().toISOString().split("T")[0],
+                } as Invoice
+              }
+              companySettings={{ ...formData, invoiceDesign }}
+              designOverride={invoiceDesign}
+              previewDocTypeOverride={previewDocType}
+              paperId="settings-invoice-design-preview-paper"
+            />
+          </div>
+        </div>
       )}
 
       {/* ─── TAB 3: BACKUP & DATA ─── */}

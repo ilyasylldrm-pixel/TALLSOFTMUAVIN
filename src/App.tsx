@@ -135,6 +135,7 @@ import { readStoredMysoftTenantVkn, writeStoredMysoftTenantVkn } from "./utils/m
 import {
   upsertOutgoingEDocumentFromSalesInvoice,
   removeOutgoingEDocumentForInvoice,
+  getLocalNextSequentialInvoiceNumber,
 } from "./services/mysoftEDocumentService";
 import { CompanyModal } from "./components/CompanyModal";
 
@@ -1693,6 +1694,7 @@ export default function App() {
                   eFaturaNextNumber: nextSerialNo,
                 }),
           };
+          saveStoredData("SETTINGS", updatedSettings, activeCompanyId);
 
           const activeComp = companies.find((c) => c.id === activeCompanyId);
           if (activeComp) {
@@ -2017,6 +2019,7 @@ export default function App() {
                     eFaturaNextNumber: nextSerialNo,
                   }),
             };
+            saveStoredData("SETTINGS", updatedSettings, activeCompanyId);
 
             const activeComp = companies.find((c) => c.id === activeCompanyId);
             if (activeComp) {
@@ -3336,15 +3339,8 @@ export default function App() {
   };
 
   const handleConvertQuoteToInvoice = (quote: Quote) => {
-    const currentYear = new Date().getFullYear();
-    const prefix = (data.settings.eFaturaPrefix || data.settings.defaultInvoicePrefix || "GIB")
-      .trim()
-      .toUpperCase()
-      .slice(0, 3)
-      .padEnd(3, "X");
-    const nextSeq = String(data.invoices.length + 1).padStart(9, "0");
-    const resolvedInvoiceNo =
-      data.settings.eFaturaNextNumber || `${prefix}${currentYear}${nextSeq}`;
+    const seqInfo = getLocalNextSequentialInvoiceNumber("e_fatura", activeCompanyId);
+    const resolvedInvoiceNo = seqInfo.nextInvoiceNumber;
 
     const newInvoice: Invoice = {
       id: "inv_" + Date.now(),
@@ -3517,6 +3513,12 @@ export default function App() {
         defaultBankName: normalizedSettings.defaultBankName ?? existingComp.defaultBankName,
         defaultBankIban: normalizedSettings.defaultBankIban ?? existingComp.defaultBankIban,
         tenantIdentifierNumber: normalizedSettings.tenantIdentifierNumber ?? existingComp.tenantIdentifierNumber,
+        eFaturaPrefix: normalizedSettings.eFaturaPrefix ?? existingComp.eFaturaPrefix,
+        eFaturaNextNumber: normalizedSettings.eFaturaNextNumber ?? existingComp.eFaturaNextNumber,
+        eArsivPrefix: normalizedSettings.eArsivPrefix ?? existingComp.eArsivPrefix,
+        eArsivNextNumber: normalizedSettings.eArsivNextNumber ?? existingComp.eArsivNextNumber,
+        defaultInvoicePrefix: normalizedSettings.defaultInvoicePrefix ?? existingComp.defaultInvoicePrefix,
+        invoiceDesign: normalizedSettings.invoiceDesign ?? existingComp.invoiceDesign,
         logoUrl: normalizedSettings.logoUrl || "/logo.svg",
         logoScale: normalizedSettings.logoScale ?? 1,
       });

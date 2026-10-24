@@ -53,6 +53,7 @@ import {
   type MysoftNextInvoiceNumberResult,
   listMysoftTenants,
   normalizeMysoftTenantIdentifier,
+  readPersistedEDocuments,
 } from "../services/mysoftEDocumentService";
 import {
   buildMysoftInvoiceOutboxPayload,
@@ -888,7 +889,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [mysoftMappingDefaults, setMysoftMappingDefaults] = useState<MysoftMappingDefaults | null>(null);
   const [selectedEFaturaPrefix, setSelectedEFaturaPrefix] = useState<string>(
     () =>
-      (companySettings.eFaturaPrefix || companySettings.defaultInvoicePrefix || "GIB")
+      (
+        companySettings.eFaturaPrefix ||
+        (companySettings.defaultInvoicePrefix &&
+        companySettings.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+          ? companySettings.defaultInvoicePrefix
+          : "") ||
+        "GIB"
+      )
         .trim()
         .toUpperCase()
         .slice(0, 3) || "GIB",
@@ -897,6 +905,39 @@ export const Invoices: React.FC<InvoicesProps> = ({
     () => (companySettings.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3) || "EAR",
   );
   const [isLoadingMysoftSeries, setIsLoadingMysoftSeries] = useState<boolean>(false);
+
+  // Sync e-Fatura & e-Arşiv prefixes when Fatura & Belge Format Parametreleri (companySettings) changes
+  useEffect(() => {
+    const nextEFat = (
+      companySettings.eFaturaPrefix ||
+      (companySettings.defaultInvoicePrefix &&
+      companySettings.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+        ? companySettings.defaultInvoicePrefix
+        : "") ||
+      ""
+    )
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 3);
+    if (nextEFat) {
+      setSelectedEFaturaPrefix(nextEFat);
+    }
+    const nextEArs = (companySettings.eArsivPrefix || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 3);
+    if (nextEArs) {
+      setSelectedEArsivPrefix(nextEArs);
+    }
+  }, [
+    companySettings.eFaturaPrefix,
+    companySettings.eArsivPrefix,
+    companySettings.defaultInvoicePrefix,
+    companySettings.eFaturaNextNumber,
+    companySettings.eArsivNextNumber,
+  ]);
   const [isManualInvoiceNumber, setIsManualInvoiceNumber] = useState<boolean>(false);
 
   useEffect(() => {
@@ -957,14 +998,41 @@ export const Invoices: React.FC<InvoicesProps> = ({
         const efatNext = efatNextSettled.status === "fulfilled" ? efatNextSettled.value : null;
         const earsNext = earsNextSettled.status === "fulfilled" ? earsNextSettled.value : null;
 
-        const localSalesDocNos = invoices
-          .filter((inv) => inv.type === "sales" && inv.status !== "draft")
-          .map((inv) => inv.invoiceNumber)
+        const persistedOutboxDocNos = readPersistedEDocuments()
+          .filter(
+            (doc) =>
+              doc.direction === "outbox" ||
+              doc.direction === "outgoing" ||
+              doc.canonicalDirection === "outgoing",
+          )
+          .map((doc) => String(doc.documentNo || doc.documentNumber || ""))
           .filter(Boolean);
 
+        const localSalesDocNos = [
+          ...invoices
+            .filter((inv) => inv.type === "sales" && inv.status !== "draft")
+            .map((inv) => inv.invoiceNumber)
+            .filter(Boolean),
+          ...persistedOutboxDocNos,
+        ];
+
+        const savedEFatPfx = (
+          companySettings.eFaturaPrefix ||
+          (companySettings.defaultInvoicePrefix &&
+          companySettings.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+            ? companySettings.defaultInvoicePrefix
+            : "") ||
+          ""
+        )
+          .trim()
+          .toUpperCase()
+          .slice(0, 3);
+
         const resolvedEFatPrefix = (
+          (savedEFatPfx && savedEFatPfx !== "GIB" ? savedEFatPfx : "") ||
           (efatNext?.prefix && efatNext.prefix !== "GIB" ? efatNext.prefix : "") ||
           (defaults?.eFaturaPrefix && defaults.eFaturaPrefix !== "GIB" ? defaults.eFaturaPrefix : "") ||
+          savedEFatPfx ||
           efatNext?.prefix ||
           defaults?.eFaturaPrefix ||
           "GIB"
@@ -973,10 +1041,28 @@ export const Invoices: React.FC<InvoicesProps> = ({
           .toUpperCase()
           .slice(0, 3);
 
+        let savedEFatNextSeq = 0;
+        if (companySettings.eFaturaNextNumber) {
+          const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(
+            companySettings.eFaturaNextNumber.trim(),
+          );
+          if (
+            m &&
+            m[1].toUpperCase() === resolvedEFatPrefix &&
+            Number(m[2]) === currentYear
+          ) {
+            savedEFatNextSeq = parseInt(m[3], 10) || 0;
+          }
+        }
+
         const efatMerged = calculateNextInvoiceNumber({
           existingDocNos: [
-            efatNext?.lastInvoiceNumber,
-            defaults?.eFaturaLastNumber,
+            efatNext?.prefix?.toUpperCase() === resolvedEFatPrefix
+              ? efatNext?.lastInvoiceNumber
+              : undefined,
+            defaults?.eFaturaPrefix?.toUpperCase() === resolvedEFatPrefix
+              ? defaults?.eFaturaLastNumber
+              : undefined,
             ...localSalesDocNos,
           ].filter((x): x is string => Boolean(x)),
           targetPrefix: resolvedEFatPrefix,
@@ -985,8 +1071,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
         });
 
         const finalEFatSeq = Math.max(
-          efatNext?.nextSequence || 1,
-          defaults?.eFaturaSequence || 1,
+          efatNext?.prefix?.toUpperCase() === resolvedEFatPrefix
+            ? efatNext?.nextSequence || 1
+            : 1,
+          defaults?.eFaturaPrefix?.toUpperCase() === resolvedEFatPrefix
+            ? defaults?.eFaturaSequence || 1
+            : 1,
+          savedEFatNextSeq,
           efatMerged.nextSequence || 1,
         );
         const finalEFatNextNo = `${resolvedEFatPrefix}${currentYear}${String(finalEFatSeq).padStart(9, "0")}`;
@@ -995,9 +1086,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
             ? `${resolvedEFatPrefix}${currentYear}${String(finalEFatSeq - 1).padStart(9, "0")}`
             : efatNext?.lastInvoiceNumber || defaults?.eFaturaLastNumber;
 
+        const savedEArsPfx = (companySettings.eArsivPrefix || "")
+          .trim()
+          .toUpperCase()
+          .slice(0, 3);
+
         const resolvedEArsPrefix = (
+          (savedEArsPfx && savedEArsPfx !== "EAR" ? savedEArsPfx : "") ||
           (earsNext?.prefix && earsNext.prefix !== "EAR" ? earsNext.prefix : "") ||
           (defaults?.eArsivPrefix && defaults.eArsivPrefix !== "EAR" ? defaults.eArsivPrefix : "") ||
+          savedEArsPfx ||
           earsNext?.prefix ||
           defaults?.eArsivPrefix ||
           "EAR"
@@ -1006,10 +1104,28 @@ export const Invoices: React.FC<InvoicesProps> = ({
           .toUpperCase()
           .slice(0, 3);
 
+        let savedEArsNextSeq = 0;
+        if (companySettings.eArsivNextNumber) {
+          const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(
+            companySettings.eArsivNextNumber.trim(),
+          );
+          if (
+            m &&
+            m[1].toUpperCase() === resolvedEArsPrefix &&
+            Number(m[2]) === currentYear
+          ) {
+            savedEArsNextSeq = parseInt(m[3], 10) || 0;
+          }
+        }
+
         const earsMerged = calculateNextInvoiceNumber({
           existingDocNos: [
-            earsNext?.lastInvoiceNumber,
-            defaults?.eArsivLastNumber,
+            earsNext?.prefix?.toUpperCase() === resolvedEArsPrefix
+              ? earsNext?.lastInvoiceNumber
+              : undefined,
+            defaults?.eArsivPrefix?.toUpperCase() === resolvedEArsPrefix
+              ? defaults?.eArsivLastNumber
+              : undefined,
             ...localSalesDocNos,
           ].filter((x): x is string => Boolean(x)),
           targetPrefix: resolvedEArsPrefix,
@@ -1018,8 +1134,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
         });
 
         const finalEArsSeq = Math.max(
-          earsNext?.nextSequence || 1,
-          defaults?.eArsivSequence || 1,
+          earsNext?.prefix?.toUpperCase() === resolvedEArsPrefix
+            ? earsNext?.nextSequence || 1
+            : 1,
+          defaults?.eArsivPrefix?.toUpperCase() === resolvedEArsPrefix
+            ? defaults?.eArsivSequence || 1
+            : 1,
+          savedEArsNextSeq,
           earsMerged.nextSequence || 1,
         );
         const finalEArsNextNo = `${resolvedEArsPrefix}${currentYear}${String(finalEArsSeq).padStart(9, "0")}`;
@@ -1031,6 +1152,32 @@ export const Invoices: React.FC<InvoicesProps> = ({
         setSelectedEFaturaPrefix(resolvedEFatPrefix);
         setSelectedEArsivPrefix(resolvedEArsPrefix);
 
+        const mergedPrefixes = [...(defaults?.prefixes || [])];
+        if (
+          !mergedPrefixes.some(
+            (p) => String(p.prefix || "").toUpperCase() === resolvedEFatPrefix,
+          )
+        ) {
+          mergedPrefixes.unshift({
+            prefix: resolvedEFatPrefix,
+            edocumentType: "EFATURA",
+            year: currentYear,
+            currentNumber: finalEFatSeq > 1 ? finalEFatSeq - 1 : 0,
+          });
+        }
+        if (
+          !mergedPrefixes.some(
+            (p) => String(p.prefix || "").toUpperCase() === resolvedEArsPrefix,
+          )
+        ) {
+          mergedPrefixes.push({
+            prefix: resolvedEArsPrefix,
+            edocumentType: "EARSIVFATURA",
+            year: currentYear,
+            currentNumber: finalEArsSeq > 1 ? finalEArsSeq - 1 : 0,
+          });
+        }
+
         setMysoftMappingDefaults({
           vknTckn: vkn,
           eFaturaPrefix: resolvedEFatPrefix,
@@ -1041,7 +1188,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
           eArsivLastNumber: finalEArsLastNo,
           eArsivNextNumber: finalEArsNextNo,
           eArsivSequence: finalEArsSeq,
-          prefixes: defaults?.prefixes || [],
+          prefixes: mergedPrefixes,
         });
       } catch {
         // Keep current prefixes/settings
@@ -1055,6 +1202,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
       companySettings.vkn,
       companySettings.tckn,
       companySettings.taxNumber,
+      companySettings.eFaturaPrefix,
+      companySettings.eArsivPrefix,
+      companySettings.defaultInvoicePrefix,
+      companySettings.eFaturaNextNumber,
+      companySettings.eArsivNextNumber,
       invoices,
     ],
   );
@@ -1090,39 +1242,124 @@ export const Invoices: React.FC<InvoicesProps> = ({
           eDocumentType: targetDocType === "e_arsiv" ? "EARSIVFATURA" : "EFATURA",
         });
 
-        // Localdeki faturaları da kontrol ederek çakışmayı önle
-        const localDocNos = invoices
-          .filter((inv) => inv.type === "sales")
-          .map((inv) => inv.invoiceNumber)
+        // Localdeki faturaları ve Mysoft giden e-belgeleri de kontrol ederek çakışmayı önle
+        const persistedOutboxDocNos = readPersistedEDocuments()
+          .filter(
+            (doc) =>
+              doc.direction === "outbox" ||
+              doc.direction === "outgoing" ||
+              doc.canonicalDirection === "outgoing",
+          )
+          .map((doc) => String(doc.documentNo || doc.documentNumber || ""))
           .filter(Boolean);
+
+        const localDocNos = [
+          ...invoices
+            .filter((inv) => inv.type === "sales")
+            .map((inv) => inv.invoiceNumber)
+            .filter(Boolean),
+          ...persistedOutboxDocNos,
+        ];
+
+        // Kullanıcının Fatura & Belge Format Parametreleri / Portaldaki Seriler bölümündeki ön ekini koru
+        const configuredPrefix = (
+          targetDocType === "e_arsiv"
+            ? (selectedEArsivPrefix && selectedEArsivPrefix !== "EAR"
+                ? selectedEArsivPrefix
+                : "") ||
+              (companySettings.eArsivPrefix && companySettings.eArsivPrefix !== "EAR"
+                ? companySettings.eArsivPrefix
+                : "") ||
+              (mysoftMappingDefaults?.eArsivPrefix &&
+              mysoftMappingDefaults.eArsivPrefix !== "EAR"
+                ? mysoftMappingDefaults.eArsivPrefix
+                : "") ||
+              (result.prefix && result.prefix !== "EAR" && result.prefix !== "GIB"
+                ? result.prefix
+                : "") ||
+              companySettings.eArsivPrefix ||
+              selectedEArsivPrefix ||
+              result.prefix ||
+              "EAR"
+            : (selectedEFaturaPrefix && selectedEFaturaPrefix !== "GIB"
+                ? selectedEFaturaPrefix
+                : "") ||
+              (companySettings.eFaturaPrefix && companySettings.eFaturaPrefix !== "GIB"
+                ? companySettings.eFaturaPrefix
+                : "") ||
+              (mysoftMappingDefaults?.eFaturaPrefix &&
+              mysoftMappingDefaults.eFaturaPrefix !== "GIB"
+                ? mysoftMappingDefaults.eFaturaPrefix
+                : "") ||
+              (result.prefix && result.prefix !== "GIB" && result.prefix !== "EAR"
+                ? result.prefix
+                : "") ||
+              companySettings.eFaturaPrefix ||
+              selectedEFaturaPrefix ||
+              result.prefix ||
+              "GIB"
+        )
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, 3);
+
+        let savedSeq = 0;
+        const savedCandidates =
+          targetDocType === "e_arsiv"
+            ? [mysoftMappingDefaults?.eArsivNextNumber, companySettings.eArsivNextNumber]
+            : [mysoftMappingDefaults?.eFaturaNextNumber, companySettings.eFaturaNextNumber];
+        for (const cand of savedCandidates) {
+          if (!cand) continue;
+          const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(cand.trim());
+          if (
+            m &&
+            m[1].toUpperCase() === configuredPrefix &&
+            Number(m[2]) === result.year
+          ) {
+            const parsed = parseInt(m[3], 10) || 0;
+            if (parsed > savedSeq) savedSeq = parsed;
+          }
+        }
 
         const mergedCalc = calculateNextInvoiceNumber({
           existingDocNos: [
-            result.lastInvoiceNumber,
+            result.prefix?.toUpperCase() === configuredPrefix
+              ? result.lastInvoiceNumber
+              : undefined,
             ...localDocNos,
           ].filter((x): x is string => Boolean(x)),
-          targetPrefix: result.prefix,
+          targetPrefix: configuredPrefix,
           targetYear: result.year,
           fallbackPrefix: targetDocType === "e_arsiv" ? "EAR" : "GIB",
         });
 
-        const finalNextDocNo =
-          mergedCalc.nextSequence > result.nextSequence
-            ? mergedCalc.nextDocNo
-            : result.nextInvoiceNumber;
+        const apiMatchesPrefix = result.prefix?.toUpperCase() === configuredPrefix;
+        const finalNextSeq = Math.max(
+          1,
+          apiMatchesPrefix ? result.nextSequence || 1 : 1,
+          savedSeq,
+          mergedCalc.nextSequence || 1,
+        );
+        const finalNextDocNo = `${configuredPrefix}${result.year}${String(finalNextSeq).padStart(9, "0")}`;
 
-        if (result.prefix) {
+        if (configuredPrefix) {
           if (targetDocType === "e_arsiv") {
-            setSelectedEArsivPrefix(result.prefix);
+            setSelectedEArsivPrefix(configuredPrefix);
           } else {
-            setSelectedEFaturaPrefix(result.prefix);
+            setSelectedEFaturaPrefix(configuredPrefix);
           }
         }
 
         setMysoftNumberInfo({
           ...result,
-          lastSequence: Math.max(result.lastSequence, mergedCalc.lastSequence),
-          nextSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+          prefix: configuredPrefix,
+          lastSequence: Math.max(
+            apiMatchesPrefix ? result.lastSequence : 0,
+            mergedCalc.lastSequence,
+            finalNextSeq > 1 ? finalNextSeq - 1 : 0,
+          ),
+          nextSequence: finalNextSeq,
           nextInvoiceNumber: finalNextDocNo,
         });
 
@@ -1134,14 +1371,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
           ...(prev || { vknTckn: targetTenant || "", prefixes: [] }),
           ...(targetDocType === "e_arsiv"
             ? {
-                eArsivPrefix: result.prefix,
+                eArsivPrefix: configuredPrefix,
                 eArsivNextNumber: finalNextDocNo,
-                eArsivSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+                eArsivSequence: finalNextSeq,
               }
             : {
-                eFaturaPrefix: result.prefix,
+                eFaturaPrefix: configuredPrefix,
                 eFaturaNextNumber: finalNextDocNo,
-                eFaturaSequence: Math.max(result.nextSequence, mergedCalc.nextSequence),
+                eFaturaSequence: finalNextSeq,
               }),
         }));
 
@@ -1154,7 +1391,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
         setIsFetchingNextDocNo(false);
       }
     },
-    [mysoftTenantVkn, companySettings, mysoftEDocType, invoices, sendToMysoft],
+    [
+      mysoftTenantVkn,
+      companySettings,
+      mysoftEDocType,
+      invoices,
+      sendToMysoft,
+      selectedEFaturaPrefix,
+      selectedEArsivPrefix,
+      mysoftMappingDefaults,
+    ],
   );
 
   const handleTenantSelect = useCallback((vkn: string | undefined) => {
@@ -1435,39 +1681,101 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const computeMysoftSequentialNumber = useCallback(
     (docType: "e_fatura" | "e_arsiv", customPrefix?: string): string => {
       const isEArsiv = docType === "e_arsiv";
+      const currentYear =
+        issueDate && /^\d{4}/.test(issueDate)
+          ? Number(issueDate.slice(0, 4))
+          : new Date().getFullYear();
 
-      // 1. Canlı Mysoft giden faturalarından çekilen numara varsa öncelikli olarak onu kullan
-      if (mysoftNumberInfo && mysoftNumberInfo.nextInvoiceNumber) {
-        const isInfoEArsiv = mysoftNumberInfo.eDocumentType === "EARSIVFATURA";
-        if (isInfoEArsiv === isEArsiv) {
-          if (!customPrefix || customPrefix.toUpperCase().slice(0, 3) === mysoftNumberInfo.prefix) {
-            return mysoftNumberInfo.nextInvoiceNumber;
-          }
+      // Persisted Mysoft outgoing e-documents: discover active prefix and highest sequence
+      const persistedEDocs = readPersistedEDocuments().filter(
+        (doc) =>
+          doc.direction === "outbox" ||
+          doc.direction === "outgoing" ||
+          doc.canonicalDirection === "outgoing",
+      );
+
+      let discoveredEDocPrefix = "";
+      let discoveredEDocMaxSeq = 0;
+      const eDocMaxSeqByPrefix: Record<string, number> = {};
+
+      for (const doc of persistedEDocs) {
+        const rawDocNo = String(doc.documentNo || doc.documentNumber || "")
+          .replace(/\s*\(TASLAK\)\s*$/i, "")
+          .trim();
+        const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawDocNo);
+        if (!match) continue;
+        const pfx = match[1].toUpperCase();
+        if (pfx === "GYR") continue;
+        const yr = Number(match[2]);
+        const seq = parseInt(match[3], 10);
+        if (yr !== currentYear || isNaN(seq)) continue;
+
+        if (!eDocMaxSeqByPrefix[pfx] || seq > eDocMaxSeqByPrefix[pfx]) {
+          eDocMaxSeqByPrefix[pfx] = seq;
+        }
+        const docIsEArsiv =
+          doc.documentType === "e_arsiv" ||
+          String(doc.profile || "").toUpperCase().includes("ARSIV") ||
+          pfx === "EAR";
+        if (docIsEArsiv === isEArsiv && seq >= discoveredEDocMaxSeq) {
+          discoveredEDocMaxSeq = seq;
+          discoveredEDocPrefix = pfx;
         }
       }
+
+      const infoPrefix =
+        mysoftNumberInfo &&
+        (mysoftNumberInfo.eDocumentType === "EARSIVFATURA") === isEArsiv &&
+        mysoftNumberInfo.prefix &&
+        mysoftNumberInfo.prefix !== "GIB" &&
+        mysoftNumberInfo.prefix !== "EAR"
+          ? mysoftNumberInfo.prefix
+          : "";
+
+      const nonGenericCandidate = (val?: string) => {
+        const cleaned = String(val || "").trim().toUpperCase().slice(0, 3);
+        return cleaned && cleaned !== "GIB" && cleaned !== "EAR" ? cleaned : "";
+      };
 
       const rawPrefix =
         customPrefix ||
         (isEArsiv
-          ? selectedEArsivPrefix ||
+          ? nonGenericCandidate(selectedEArsivPrefix) ||
+            nonGenericCandidate(infoPrefix) ||
+            nonGenericCandidate(mysoftMappingDefaults?.eArsivPrefix) ||
+            nonGenericCandidate(companySettings.eArsivPrefix) ||
+            nonGenericCandidate(discoveredEDocPrefix) ||
+            selectedEArsivPrefix ||
             mysoftMappingDefaults?.eArsivPrefix ||
             companySettings.eArsivPrefix ||
+            discoveredEDocPrefix ||
             "EAR"
-          : selectedEFaturaPrefix ||
+          : nonGenericCandidate(selectedEFaturaPrefix) ||
+            nonGenericCandidate(infoPrefix) ||
+            nonGenericCandidate(mysoftMappingDefaults?.eFaturaPrefix) ||
+            nonGenericCandidate(companySettings.eFaturaPrefix) ||
+            nonGenericCandidate(discoveredEDocPrefix) ||
+            nonGenericCandidate(companySettings.defaultInvoicePrefix) ||
+            selectedEFaturaPrefix ||
             mysoftMappingDefaults?.eFaturaPrefix ||
             companySettings.eFaturaPrefix ||
+            discoveredEDocPrefix ||
             companySettings.defaultInvoicePrefix ||
             "GIB");
+
       const prefix =
         rawPrefix
           .trim()
           .toUpperCase()
           .replace(/[^A-Z0-9]/g, "")
           .slice(0, 3) || (isEArsiv ? "EAR" : "GIB");
-      const currentYear =
-        issueDate && /^\d{4}/.test(issueDate)
-          ? Number(issueDate.slice(0, 4))
-          : new Date().getFullYear();
+
+      let infoSeq = 0;
+      if (mysoftNumberInfo && (mysoftNumberInfo.eDocumentType === "EARSIVFATURA") === isEArsiv) {
+        if (mysoftNumberInfo.prefix?.toUpperCase() === prefix) {
+          infoSeq = Number(mysoftNumberInfo.nextSequence) || 0;
+        }
+      }
 
       let rowSeq = 0;
       const prefixRow = mysoftMappingDefaults?.prefixes?.find(
@@ -1478,17 +1786,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
 
       let savedSeq = 0;
-      const savedNext = isEArsiv
-        ? mysoftMappingDefaults?.eArsivNextNumber || companySettings.eArsivNextNumber
-        : mysoftMappingDefaults?.eFaturaNextNumber || companySettings.eFaturaNextNumber;
-      if (savedNext) {
+      const savedNextCandidates = isEArsiv
+        ? [mysoftMappingDefaults?.eArsivNextNumber, companySettings.eArsivNextNumber]
+        : [mysoftMappingDefaults?.eFaturaNextNumber, companySettings.eFaturaNextNumber];
+      for (const savedNext of savedNextCandidates) {
+        if (!savedNext) continue;
         const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(savedNext.trim());
         if (
           match &&
           match[1].toUpperCase() === prefix &&
           Number(match[2]) === currentYear
         ) {
-          savedSeq = parseInt(match[3], 10) || 0;
+          const parsed = parseInt(match[3], 10) || 0;
+          if (parsed > savedSeq) savedSeq = parsed;
         }
       }
 
@@ -1508,7 +1818,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
         }
       }
 
-      const nextSeq = Math.max(1, rowSeq, savedSeq, maxInvoiceSeq + 1);
+      const maxEDocSeq = Math.max(
+        eDocMaxSeqByPrefix[prefix] || 0,
+        prefix === discoveredEDocPrefix ? discoveredEDocMaxSeq : 0,
+      );
+
+      const nextSeq = Math.max(
+        1,
+        infoSeq,
+        rowSeq,
+        savedSeq,
+        maxInvoiceSeq + 1,
+        maxEDocSeq + 1,
+      );
       return `${prefix}${currentYear}${String(nextSeq).padStart(9, "0")}`;
     },
     [
@@ -6612,9 +6934,31 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           const checked = event.target.checked;
                           setSendToMysoft(checked);
                           setIsManualInvoiceNumber(false);
-                          setInvoiceNumberInput(
-                            checked ? activeMysoftSerialNumber : activeGyrNextNo,
-                          );
+                          if (checked) {
+                            const targetDocType: "e_fatura" | "e_arsiv" =
+                              recipientStatus !== null
+                                ? recipientStatus.isEFaturaUser
+                                  ? "e_fatura"
+                                  : "e_arsiv"
+                                : isCurrentSalesEArsiv
+                                  ? "e_arsiv"
+                                  : "e_fatura";
+                            setMysoftEDocType(targetDocType);
+                            if (targetDocType === "e_arsiv") {
+                              setInvoiceScenario("EARSIVFATURA");
+                            } else if (invoiceScenario === "EARSIVFATURA") {
+                              setInvoiceScenario("TICARIFATURA");
+                            }
+                            const nextSequentialNo =
+                              computeMysoftSequentialNumber(targetDocType);
+                            setInvoiceNumberInput(nextSequentialNo);
+                            void fetchAndApplyNextInvoiceNumber(
+                              mysoftTenantVkn,
+                              targetDocType,
+                            );
+                          } else {
+                            setInvoiceNumberInput(activeGyrNextNo);
+                          }
                         }}
                         className="mt-0.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                       />
@@ -6772,6 +7116,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   setInvoiceScenario("TICARIFATURA");
                                 }
                                 setIsManualInvoiceNumber(false);
+                                setInvoiceNumberInput(
+                                  computeMysoftSequentialNumber("e_fatura"),
+                                );
+                                void fetchAndApplyNextInvoiceNumber(
+                                  mysoftTenantVkn,
+                                  "e_fatura",
+                                );
                               }}
                               className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
                                 !isCurrentSalesEArsiv
@@ -6821,6 +7172,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 setMysoftEDocType("e_arsiv");
                                 setInvoiceScenario("EARSIVFATURA");
                                 setIsManualInvoiceNumber(false);
+                                setInvoiceNumberInput(
+                                  computeMysoftSequentialNumber("e_arsiv"),
+                                );
                                 void fetchAndApplyNextInvoiceNumber(mysoftTenantVkn, "e_arsiv");
                               }}
                               className={`p-2.5 rounded-lg border transition-all cursor-pointer ${

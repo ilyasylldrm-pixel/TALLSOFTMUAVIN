@@ -1040,7 +1040,10 @@ export class MysoftEdocumentClient {
       } as T;
     }
 
-    if (lowerPath.includes("/api/generalcard/edocumentnumber")) {
+    if (
+      lowerPath.includes("/api/generalcard/edocumentnumber") ||
+      lowerPath.includes("/api/tenant/getdocumentnumberlist")
+    ) {
       const year = new Date().getFullYear();
       return {
         succeed: true,
@@ -1048,20 +1051,26 @@ export class MysoftEdocumentClient {
         data: [
           {
             id: 1,
+            edocumentType: 1,
             eDocumentType: "EFATURA",
             prefix: "GIB",
             year,
+            currentNumber: this.mockSeqCounter,
             lastSequence: this.mockSeqCounter,
             isDefault: true,
+            isPassive: false,
             numeratorSetCode: "GIB_DEFAULT",
           },
           {
             id: 2,
+            edocumentType: 2,
             eDocumentType: "EARSIVFATURA",
             prefix: "EAR",
             year,
+            currentNumber: this.mockSeqCounter,
             lastSequence: this.mockSeqCounter,
             isDefault: true,
+            isPassive: false,
             numeratorSetCode: "EAR_DEFAULT",
           },
         ],
@@ -1176,7 +1185,7 @@ export class MysoftEdocumentClient {
       } as T;
     }
 
-    if (lowerPath.includes("getinvoiceoutboxwithheaderinfolistforperiod")) {
+    if (lowerPath.includes("getinvoiceoutboxwithheaderinfolist")) {
       return {
         data: this.mockOutboxDocs,
         succeed: true,
@@ -1873,7 +1882,7 @@ export class MysoftEdocumentClient {
         ? `${eArsivPrefix}${currentYear}${String(eArsivCurNum).padStart(9, "0")}`
         : lastEArsivDocNo || undefined);
 
-    const enrichedPrefixes = prefixes.map((p) => {
+    const enrichedPrefixes: Array<Record<string, unknown>> = prefixes.map((p) => {
       const pfx = typeof p.prefix === "string" ? p.prefix.trim().toUpperCase().slice(0, 3) : "";
       const rowCur = Math.max(
         Number(p.currentNumber ?? p.lastNumber ?? p.sequenceNumber ?? 0) || 0,
@@ -1887,6 +1896,49 @@ export class MysoftEdocumentClient {
         nextNumber: pfx ? `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}` : undefined,
       };
     });
+
+    // Ensure prefixes discovered from outgoing e-Documents or resolved defaults are always present
+    const seenPrefixes = new Set(
+      enrichedPrefixes.map((p) => String(p.prefix || "").toUpperCase()),
+    );
+    if (eFaturaPrefix && !seenPrefixes.has(eFaturaPrefix)) {
+      seenPrefixes.add(eFaturaPrefix);
+      enrichedPrefixes.push({
+        prefix: eFaturaPrefix,
+        edocumentType: 1,
+        isDefault: true,
+        isPassive: false,
+        currentNumber: eFaturaCurNum,
+        lastNumber: eFaturaLastNumber,
+        nextNumber: eFaturaNextNumber,
+      });
+    }
+    if (eArsivPrefix && !seenPrefixes.has(eArsivPrefix)) {
+      seenPrefixes.add(eArsivPrefix);
+      enrichedPrefixes.push({
+        prefix: eArsivPrefix,
+        edocumentType: 2,
+        isDefault: true,
+        isPassive: false,
+        currentNumber: eArsivCurNum,
+        lastNumber: eArsivLastNumber,
+        nextNumber: eArsivNextNumber,
+      });
+    }
+    for (const [pfx, seq] of Object.entries(maxOutboxSeqByPrefix)) {
+      if (pfx && !seenPrefixes.has(pfx)) {
+        seenPrefixes.add(pfx);
+        enrichedPrefixes.push({
+          prefix: pfx,
+          edocumentType: pfx === eArsivPrefix ? 2 : 1,
+          isDefault: false,
+          isPassive: false,
+          currentNumber: seq,
+          lastNumber: `${pfx}${currentYear}${String(seq).padStart(9, "0")}`,
+          nextNumber: `${pfx}${currentYear}${String(seq + 1).padStart(9, "0")}`,
+        });
+      }
+    }
 
     return {
       vknTckn: vkn,

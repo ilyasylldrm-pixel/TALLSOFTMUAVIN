@@ -1354,14 +1354,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
             </div>
           )}
 
-          <InvoiceDesignCustomizerBar
-            companySettings={effectiveCompanySettings}
-            design={localDesign}
-            previewDocType={previewDocType}
-            onChangePreviewDocType={setPreviewDocType}
-            onChangeDesign={(patch) => setLocalDesign((prev) => ({ ...prev, ...patch }))}
-          />
-
           <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
             <OfficialGIBInvoicePaper
               invoice={previewInvoice}

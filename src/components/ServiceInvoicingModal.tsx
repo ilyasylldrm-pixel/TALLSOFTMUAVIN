@@ -30,6 +30,10 @@ import {
   EDocumentType,
 } from "../types";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import {
+  getLocalNextSequentialInvoiceNumber,
+  getNextMysoftInvoiceNumber,
+} from "../services/mysoftEDocumentService";
 
 export type AnyServiceRecord = AutoServiceRecord | ItServiceRecord | ApplianceServiceRecord;
 
@@ -178,15 +182,31 @@ export const ServiceInvoicingModal: React.FC<ServiceInvoicingModalProps> = ({
   const [taxNumber, setTaxNumber] = useState<string>(initialContact?.taxNumber || "11111111111");
   const [taxOffice, setTaxOffice] = useState<string>(initialContact?.taxOffice || "Kadıköy V.D.");
 
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(
-    `${getServicePrefix()}${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
+  const [eDocType, setEDocType] = useState<EDocumentType>("e_arsiv");
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(() =>
+    getLocalNextSequentialInvoiceNumber("e_arsiv").nextInvoiceNumber
   );
   const [issueDate, setIssueDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState<string>(
     new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
-  const [eDocType, setEDocType] = useState<EDocumentType>("e_arsiv");
   const [paymentStatus, setPaymentStatus] = useState<"paid" | "sent">("sent");
+
+  useEffect(() => {
+    const localSeq = getLocalNextSequentialInvoiceNumber(eDocType);
+    setInvoiceNumber(localSeq.nextInvoiceNumber);
+    if (eDocType === "e_fatura" || eDocType === "e_arsiv") {
+      getNextMysoftInvoiceNumber({
+        eDocumentType: eDocType === "e_arsiv" ? "EARSIVFATURA" : "EFATURA",
+      })
+        .then((res) => {
+          if (res.nextSequence >= localSeq.nextSequence && res.nextInvoiceNumber) {
+            setInvoiceNumber(res.nextInvoiceNumber);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [eDocType]);
 
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>(getInitialInvoiceItems());
   const [discountAmount, setDiscountAmount] = useState<number>(serviceRecord.discountAmount || 0);

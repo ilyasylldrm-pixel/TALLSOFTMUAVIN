@@ -1085,6 +1085,10 @@ export async function getMysoftMappingDefaults(
     );
   } catch {}
 
+  let maxEFatPrefixFromDocs = "";
+  let maxEArsPrefixFromDocs = "";
+  const lastDocNoByPrefix: Record<string, string> = {};
+
   const recordDocNoSeq = (rawNo: string, isEArsivHint?: boolean) => {
     const cleaned = String(rawNo || "")
       .replace(/\s*\(TASLAK\)\s*$/i, "")
@@ -1092,16 +1096,24 @@ export async function getMysoftMappingDefaults(
     const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(cleaned);
     if (match) {
       const pfx = match[1].toUpperCase();
+      if (pfx === "GYR") return;
       const yr = Number(match[2]);
       const seq = parseInt(match[3], 10);
       if (yr === currentYear && !isNaN(seq)) {
-        if (!maxLocalSeqByPrefix[pfx] || seq > maxLocalSeqByPrefix[pfx]) {
+        if (!maxLocalSeqByPrefix[pfx] || seq >= maxLocalSeqByPrefix[pfx]) {
           maxLocalSeqByPrefix[pfx] = seq;
+          lastDocNoByPrefix[pfx] = `${pfx}${yr}${String(seq).padStart(9, "0")}`;
         }
         if (isEArsivHint || pfx === "EAR") {
-          if (seq > maxEArsSeqFallback) maxEArsSeqFallback = seq;
+          if (seq >= maxEArsSeqFallback) {
+            maxEArsSeqFallback = seq;
+            maxEArsPrefixFromDocs = pfx;
+          }
         } else {
-          if (seq > maxEFatSeqFallback) maxEFatSeqFallback = seq;
+          if (seq >= maxEFatSeqFallback) {
+            maxEFatSeqFallback = seq;
+            maxEFatPrefixFromDocs = pfx;
+          }
         }
       }
     }
@@ -1110,9 +1122,12 @@ export async function getMysoftMappingDefaults(
   try {
     const localEDocs = readPersistedEDocuments();
     for (const doc of localEDocs) {
+      if (canonicalDirection(doc.direction) !== "outgoing") continue;
+      if (matchedComp && doc.companyId && doc.companyId !== matchedComp.id) continue;
+      if (canonicalDocumentFamily(doc.family) !== "invoice") continue;
       recordDocNoSeq(
         String(doc.documentNo || doc.documentNumber || ""),
-        doc.documentType === "e_arsiv",
+        doc.documentType === "e_arsiv" || String(doc.profile || "").toUpperCase().includes("ARSIV"),
       );
     }
   } catch {}
@@ -1142,6 +1157,15 @@ export async function getMysoftMappingDefaults(
     return 0;
   };
 
+  const savedCompEFatPrefix =
+    matchedComp?.eFaturaPrefix && matchedComp.eFaturaPrefix.toUpperCase() !== "GIB"
+      ? matchedComp.eFaturaPrefix.toUpperCase().slice(0, 3)
+      : "";
+  const savedCompEArsPrefix =
+    matchedComp?.eArsivPrefix && matchedComp.eArsivPrefix.toUpperCase() !== "EAR"
+      ? matchedComp.eArsivPrefix.toUpperCase().slice(0, 3)
+      : "";
+
   try {
     const { payload } = await proxyRequest(
       `/${encodeURIComponent(identifier)}/document-numbers`,
@@ -1153,20 +1177,36 @@ export async function getMysoftMappingDefaults(
       const apiPrefixes = Array.isArray(data.prefixes) ? data.prefixes : [];
       const hasApiEFaturaPrefix =
         (data.eFaturaPrefix && data.eFaturaPrefix !== "GIB") ||
-        apiPrefixes.some((p: any) => String(p.prefix || "").toUpperCase() === String(data.eFaturaPrefix || "").toUpperCase());
+        apiPrefixes.some(
+          (p: any) =>
+            String(p.prefix || "").toUpperCase() === String(data.eFaturaPrefix || "").toUpperCase() &&
+            String(p.prefix || "").toUpperCase() !== "GIB",
+        );
       const hasApiEArsivPrefix =
         (data.eArsivPrefix && data.eArsivPrefix !== "EAR") ||
-        apiPrefixes.some((p: any) => String(p.prefix || "").toUpperCase() === String(data.eArsivPrefix || "").toUpperCase());
+        apiPrefixes.some(
+          (p: any) =>
+            String(p.prefix || "").toUpperCase() === String(data.eArsivPrefix || "").toUpperCase() &&
+            String(p.prefix || "").toUpperCase() !== "EAR",
+        );
 
       const eFaturaPrefix = (
-        (hasApiEFaturaPrefix ? data.eFaturaPrefix : matchedComp?.eFaturaPrefix || data.eFaturaPrefix) ||
+        (hasApiEFaturaPrefix ? data.eFaturaPrefix : "") ||
+        savedCompEFatPrefix ||
+        maxEFatPrefixFromDocs ||
+        matchedComp?.eFaturaPrefix ||
+        data.eFaturaPrefix ||
         "GIB"
       )
         .toUpperCase()
         .slice(0, 3);
 
       const eArsivPrefix = (
-        (hasApiEArsivPrefix ? data.eArsivPrefix : matchedComp?.eArsivPrefix || data.eArsivPrefix) ||
+        (hasApiEArsivPrefix ? data.eArsivPrefix : "") ||
+        savedCompEArsPrefix ||
+        maxEArsPrefixFromDocs ||
+        matchedComp?.eArsivPrefix ||
+        data.eArsivPrefix ||
         "EAR"
       )
         .toUpperCase()
@@ -1175,45 +1215,92 @@ export async function getMysoftMappingDefaults(
       const eFaturaSequence = Math.max(
         Number(data.eFaturaSequence) || 1,
         parseSavedNextSeq(matchedComp?.eFaturaNextNumber, eFaturaPrefix),
-        (maxLocalSeqByPrefix[eFaturaPrefix] || 0) + 1,
+        (maxLocalSeqByPrefix[eFaturaPrefix] ?? maxEFatSeqFallback) + 1,
       );
 
       const eArsivSequence = Math.max(
         Number(data.eArsivSequence) || 1,
         parseSavedNextSeq(matchedComp?.eArsivNextNumber, eArsivPrefix),
-        (maxLocalSeqByPrefix[eArsivPrefix] || 0) + 1,
+        (maxLocalSeqByPrefix[eArsivPrefix] ?? maxEArsSeqFallback) + 1,
       );
 
       const eFaturaLastSeq = eFaturaSequence - 1;
       const eArsivLastSeq = eArsivSequence - 1;
 
+      const mergedPrefixes = [...apiPrefixes];
+      const seenPfx = new Set(mergedPrefixes.map((p: any) => String(p.prefix || "").toUpperCase()));
+      if (!seenPfx.has(eFaturaPrefix)) {
+        seenPfx.add(eFaturaPrefix);
+        mergedPrefixes.push({
+          prefix: eFaturaPrefix,
+          edocumentType: 1,
+          isDefault: true,
+          currentNumber: eFaturaLastSeq,
+          lastNumber:
+            eFaturaLastSeq > 0
+              ? `${eFaturaPrefix}${currentYear}${String(eFaturaLastSeq).padStart(9, "0")}`
+              : undefined,
+          nextNumber: `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`,
+        });
+      }
+      if (!seenPfx.has(eArsivPrefix)) {
+        seenPfx.add(eArsivPrefix);
+        mergedPrefixes.push({
+          prefix: eArsivPrefix,
+          edocumentType: 2,
+          isDefault: true,
+          currentNumber: eArsivLastSeq,
+          lastNumber:
+            eArsivLastSeq > 0
+              ? `${eArsivPrefix}${currentYear}${String(eArsivLastSeq).padStart(9, "0")}`
+              : undefined,
+          nextNumber: `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`,
+        });
+      }
+
       return {
         vknTckn: identifier,
         eFaturaPrefix,
         eFaturaLastNumber:
-          data.eFaturaLastNumber ||
           (eFaturaLastSeq > 0
             ? `${eFaturaPrefix}${currentYear}${String(eFaturaLastSeq).padStart(9, "0")}`
-            : undefined),
+            : undefined) ||
+          data.eFaturaLastNumber ||
+          lastDocNoByPrefix[eFaturaPrefix],
         eFaturaNextNumber: `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`,
         eFaturaSequence,
         eArsivPrefix,
         eArsivLastNumber:
-          data.eArsivLastNumber ||
           (eArsivLastSeq > 0
             ? `${eArsivPrefix}${currentYear}${String(eArsivLastSeq).padStart(9, "0")}`
-            : undefined),
+            : undefined) ||
+          data.eArsivLastNumber ||
+          lastDocNoByPrefix[eArsivPrefix],
         eArsivNextNumber: `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`,
         eArsivSequence,
-        prefixes: apiPrefixes,
+        prefixes: mergedPrefixes,
       };
     }
   } catch {
     // Graceful fallback to client-side sequential calculation
   }
 
-  const fallbackEFatPrefix = (matchedComp?.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
-  const fallbackEArsPrefix = (matchedComp?.eArsivPrefix || "EAR").toUpperCase().slice(0, 3);
+  const fallbackEFatPrefix = (
+    savedCompEFatPrefix ||
+    maxEFatPrefixFromDocs ||
+    matchedComp?.eFaturaPrefix ||
+    "GIB"
+  )
+    .toUpperCase()
+    .slice(0, 3);
+  const fallbackEArsPrefix = (
+    savedCompEArsPrefix ||
+    maxEArsPrefixFromDocs ||
+    matchedComp?.eArsivPrefix ||
+    "EAR"
+  )
+    .toUpperCase()
+    .slice(0, 3);
 
   const nextEFatSeq = Math.max(
     1,
@@ -1226,12 +1313,23 @@ export async function getMysoftMappingDefaults(
     (maxLocalSeqByPrefix[fallbackEArsPrefix] ?? maxEArsSeqFallback) + 1,
   );
 
+  const lastEFatSeq = nextEFatSeq - 1;
+  const lastEArsSeq = nextEArsSeq - 1;
+
   return {
     vknTckn: identifier,
     eFaturaPrefix: fallbackEFatPrefix,
+    eFaturaLastNumber:
+      lastEFatSeq > 0
+        ? `${fallbackEFatPrefix}${currentYear}${String(lastEFatSeq).padStart(9, "0")}`
+        : lastDocNoByPrefix[fallbackEFatPrefix],
     eFaturaNextNumber: `${fallbackEFatPrefix}${currentYear}${String(nextEFatSeq).padStart(9, "0")}`,
     eFaturaSequence: nextEFatSeq,
     eArsivPrefix: fallbackEArsPrefix,
+    eArsivLastNumber:
+      lastEArsSeq > 0
+        ? `${fallbackEArsPrefix}${currentYear}${String(lastEArsSeq).padStart(9, "0")}`
+        : lastDocNoByPrefix[fallbackEArsPrefix],
     eArsivNextNumber: `${fallbackEArsPrefix}${currentYear}${String(nextEArsSeq).padStart(9, "0")}`,
     eArsivSequence: nextEArsSeq,
     prefixes: [
@@ -1239,14 +1337,22 @@ export async function getMysoftMappingDefaults(
         prefix: fallbackEFatPrefix,
         edocumentType: 1,
         isDefault: true,
-        currentNumber: nextEFatSeq - 1,
+        currentNumber: lastEFatSeq,
+        lastNumber:
+          lastEFatSeq > 0
+            ? `${fallbackEFatPrefix}${currentYear}${String(lastEFatSeq).padStart(9, "0")}`
+            : undefined,
         nextNumber: `${fallbackEFatPrefix}${currentYear}${String(nextEFatSeq).padStart(9, "0")}`,
       },
       {
         prefix: fallbackEArsPrefix,
         edocumentType: 2,
         isDefault: true,
-        currentNumber: nextEArsSeq - 1,
+        currentNumber: lastEArsSeq,
+        lastNumber:
+          lastEArsSeq > 0
+            ? `${fallbackEArsPrefix}${currentYear}${String(lastEArsSeq).padStart(9, "0")}`
+            : undefined,
         nextNumber: `${fallbackEArsPrefix}${currentYear}${String(nextEArsSeq).padStart(9, "0")}`,
       },
     ],
@@ -1327,6 +1433,173 @@ export function readPersistedEDocuments(): MysoftEDocument[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Synchronously compute the company's active prefix, last issued number, and next sequential
+ * invoice number by inspecting Mysoft outgoing e-documents (`muavin_e_documents`), local sales
+ * invoices, and company settings.
+ */
+export function getLocalNextSequentialInvoiceNumber(
+  docType: EDocumentType = "e_fatura",
+  companyId?: string,
+  customPrefix?: string,
+): {
+  prefix: string;
+  year: number;
+  lastSequence: number;
+  lastInvoiceNumber?: string;
+  nextSequence: number;
+  nextInvoiceNumber: string;
+} {
+  const year = new Date().getFullYear();
+  if (docType === "paper") {
+    const storedApp = getStoredData(companyId);
+    let maxGyrSeq = 0;
+    for (const inv of storedApp.invoices || []) {
+      const cleaned = String(inv.invoiceNumber || "")
+        .replace(/\s*\(TASLAK\)\s*$/i, "")
+        .trim()
+        .toUpperCase();
+      if (cleaned.startsWith(`GYR${year}`)) {
+        const parsed = parseInt(cleaned.slice(7), 10);
+        if (!isNaN(parsed) && parsed > maxGyrSeq) maxGyrSeq = parsed;
+      }
+    }
+    const nextSeq = maxGyrSeq + 1;
+    return {
+      prefix: "GYR",
+      year,
+      lastSequence: maxGyrSeq,
+      lastInvoiceNumber:
+        maxGyrSeq > 0 ? `GYR${year}${String(maxGyrSeq).padStart(9, "0")}` : undefined,
+      nextSequence: nextSeq,
+      nextInvoiceNumber: `GYR${year}${String(nextSeq).padStart(9, "0")}`,
+    };
+  }
+
+  const isEArsiv = docType === "e_arsiv";
+  const storedApp = getStoredData(companyId);
+  const settings = storedApp.settings;
+  let matchedComp: ReturnType<typeof getCompaniesList>[number] | undefined;
+  try {
+    const comps = getCompaniesList();
+    matchedComp = companyId
+      ? comps.find((c) => c.id === companyId)
+      : comps[0];
+  } catch {}
+
+  const seqByPrefix: Record<string, number> = {};
+  let highestDiscoveredPrefix = "";
+  let highestDiscoveredSeq = 0;
+
+  const scanNo = (rawNo: string, docIsEArsiv?: boolean) => {
+    if (docIsEArsiv !== undefined && docIsEArsiv !== isEArsiv) return;
+    const cleaned = String(rawNo || "")
+      .replace(/\s*\(TASLAK\)\s*$/i, "")
+      .trim();
+    const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(cleaned);
+    if (!match) return;
+    const pfx = match[1].toUpperCase();
+    if (pfx === "GYR") return;
+    const yr = Number(match[2]);
+    const seq = parseInt(match[3], 10);
+    if (yr === year && !isNaN(seq)) {
+      if (!seqByPrefix[pfx] || seq > seqByPrefix[pfx]) {
+        seqByPrefix[pfx] = seq;
+      }
+      if (seq >= highestDiscoveredSeq) {
+        highestDiscoveredSeq = seq;
+        highestDiscoveredPrefix = pfx;
+      }
+    }
+  };
+
+  try {
+    for (const doc of readPersistedEDocuments()) {
+      if (canonicalDirection(doc.direction) !== "outgoing") continue;
+      if (companyId && doc.companyId && doc.companyId !== companyId) continue;
+      if (canonicalDocumentFamily(doc.family) !== "invoice") continue;
+      const docNoStr = String(doc.documentNo || doc.documentNumber || "");
+      const docIsEArsiv =
+        doc.documentType === "e_arsiv" ||
+        String(doc.profile || "").toUpperCase().includes("ARSIV") ||
+        docNoStr.toUpperCase().startsWith("EAR");
+      scanNo(docNoStr, docIsEArsiv);
+    }
+  } catch {}
+
+  try {
+    for (const inv of storedApp.invoices || []) {
+      if (inv.type === "sales" && inv.status !== "draft") {
+        const invNoStr = String(inv.invoiceNumber || "");
+        const invIsEArsiv =
+          inv.eDocumentType === "e_arsiv" ||
+          inv.invoiceScenario === "EARSIVFATURA" ||
+          invNoStr.toUpperCase().startsWith("EAR");
+        scanNo(invNoStr, invIsEArsiv);
+      }
+    }
+  } catch {}
+
+  const nonGeneric = (v?: string) => {
+    const c = String(v || "").trim().toUpperCase().slice(0, 3);
+    return c && c !== "GIB" && c !== "EAR" ? c : "";
+  };
+
+  const resolvedPrefix = (
+    customPrefix?.trim().toUpperCase().slice(0, 3) ||
+    (isEArsiv
+      ? nonGeneric(settings?.eArsivPrefix) ||
+        nonGeneric(matchedComp?.eArsivPrefix) ||
+        nonGeneric(highestDiscoveredPrefix) ||
+        settings?.eArsivPrefix ||
+        matchedComp?.eArsivPrefix ||
+        highestDiscoveredPrefix ||
+        "EAR"
+      : nonGeneric(settings?.eFaturaPrefix) ||
+        nonGeneric(matchedComp?.eFaturaPrefix) ||
+        nonGeneric(highestDiscoveredPrefix) ||
+        nonGeneric(settings?.defaultInvoicePrefix) ||
+        settings?.eFaturaPrefix ||
+        matchedComp?.eFaturaPrefix ||
+        highestDiscoveredPrefix ||
+        settings?.defaultInvoicePrefix ||
+        "GIB")
+  )
+    .trim()
+    .toUpperCase()
+    .slice(0, 3);
+
+  let savedNextSeq = 0;
+  const savedCandidates = isEArsiv
+    ? [settings?.eArsivNextNumber, matchedComp?.eArsivNextNumber]
+    : [settings?.eFaturaNextNumber, matchedComp?.eFaturaNextNumber];
+  for (const savedStr of savedCandidates) {
+    if (!savedStr) continue;
+    const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(savedStr.trim());
+    if (m && m[1].toUpperCase() === resolvedPrefix && Number(m[2]) === year) {
+      const parsed = parseInt(m[3], 10) || 0;
+      if (parsed > savedNextSeq) savedNextSeq = parsed;
+    }
+  }
+
+  const maxDocSeq = Math.max(
+    seqByPrefix[resolvedPrefix] || 0,
+    resolvedPrefix === highestDiscoveredPrefix ? highestDiscoveredSeq : 0,
+  );
+  const lastSeq = Math.max(maxDocSeq, savedNextSeq > 1 ? savedNextSeq - 1 : 0);
+  const nextSeq = Math.max(1, lastSeq + 1, savedNextSeq);
+
+  return {
+    prefix: resolvedPrefix,
+    year,
+    lastSequence: lastSeq,
+    lastInvoiceNumber:
+      lastSeq > 0 ? `${resolvedPrefix}${year}${String(lastSeq).padStart(9, "0")}` : undefined,
+    nextSequence: nextSeq,
+    nextInvoiceNumber: `${resolvedPrefix}${year}${String(nextSeq).padStart(9, "0")}`,
+  };
 }
 
 /**
@@ -1954,39 +2227,45 @@ export async function getNextMysoftInvoiceNumber(
     .slice(0, 3);
   const callerPrefix = options.prefix?.trim().toUpperCase().slice(0, 3);
 
-  const resolvedPrefix =
-    (apiPrefix && apiPrefix !== "GIB" && apiPrefix !== "EAR" ? apiPrefix : "") ||
-    (savedCompPrefix && savedCompPrefix !== "GIB" && savedCompPrefix !== "EAR"
-      ? savedCompPrefix
-      : "") ||
-    (callerPrefix && callerPrefix !== "GIB" && callerPrefix !== "EAR" ? callerPrefix : "") ||
-    apiPrefix ||
-    savedCompPrefix ||
-    callerPrefix ||
-    (isEarsiv ? "EAR" : "GIB");
+  // Discover all outgoing e-document & sales invoice sequences by prefix first
+  const seqByPrefix: Record<string, number> = {};
+  let highestDiscoveredPrefix = "";
+  let highestDiscoveredSeq = 0;
 
-  // Also check local persisted e-documents and local sales invoices for this prefix/type
-  let localMaxSeq = 0;
-  const checkDocNo = (rawNo: string) => {
+  const scanDocNo = (rawNo: string, docIsEArsiv?: boolean) => {
+    if (docIsEArsiv !== undefined && docIsEArsiv !== isEarsiv) return;
     const cleaned = String(rawNo || "")
       .replace(/\s*\(TASLAK\)\s*$/i, "")
       .trim();
     const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(cleaned);
     if (match) {
       const pfx = match[1].toUpperCase();
+      if (pfx === "GYR") return;
       const yr = Number(match[2]);
       const seq = parseInt(match[3], 10);
-      if (yr === year && pfx === resolvedPrefix && !isNaN(seq) && seq > localMaxSeq) {
-        localMaxSeq = seq;
+      if (yr === year && !isNaN(seq)) {
+        if (!seqByPrefix[pfx] || seq > seqByPrefix[pfx]) {
+          seqByPrefix[pfx] = seq;
+        }
+        if (seq >= highestDiscoveredSeq) {
+          highestDiscoveredSeq = seq;
+          highestDiscoveredPrefix = pfx;
+        }
       }
     }
   };
 
   try {
     for (const doc of readPersistedEDocuments()) {
-      if (!matchedComp || !doc.companyId || doc.companyId === matchedComp.id) {
-        checkDocNo(String(doc.documentNo || doc.documentNumber || ""));
-      }
+      if (canonicalDirection(doc.direction) !== "outgoing") continue;
+      if (matchedComp && doc.companyId && doc.companyId !== matchedComp.id) continue;
+      if (canonicalDocumentFamily(doc.family) !== "invoice") continue;
+      const docNoStr = String(doc.documentNo || doc.documentNumber || "");
+      const docIsEArsiv =
+        doc.documentType === "e_arsiv" ||
+        String(doc.profile || "").toUpperCase().includes("ARSIV") ||
+        docNoStr.toUpperCase().startsWith("EAR");
+      scanDocNo(docNoStr, docIsEArsiv);
     }
   } catch {}
 
@@ -1994,10 +2273,32 @@ export async function getNextMysoftInvoiceNumber(
     const storedApp = getStoredData(matchedComp?.id);
     for (const inv of storedApp.invoices || []) {
       if (inv.type === "sales" && inv.status !== "draft") {
-        checkDocNo(String(inv.invoiceNumber || ""));
+        const invNoStr = String(inv.invoiceNumber || "");
+        const invIsEArsiv =
+          inv.eDocumentType === "e_arsiv" ||
+          inv.invoiceScenario === "EARSIVFATURA" ||
+          invNoStr.toUpperCase().startsWith("EAR");
+        scanDocNo(invNoStr, invIsEArsiv);
       }
     }
   } catch {}
+
+  const resolvedPrefix =
+    (apiPrefix && apiPrefix !== "GIB" && apiPrefix !== "EAR" ? apiPrefix : "") ||
+    (savedCompPrefix && savedCompPrefix !== "GIB" && savedCompPrefix !== "EAR"
+      ? savedCompPrefix
+      : "") ||
+    (callerPrefix && callerPrefix !== "GIB" && callerPrefix !== "EAR" ? callerPrefix : "") ||
+    highestDiscoveredPrefix ||
+    apiPrefix ||
+    savedCompPrefix ||
+    callerPrefix ||
+    (isEarsiv ? "EAR" : "GIB");
+
+  const localMaxSeq = Math.max(
+    seqByPrefix[resolvedPrefix] || 0,
+    resolvedPrefix === highestDiscoveredPrefix ? highestDiscoveredSeq : 0,
+  );
 
   // Check if company has a saved nextNumber for this prefix
   let savedNextSeq = 0;
@@ -2214,7 +2515,22 @@ export async function listMysoftEDocuments(
   const options = normalizeListOptions(getOptions(optionsOrSignal));
   try {
     // A valid empty response is not an error and must not display fixtures.
-    return (await requestMysoftEDocumentPage(direction, options)).documents;
+    const page = await requestMysoftEDocumentPage(direction, options);
+    if (page.documents.length > 0) {
+      try {
+        const previous = readPersistedEDocuments();
+        const byKey = new Map(
+          previous.map((doc) => [documentStorageKey(doc), doc]),
+        );
+        for (const doc of page.documents) {
+          byKey.set(documentStorageKey(doc), doc);
+        }
+        saveStoredData("EDOCUMENTS", [...byKey.values()]);
+      } catch {
+        // Non-fatal persistence update
+      }
+    }
+    return page.documents;
   } catch (error) {
     if (isAbortError(error) || options.fallback !== true) throw error;
     console.warn(

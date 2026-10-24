@@ -1618,6 +1618,203 @@ function generate150VirmanTransactions(contacts2) {
 
 // src/mockData.ts
 var generatedData = generateMonthlyIntegratedData();
+var initialCompanySettings = {
+  companyName: "MUAV\u0130N B\u0130L\u0130\u015E\u0130M TEKN.DAN.A.\u015E.",
+  companyTitle: "Muavin Bili\u015Fim Teknolojileri ve Dan\u0131\u015Fmanl\u0131k Anonim \u015Eirketi",
+  taxpayerType: "Anonim \u015Eirket",
+  taxOffice: "Mecidiyek\xF6y V.D.",
+  taxNumber: "8470291038",
+  tradeRegisterNo: "",
+  mersisNo: "",
+  address: "B\xFCy\xFCkdere Cad. No:195 Maya Plaza Kat:8, Mecidiyek\xF6y, \u015Ei\u015Fli / \u0130stanbul",
+  city: "\u0130stanbul",
+  district: "\u015Ei\u015Fli",
+  neighborhood: "Mecidiyek\xF6y",
+  street: "B\xFCy\xFCkdere Cad.",
+  buildingNo: "195",
+  doorNo: "Kat:8",
+  postalCode: "34394",
+  country: "T\xFCrkiye",
+  addressDetails: {
+    country: "T\xFCrkiye",
+    city: "\u0130stanbul",
+    district: "\u015Ei\u015Fli",
+    neighborhood: "Mecidiyek\xF6y",
+    street: "B\xFCy\xFCkdere Cad.",
+    buildingNo: "195",
+    doorNo: "Kat:8",
+    postalCode: "34394",
+    fullAddress: "B\xFCy\xFCkdere Cad. No:195 Maya Plaza Kat:8, Mecidiyek\xF6y, \u015Ei\u015Fli / \u0130stanbul"
+  },
+  phone: "+90 (212) 444 0 999",
+  email: "info@muavin.com.tr",
+  website: "www.muavin.com.tr",
+  logoUrl: "",
+  defaultBankAccountName: "Muavin Bili\u015Fim Teknolojileri ve Dan\u0131\u015Fmanl\u0131k Anonim \u015Eirketi",
+  defaultBankName: "Garanti BBVA - Levent Ticari \u015Eubesi",
+  defaultBankIban: "TR33 0006 2000 0000 0012 3456 78",
+  currency: "\u20BA",
+  defaultInvoicePrefix: "MUV2026",
+  defaultVatRate: 20,
+  defaultFoodAllowance: 5500,
+  defaultRoadAllowance: 2500,
+  dailyFoodAllowanceRate: 300,
+  dailyRoadAllowanceRate: 115,
+  foodAllowanceCalculationType: "monthly",
+  roadAllowanceCalculationType: "monthly",
+  applyAllowancesToAllEmployees: true,
+  taxCredentials: {
+    userCode: "3484702910",
+    password: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+    codeSecret: "GIB-84920"
+  },
+  sgkCredentials: {
+    userCode: "28470291038",
+    workplaceCode: "000",
+    systemPassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+    workplacePassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+    workplaceRegistrationNo: "28470010110293840340112",
+    workplaces: [
+      {
+        id: "sgk_wp_1",
+        name: "Merkez (Genel M\xFCd\xFCrl\xFCk)",
+        type: "main",
+        referenceId: "br_1",
+        workplaceRegistrationNo: "28470010110293840340112",
+        userCode: "28470291038",
+        workplaceCode: "000",
+        systemPassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+        workplacePassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+      },
+      {
+        id: "sgk_wp_2",
+        name: "Ankara B\xF6lge M\xFCd\xFCrl\xFC\u011F\xFC (\u015Eube)",
+        type: "branch",
+        referenceId: "br_2",
+        workplaceRegistrationNo: "20600010110283920060215",
+        userCode: "20600028392",
+        workplaceCode: "001",
+        systemPassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+        workplacePassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+      },
+      {
+        id: "sgk_wp_3",
+        name: "Gebze Lojistik & Ana Depo",
+        type: "warehouse",
+        referenceId: "wh_1",
+        workplaceRegistrationNo: "24100010110938470410105",
+        userCode: "24100093847",
+        workplaceCode: "002",
+        systemPassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+        workplacePassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+      }
+    ]
+  },
+  eDevletCredentials: {
+    managerName: "Ahmet Y\u0131lmaz",
+    tcKimlikNo: "18492048592",
+    eDevletPassword: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+    mobileSignaturePhone: "+90 (532) 555 12 34"
+  },
+  eTebligatlar: [
+    {
+      id: "eteb_1",
+      authority: "GIB",
+      senderUnit: "Mecidiyek\xF6y Vergi Dairesi M\xFCd\xFCrl\xFC\u011F\xFC",
+      documentTitle: "\u0130zahata Davet Yaz\u0131s\u0131 (VUK 370. Madde Uyar\u0131nca)",
+      documentType: "\u0130zahata Davet",
+      barcodeNumber: "GIB-2026-ETEB-8492019",
+      envelopeId: "e-ZRF-2026-948204",
+      sentDate: "2026-08-16",
+      deliveryDate: "2026-08-21",
+      legalDeadlineDate: "2026-09-05",
+      status: "unread",
+      contentSummary: "2026/04 d\xF6nemine ait Form Ba/Bs bildirimlerinde tedarik\xE7i faturalar\u0131 ile beyan edilen matrahlar aras\u0131ndaki \xE7apraz kontrol uyu\u015Fmazl\u0131\u011F\u0131na ili\u015Fkin 30 g\xFCn i\xE7inde izahat verilmesi talep edilmektedir.",
+      notes: "Mali m\xFC\u015Favir ile g\xF6r\xFC\u015F\xFCl\xFCp fatura listeleri kar\u015F\u0131la\u015Ft\u0131r\u0131lacak.",
+      amount: 0,
+      receiptNumber: "MZB-GIB-2026-00492"
+    },
+    {
+      id: "eteb_2",
+      authority: "SGK",
+      senderUnit: "\u0130stanbul Sosyal G\xFCvenlik \u0130l M\xFCd\xFCrl\xFC\u011F\xFC (\u015Ei\u015Fli SGM)",
+      documentTitle: "5510 Say\u0131l\u0131 Kanun Kapsam\u0131nda Prim Te\u015Fvik Uygunluk & Mahsup Bildirimi",
+      documentType: "Te\u015Fvik Bildirimi",
+      barcodeNumber: "SGK-2026-TEB-3829104",
+      envelopeId: "e-ZRF-2026-118492",
+      sentDate: "2026-08-14",
+      deliveryDate: "2026-08-19",
+      legalDeadlineDate: "2026-09-18",
+      status: "read",
+      contentSummary: "2026/06 d\xF6neminde uygulanan %5 Hazine deste\u011Fi ve ilave istihdam prim te\u015Fviklerinin denetimi tamamlanm\u0131\u015F olup ilgili tutarlar prim hesab\u0131na mahsup edilmi\u015Ftir.",
+      workplaceId: "sgk_wp_1",
+      workplaceName: "Merkez (Genel M\xFCd\xFCrl\xFCk)",
+      notes: "Bordro ve muhasebe kay\u0131tlar\u0131na i\u015Flendi.",
+      amount: 14850,
+      receiptNumber: "MZB-SGK-2026-00812"
+    },
+    {
+      id: "eteb_3",
+      authority: "GIB",
+      senderUnit: "Gelir \u0130daresi Ba\u015Fkanl\u0131\u011F\u0131 / B\xFCy\xFCk M\xFCkellefler V.D.",
+      documentTitle: "2026/05 D\xF6nemi KDV \u0130adesi Mahsup ve Mahsup Talebi Uygunluk Belgesi",
+      documentType: "KDV \u0130ade / Mahsup",
+      barcodeNumber: "GIB-2026-ETEB-1948203",
+      envelopeId: "e-ZRF-2026-559102",
+      sentDate: "2026-08-10",
+      deliveryDate: "2026-08-15",
+      legalDeadlineDate: "2026-09-14",
+      status: "paid",
+      contentSummary: "\u0130hracat istisnas\u0131 kaynakl\u0131 KDV iade talebiniz vergi dairesince onaylanm\u0131\u015F ve sonraki d\xF6nem SGK prim bor\xE7lar\u0131na mahsup i\u015Flemi ger\xE7ekle\u015Ftirilmi\u015Ftir.",
+      notes: "Mahsup makbuzu al\u0131nd\u0131.",
+      amount: 42350,
+      receiptNumber: "MZB-GIB-2026-00219"
+    },
+    {
+      id: "eteb_4",
+      authority: "SGK",
+      senderUnit: "Ankara Sosyal G\xFCvenlik \u0130l M\xFCd\xFCrl\xFC\u011F\xFC (\xC7ankaya SGM)",
+      documentTitle: "\u0130dari Para Cezas\u0131 ve Eksik G\xFCn Bildirim Yaz\u0131s\u0131",
+      documentType: "\u0130dari Para Cezas\u0131",
+      barcodeNumber: "SGK-2026-TEB-9104823",
+      envelopeId: "e-ZRF-2026-448201",
+      sentDate: "2026-08-08",
+      deliveryDate: "2026-08-13",
+      legalDeadlineDate: "2026-08-28",
+      status: "in_process",
+      contentSummary: "Ankara B\xF6lge \u015Eubesi nezdinde 2026/04 d\xF6neminde bildirilen eksik g\xFCn kodunun (07 Kod Puantaj Kayd\u0131) belgelendirilmesi talebi.",
+      workplaceId: "sgk_wp_2",
+      workplaceName: "Ankara B\xF6lge & Sat\u0131\u015F \u015Eubesi",
+      notes: "Puantaj kay\u0131tlar\u0131 ve imzal\u0131 bordrolar sisteme y\xFCklenecek.",
+      amount: 4850,
+      receiptNumber: "MZB-SGK-2026-00384"
+    }
+  ]
+};
+var initialBranches = [
+  {
+    id: "br_1",
+    code: "MRK-001",
+    name: "Merkez",
+    managerName: "Ahmet Y\u0131lmaz",
+    phone: initialCompanySettings.phone,
+    email: initialCompanySettings.email,
+    isMain: true,
+    status: "active",
+    address: {
+      country: initialCompanySettings.country || "T\xFCrkiye",
+      city: initialCompanySettings.city,
+      district: initialCompanySettings.district || "",
+      neighborhood: initialCompanySettings.neighborhood || "",
+      street: initialCompanySettings.street || "",
+      buildingNo: initialCompanySettings.buildingNo || "",
+      doorNo: initialCompanySettings.doorNo || "",
+      postalCode: initialCompanySettings.postalCode || "",
+      fullAddress: initialCompanySettings.address
+    },
+    createdAt: "2026-01-01"
+  }
+];
 var initialContacts = generatedData.contacts;
 var initialAccounts = generatedData.accounts;
 var initialProducts = generatedData.products;
@@ -25794,7 +25991,7 @@ var MysoftEdocumentClient = class {
         ]
       };
     }
-    if (lowerPath.includes("/api/generalcard/edocumentnumber")) {
+    if (lowerPath.includes("/api/generalcard/edocumentnumber") || lowerPath.includes("/api/tenant/getdocumentnumberlist")) {
       const year = (/* @__PURE__ */ new Date()).getFullYear();
       return {
         succeed: true,
@@ -25802,20 +25999,26 @@ var MysoftEdocumentClient = class {
         data: [
           {
             id: 1,
+            edocumentType: 1,
             eDocumentType: "EFATURA",
             prefix: "GIB",
             year,
+            currentNumber: this.mockSeqCounter,
             lastSequence: this.mockSeqCounter,
             isDefault: true,
+            isPassive: false,
             numeratorSetCode: "GIB_DEFAULT"
           },
           {
             id: 2,
+            edocumentType: 2,
             eDocumentType: "EARSIVFATURA",
             prefix: "EAR",
             year,
+            currentNumber: this.mockSeqCounter,
             lastSequence: this.mockSeqCounter,
             isDefault: true,
+            isPassive: false,
             numeratorSetCode: "EAR_DEFAULT"
           }
         ]
@@ -25905,7 +26108,7 @@ var MysoftEdocumentClient = class {
         data: html
       };
     }
-    if (lowerPath.includes("getinvoiceoutboxwithheaderinfolistforperiod")) {
+    if (lowerPath.includes("getinvoiceoutboxwithheaderinfolist")) {
       return {
         data: this.mockOutboxDocs,
         succeed: true,
@@ -26421,6 +26624,47 @@ var MysoftEdocumentClient = class {
         nextNumber: pfx ? `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}` : void 0
       };
     });
+    const seenPrefixes = new Set(
+      enrichedPrefixes.map((p) => String(p.prefix || "").toUpperCase())
+    );
+    if (eFaturaPrefix && !seenPrefixes.has(eFaturaPrefix)) {
+      seenPrefixes.add(eFaturaPrefix);
+      enrichedPrefixes.push({
+        prefix: eFaturaPrefix,
+        edocumentType: 1,
+        isDefault: true,
+        isPassive: false,
+        currentNumber: eFaturaCurNum,
+        lastNumber: eFaturaLastNumber,
+        nextNumber: eFaturaNextNumber
+      });
+    }
+    if (eArsivPrefix && !seenPrefixes.has(eArsivPrefix)) {
+      seenPrefixes.add(eArsivPrefix);
+      enrichedPrefixes.push({
+        prefix: eArsivPrefix,
+        edocumentType: 2,
+        isDefault: true,
+        isPassive: false,
+        currentNumber: eArsivCurNum,
+        lastNumber: eArsivLastNumber,
+        nextNumber: eArsivNextNumber
+      });
+    }
+    for (const [pfx, seq] of Object.entries(maxOutboxSeqByPrefix)) {
+      if (pfx && !seenPrefixes.has(pfx)) {
+        seenPrefixes.add(pfx);
+        enrichedPrefixes.push({
+          prefix: pfx,
+          edocumentType: pfx === eArsivPrefix ? 2 : 1,
+          isDefault: false,
+          isPassive: false,
+          currentNumber: seq,
+          lastNumber: `${pfx}${currentYear}${String(seq).padStart(9, "0")}`,
+          nextNumber: `${pfx}${currentYear}${String(seq + 1).padStart(9, "0")}`
+        });
+      }
+    }
     return {
       vknTckn: vkn,
       eFaturaPrefix,

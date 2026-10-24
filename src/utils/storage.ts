@@ -1267,48 +1267,81 @@ export function getStoredData(targetCompanyId?: string) {
     cheques: storedCheques,
     promissoryNotes: storedNotes,
     branches: (() => {
-      if (isDefault) {
-        const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
-        const list = Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
-        return list;
-      }
-      const scopedKey = `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
-      const existingRaw = safeGetStorageItem(scopedKey);
-      if (existingRaw) {
-        try {
-          const parsed = JSON.parse(existingRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch (_) {}
-      }
-      const defaultBranchForComp: Branch[] = [
-        {
-          id: `br_main_${activeCompId}`,
-          code: "MRK-001",
-          name: `${loadedSettings.companyName || compMeta.companyName || "İşletme"} - Merkez`,
-          isMain: true,
-          managerName: compMeta.companyType === "sahis" ? (compMeta.companyName?.split("-")[0]?.trim() || "İşletme Sahibi") : "Şube Müdürü",
-          phone: loadedSettings.phone || compMeta.phone || "+90 (212) 000 00 00",
-          email: loadedSettings.email || compMeta.email || "",
-          status: "active",
-          address: {
-            country: "Türkiye",
-            city: loadedSettings.city || compMeta.city || "İstanbul",
-            district: loadedSettings.district || compMeta.district || "Merkez",
-            neighborhood: loadedSettings.neighborhood || compMeta.neighborhood || "",
-            street: loadedSettings.street || compMeta.street || "",
-            buildingNo: loadedSettings.buildingNo || compMeta.buildingNo || "",
-            doorNo: loadedSettings.doorNo || compMeta.doorNo || "",
-            postalCode: loadedSettings.postalCode || compMeta.postalCode || "",
-            fullAddress:
-              loadedSettings.address ||
-              compMeta.address ||
-              `${loadedSettings.city || compMeta.city || "İstanbul"} / ${loadedSettings.district || compMeta.district || "Merkez"}`,
-          },
-          createdAt: new Date().toISOString().split("T")[0],
-        },
-      ];
-      safeSet(scopedKey, defaultBranchForComp);
-      return defaultBranchForComp;
+      const scopedKey = isDefault ? STORAGE_KEYS.BRANCHES : `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
+      const rawBranches: Branch[] = (() => {
+        if (isDefault) {
+          const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
+          return Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
+        }
+        const existingRaw = safeGetStorageItem(scopedKey);
+        if (existingRaw) {
+          try {
+            const parsed = JSON.parse(existingRaw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          } catch (_) {}
+        }
+        return [];
+      })();
+
+      // Remove legacy hardcoded mock sub-branches so only "Merkez" appears initially unless user added new branches
+      const filteredBranches = rawBranches.filter(
+        (b) =>
+          !(b.id === "br_2" && b.name === "Ankara Bölge Müdürlüğü") &&
+          !(b.id === "br_3" && b.name === "İzmir Şubesi")
+      );
+
+      const hqFullAddress =
+        getCompanyHeadquartersAddress(loadedSettings) ||
+        loadedSettings.address ||
+        compMeta.address ||
+        `${loadedSettings.city || compMeta.city || "İstanbul"} / ${loadedSettings.district || compMeta.district || "Merkez"}`;
+
+      const hqAddress = {
+        country: loadedSettings.country || loadedSettings.addressDetails?.country || "Türkiye",
+        city: loadedSettings.city || loadedSettings.addressDetails?.city || compMeta.city || "İstanbul",
+        district: loadedSettings.district || loadedSettings.addressDetails?.district || compMeta.district || "Merkez",
+        neighborhood: loadedSettings.neighborhood || loadedSettings.addressDetails?.neighborhood || compMeta.neighborhood || "",
+        street: loadedSettings.street || loadedSettings.addressDetails?.street || compMeta.street || "",
+        buildingNo: loadedSettings.buildingNo || loadedSettings.addressDetails?.buildingNo || compMeta.buildingNo || "",
+        doorNo: loadedSettings.doorNo || loadedSettings.addressDetails?.doorNo || compMeta.doorNo || "",
+        postalCode: loadedSettings.postalCode || loadedSettings.addressDetails?.postalCode || compMeta.postalCode || "",
+        fullAddress: hqFullAddress,
+      };
+
+      const existingMain = filteredBranches.find((b) => b.isMain) || filteredBranches[0];
+      const mainBranch: Branch = existingMain
+        ? {
+            ...existingMain,
+            code: existingMain.code || "MRK-001",
+            name: "Merkez",
+            isMain: true,
+            phone: loadedSettings.phone || existingMain.phone || compMeta.phone || "",
+            email: loadedSettings.email || existingMain.email || compMeta.email || "",
+            address: hqAddress,
+          }
+        : {
+            id: isDefault ? "br_1" : `br_main_${activeCompId}`,
+            code: "MRK-001",
+            name: "Merkez",
+            isMain: true,
+            managerName:
+              compMeta.companyType === "sahis"
+                ? compMeta.companyName?.split("-")[0]?.trim() || "İşletme Sahibi"
+                : "Merkez Yönetimi",
+            phone: loadedSettings.phone || compMeta.phone || "",
+            email: loadedSettings.email || compMeta.email || "",
+            status: "active",
+            address: hqAddress,
+            createdAt: new Date().toISOString().split("T")[0],
+          };
+
+      const otherBranches = filteredBranches
+        .filter((b) => b.id !== mainBranch.id && !b.isMain)
+        .map((b) => ({ ...b, isMain: false }));
+
+      const syncedBranches: Branch[] = [mainBranch, ...otherBranches];
+      safeSet(scopedKey, syncedBranches);
+      return syncedBranches;
     })(),
     warehouses: (() => {
       if (isDefault) {

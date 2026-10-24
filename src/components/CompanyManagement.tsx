@@ -37,7 +37,13 @@ import {
   PROTECTED_COMPANY_IDS,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
-import { checkRecipientTaxpayerStatus } from "../services/mysoftEDocumentService";
+import {
+  checkRecipientTaxpayerStatus,
+  getMysoftMappingDefaults,
+  getNextMysoftInvoiceNumber,
+  getLocalNextSequentialInvoiceNumber,
+  type MysoftMappingDefaults,
+} from "../services/mysoftEDocumentService";
 import {
   fetchCloudLogo,
   saveCloudLogo,
@@ -175,6 +181,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     if (companies) setLocalCompanies(companies);
   }, [companies]);
 
+  // Profile Form State
+  const [profileForm, setProfileForm] = useState<CompanySettings>(settings);
+  const [isFetchingTaxpayer, setIsFetchingTaxpayer] = useState(false);
+  const [vknFetchFeedback, setVknFetchFeedback] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (settings) {
+      setProfileForm(settings);
+    }
+  }, [settings]);
+
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<CompanyItem | null>(null);
   const [companyModalMode, setCompanyModalMode] = useState<"create" | "edit" | "mysoft_match">("create");
@@ -214,24 +231,47 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         setLocalCompanies(updated);
       }
       setLocalCompanies(getCompaniesList());
-      if (savedComp.id === currentActiveCompanyId) {
-        setProfileForm((prev) => ({
-          ...prev,
-          companyName: savedComp.companyName || prev.companyName,
-          companyTitle: savedComp.companyTitle || savedComp.companyName || prev.companyTitle,
-          taxOffice: savedComp.taxOffice || prev.taxOffice,
-          taxNumber: savedComp.taxNumber || savedComp.vkn || savedComp.tckn || prev.taxNumber,
-          phone: savedComp.phone ?? prev.phone,
-          email: savedComp.email ?? prev.email,
-          website: savedComp.website ?? prev.website,
-          address: savedComp.address ?? prev.address,
-          city: savedComp.city ?? prev.city,
-          district: savedComp.district ?? prev.district,
-          defaultBankAccountName: savedComp.defaultBankAccountName ?? prev.defaultBankAccountName,
-          defaultBankName: savedComp.defaultBankName ?? prev.defaultBankName,
-          defaultBankIban: savedComp.defaultBankIban ?? prev.defaultBankIban,
-          tenantIdentifierNumber: savedComp.tenantIdentifierNumber || prev.tenantIdentifierNumber,
-        }));
+      // Persist Portaldaki Seriler & Format Parametreleri to the matched company's settings
+      try {
+        const compStored = getStoredData(savedComp.id);
+        const baseSettings =
+          savedComp.id === currentActiveCompanyId
+            ? profileForm || settings
+            : compStored.settings || settings;
+        const nextCompSettings: CompanySettings = {
+          ...baseSettings,
+          companyName: savedComp.companyName || baseSettings.companyName,
+          companyTitle: savedComp.companyTitle || savedComp.companyName || baseSettings.companyTitle,
+          taxOffice: savedComp.taxOffice || baseSettings.taxOffice,
+          taxNumber: savedComp.taxNumber || savedComp.vkn || savedComp.tckn || baseSettings.taxNumber,
+          vkn: savedComp.vkn ?? baseSettings.vkn,
+          tckn: savedComp.tckn ?? baseSettings.tckn,
+          phone: savedComp.phone ?? baseSettings.phone,
+          email: savedComp.email ?? baseSettings.email,
+          website: savedComp.website ?? baseSettings.website,
+          address: savedComp.address ?? baseSettings.address,
+          city: savedComp.city ?? baseSettings.city,
+          district: savedComp.district ?? baseSettings.district,
+          defaultBankAccountName: savedComp.defaultBankAccountName ?? baseSettings.defaultBankAccountName,
+          defaultBankName: savedComp.defaultBankName ?? baseSettings.defaultBankName,
+          defaultBankIban: savedComp.defaultBankIban ?? baseSettings.defaultBankIban,
+          tenantIdentifierNumber: savedComp.tenantIdentifierNumber || baseSettings.tenantIdentifierNumber,
+          eFaturaPrefix: savedComp.eFaturaPrefix || baseSettings.eFaturaPrefix,
+          eFaturaNextNumber: savedComp.eFaturaNextNumber || baseSettings.eFaturaNextNumber,
+          eArsivPrefix: savedComp.eArsivPrefix || baseSettings.eArsivPrefix,
+          eArsivNextNumber: savedComp.eArsivNextNumber || baseSettings.eArsivNextNumber,
+          defaultInvoicePrefix:
+            savedComp.eFaturaPrefix ||
+            savedComp.defaultInvoicePrefix ||
+            baseSettings.defaultInvoicePrefix,
+        };
+        saveStoredData("SETTINGS", nextCompSettings, savedComp.id);
+        if (savedComp.id === currentActiveCompanyId) {
+          setProfileForm(nextCompSettings);
+          onSaveSettings(nextCompSettings);
+        }
+      } catch {
+        // Ignore storage write errors
       }
     } else {
       if (onAddCompany) {
@@ -289,16 +329,214 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setCompanyToDelete(null);
   };
 
-  // Profile Form State
-  const [profileForm, setProfileForm] = useState<CompanySettings>(settings);
-  const [isFetchingTaxpayer, setIsFetchingTaxpayer] = useState(false);
-  const [vknFetchFeedback, setVknFetchFeedback] = useState<string | null>(null);
+  // Mysoft VKN/TCKN Eşleştirme Masası — Resmi Belge Ön Ekleri ve Ardışık Numaratör State
+  const [mysoftDeskDefaults, setMysoftDeskDefaults] = useState<MysoftMappingDefaults | null>(null);
+  const [isSyncingMysoftPrefixes, setIsSyncingMysoftPrefixes] = useState(false);
+  const [mysoftDeskFeedback, setMysoftDeskFeedback] = useState<string | null>(null);
+  const [deskEFaturaPrefix, setDeskEFaturaPrefix] = useState<string>("GIB");
+  const [deskEFaturaLastNo, setDeskEFaturaLastNo] = useState<string>("");
+  const [deskEFaturaNextNo, setDeskEFaturaNextNo] = useState<string>("");
+  const [deskEArsivPrefix, setDeskEArsivPrefix] = useState<string>("EAR");
+  const [deskEArsivLastNo, setDeskEArsivLastNo] = useState<string>("");
+  const [deskEArsivNextNo, setDeskEArsivNextNo] = useState<string>("");
+
+  const syncSelectedCompanyMysoftPrefixes = React.useCallback(
+    async (compId?: string, showFeedback = false) => {
+      const targetId = compId || selectedMysoftCompId || currentActiveCompanyId;
+      const targetComp =
+        effectiveCompanies.find((c) => c.id === targetId) || effectiveCompanies[0];
+      if (!targetComp) return;
+
+      const localEFat = getLocalNextSequentialInvoiceNumber("e_fatura", targetComp.id);
+      const localEArs = getLocalNextSequentialInvoiceNumber("e_arsiv", targetComp.id);
+
+      setDeskEFaturaPrefix(localEFat.prefix);
+      setDeskEFaturaLastNo(localEFat.lastInvoiceNumber || "");
+      setDeskEFaturaNextNo(localEFat.nextInvoiceNumber);
+      setDeskEArsivPrefix(localEArs.prefix);
+      setDeskEArsivLastNo(localEArs.lastInvoiceNumber || "");
+      setDeskEArsivNextNo(localEArs.nextInvoiceNumber);
+
+      const cleanId = (
+        targetComp.tenantIdentifierNumber ||
+        targetComp.vkn ||
+        targetComp.tckn ||
+        targetComp.taxNumber ||
+        ""
+      )
+        .replace(/\D/g, "")
+        .trim();
+
+      if (!cleanId) return;
+
+      setIsSyncingMysoftPrefixes(true);
+      if (showFeedback) setMysoftDeskFeedback(null);
+
+      try {
+        const currentYear = new Date().getFullYear();
+        const [defaultsSettled, efatSettled, earsSettled] = await Promise.allSettled([
+          getMysoftMappingDefaults(cleanId),
+          getNextMysoftInvoiceNumber({
+            tenantIdentifierNumber: cleanId,
+            eDocumentType: "EFATURA",
+            year: currentYear,
+          }),
+          getNextMysoftInvoiceNumber({
+            tenantIdentifierNumber: cleanId,
+            eDocumentType: "EARSIVFATURA",
+            year: currentYear,
+          }),
+        ]);
+
+        const defaults =
+          defaultsSettled.status === "fulfilled" ? defaultsSettled.value : null;
+        const efatRes = efatSettled.status === "fulfilled" ? efatSettled.value : null;
+        const earsRes = earsSettled.status === "fulfilled" ? earsSettled.value : null;
+
+        const nonGen = (v?: string) => {
+          const c = String(v || "").trim().toUpperCase().slice(0, 3);
+          return c && c !== "GIB" && c !== "EAR" ? c : "";
+        };
+
+        const resolvedEFatPrefix = (
+          nonGen(efatRes?.prefix) ||
+          nonGen(defaults?.eFaturaPrefix) ||
+          nonGen(localEFat.prefix) ||
+          nonGen(targetComp.eFaturaPrefix) ||
+          efatRes?.prefix ||
+          defaults?.eFaturaPrefix ||
+          localEFat.prefix ||
+          targetComp.eFaturaPrefix ||
+          "GIB"
+        )
+          .toUpperCase()
+          .slice(0, 3);
+
+        const resolvedEArsPrefix = (
+          nonGen(earsRes?.prefix) ||
+          nonGen(defaults?.eArsivPrefix) ||
+          nonGen(localEArs.prefix) ||
+          nonGen(targetComp.eArsivPrefix) ||
+          earsRes?.prefix ||
+          defaults?.eArsivPrefix ||
+          localEArs.prefix ||
+          targetComp.eArsivPrefix ||
+          "EAR"
+        )
+          .toUpperCase()
+          .slice(0, 3);
+
+        const finalEFatSeq = Math.max(
+          1,
+          efatRes?.nextSequence || 1,
+          defaults?.eFaturaSequence || 1,
+          localEFat.nextSequence || 1,
+        );
+        const finalEArsSeq = Math.max(
+          1,
+          earsRes?.nextSequence || 1,
+          defaults?.eArsivSequence || 1,
+          localEArs.nextSequence || 1,
+        );
+
+        const finalEFatNext = `${resolvedEFatPrefix}${currentYear}${String(finalEFatSeq).padStart(9, "0")}`;
+        const finalEFatLast =
+          finalEFatSeq > 1
+            ? `${resolvedEFatPrefix}${currentYear}${String(finalEFatSeq - 1).padStart(9, "0")}`
+            : efatRes?.lastInvoiceNumber || defaults?.eFaturaLastNumber || localEFat.lastInvoiceNumber || "";
+
+        const finalEArsNext = `${resolvedEArsPrefix}${currentYear}${String(finalEArsSeq).padStart(9, "0")}`;
+        const finalEArsLast =
+          finalEArsSeq > 1
+            ? `${resolvedEArsPrefix}${currentYear}${String(finalEArsSeq - 1).padStart(9, "0")}`
+            : earsRes?.lastInvoiceNumber || defaults?.eArsivLastNumber || localEArs.lastInvoiceNumber || "";
+
+        setDeskEFaturaPrefix(resolvedEFatPrefix);
+        setDeskEFaturaLastNo(finalEFatLast);
+        setDeskEFaturaNextNo(finalEFatNext);
+        setDeskEArsivPrefix(resolvedEArsPrefix);
+        setDeskEArsivLastNo(finalEArsLast);
+        setDeskEArsivNextNo(finalEArsNext);
+
+        const mergedPrefixes = [...(defaults?.prefixes || [])];
+        const seenPfx = new Set(mergedPrefixes.map((p) => String(p.prefix || "").toUpperCase()));
+        if (!seenPfx.has(resolvedEFatPrefix)) {
+          seenPfx.add(resolvedEFatPrefix);
+          mergedPrefixes.unshift({
+            prefix: resolvedEFatPrefix,
+            edocumentType: 1,
+            isDefault: true,
+            currentNumber: finalEFatSeq - 1,
+            lastNumber: finalEFatLast || undefined,
+            nextNumber: finalEFatNext,
+          });
+        }
+        if (!seenPfx.has(resolvedEArsPrefix)) {
+          seenPfx.add(resolvedEArsPrefix);
+          mergedPrefixes.push({
+            prefix: resolvedEArsPrefix,
+            edocumentType: 2,
+            isDefault: true,
+            currentNumber: finalEArsSeq - 1,
+            lastNumber: finalEArsLast || undefined,
+            nextNumber: finalEArsNext,
+          });
+        }
+
+        setMysoftDeskDefaults({
+          vknTckn: cleanId,
+          eFaturaPrefix: resolvedEFatPrefix,
+          eFaturaLastNumber: finalEFatLast || undefined,
+          eFaturaNextNumber: finalEFatNext,
+          eFaturaSequence: finalEFatSeq,
+          eArsivPrefix: resolvedEArsPrefix,
+          eArsivLastNumber: finalEArsLast || undefined,
+          eArsivNextNumber: finalEArsNext,
+          eArsivSequence: finalEArsSeq,
+          prefixes: mergedPrefixes,
+        });
+
+        // Persist updated prefixes and next numbers to the company & settings automatically
+        if (
+          targetComp.eFaturaPrefix !== resolvedEFatPrefix ||
+          targetComp.eFaturaNextNumber !== finalEFatNext ||
+          targetComp.eArsivPrefix !== resolvedEArsPrefix ||
+          targetComp.eArsivNextNumber !== finalEArsNext
+        ) {
+          const updatedComp: CompanyItem = {
+            ...targetComp,
+            eFaturaPrefix: resolvedEFatPrefix,
+            eFaturaNextNumber: finalEFatNext,
+            eArsivPrefix: resolvedEArsPrefix,
+            eArsivNextNumber: finalEArsNext,
+          };
+          handleSaveCompanyFromModal(updatedComp, false);
+        }
+
+        if (showFeedback) {
+          setMysoftDeskFeedback(
+            `Resmi belge ön ekleri (${resolvedEFatPrefix} / ${resolvedEArsPrefix}) ve Mysoft son belge numaraları eşitlendi. Programdan kesilecek faturalar ${finalEFatNext} / ${finalEArsNext} numarasından ardışık devam edecektir.`,
+          );
+          setTimeout(() => setMysoftDeskFeedback(null), 6000);
+        }
+      } catch {
+        if (showFeedback) {
+          setMysoftDeskFeedback(
+            `Yerel Mysoft e-Belge kayıtlarından ön ekler (${localEFat.prefix} / ${localEArs.prefix}) ve sıradaki numaralar (${localEFat.nextInvoiceNumber}) güncellendi.`,
+          );
+          setTimeout(() => setMysoftDeskFeedback(null), 5000);
+        }
+      } finally {
+        setIsSyncingMysoftPrefixes(false);
+      }
+    },
+    [selectedMysoftCompId, currentActiveCompanyId, effectiveCompanies],
+  );
 
   React.useEffect(() => {
-    if (settings) {
-      setProfileForm(settings);
-    }
-  }, [settings]);
+    void syncSelectedCompanyMysoftPrefixes(selectedMysoftCompId, false);
+  }, [selectedMysoftCompId, currentSubTab]);
+
   const [isSaved, setIsSaved] = useState(false);
   const [isCredSaved, setIsCredSaved] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -621,11 +859,53 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           defaultBankName: cleanedProfile.defaultBankName,
           defaultBankIban: cleanedProfile.defaultBankIban,
           tenantIdentifierNumber: cleanedProfile.tenantIdentifierNumber || activeComp.tenantIdentifierNumber,
+          eFaturaPrefix: cleanedProfile.eFaturaPrefix || activeComp.eFaturaPrefix,
+          eFaturaNextNumber: cleanedProfile.eFaturaNextNumber || activeComp.eFaturaNextNumber,
+          eArsivPrefix: cleanedProfile.eArsivPrefix || activeComp.eArsivPrefix,
+          eArsivNextNumber: cleanedProfile.eArsivNextNumber || activeComp.eArsivNextNumber,
+          defaultInvoicePrefix: cleanedProfile.defaultInvoicePrefix || activeComp.defaultInvoicePrefix,
+          invoiceDesign: cleanedProfile.invoiceDesign || activeComp.invoiceDesign,
           logoUrl: cleanedProfile.logoUrl || activeComp.logoUrl,
           logoScale: cleanedProfile.logoScale ?? activeComp.logoScale,
         };
         const updatedList = updateCompanyItem(updatedComp);
         setLocalCompanies(updatedList);
+      }
+
+      // Sync Main Branch ("Merkez") with Firma Profili address
+      const mainBr = branches.find((b) => b.isMain) || branches[0];
+      if (mainBr) {
+        const compiledHqAddr =
+          cleanedProfile.address ||
+          compileStructuredAddress(
+            cleanedProfile.neighborhood,
+            cleanedProfile.street,
+            cleanedProfile.district,
+            cleanedProfile.city,
+            cleanedProfile.buildingNo,
+            cleanedProfile.doorNo,
+            cleanedProfile.postalCode
+          ) ||
+          `${cleanedProfile.district || ""} / ${cleanedProfile.city || "İstanbul"}`;
+        onUpdateBranch({
+          ...mainBr,
+          code: mainBr.code || "MRK-001",
+          name: "Merkez",
+          isMain: true,
+          phone: cleanedProfile.phone || mainBr.phone || "",
+          email: cleanedProfile.email || mainBr.email || "",
+          address: {
+            country: cleanedProfile.country || cleanedProfile.addressDetails?.country || "Türkiye",
+            city: cleanedProfile.city || cleanedProfile.addressDetails?.city || "İstanbul",
+            district: cleanedProfile.district || cleanedProfile.addressDetails?.district || "Merkez",
+            neighborhood: cleanedProfile.neighborhood || cleanedProfile.addressDetails?.neighborhood || "",
+            street: cleanedProfile.street || cleanedProfile.addressDetails?.street || "",
+            buildingNo: cleanedProfile.buildingNo || cleanedProfile.addressDetails?.buildingNo || "",
+            doorNo: cleanedProfile.doorNo || cleanedProfile.addressDetails?.doorNo || "",
+            postalCode: cleanedProfile.postalCode || cleanedProfile.addressDetails?.postalCode || "",
+            fullAddress: compiledHqAddr,
+          },
+        });
       }
 
       if (showSavedFeedback) {
@@ -740,6 +1020,71 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     persistProfileSettings(profileForm, true);
   };
 
+  // Effective Branches: Main branch ("Merkez") always pulls its address from Firma Profili (profileForm)
+  const effectiveBranches = React.useMemo<Branch[]>(() => {
+    const cleanedList = branches.filter(
+      (b) =>
+        !(b.id === "br_2" && b.name === "Ankara Bölge Müdürlüğü") &&
+        !(b.id === "br_3" && b.name === "İzmir Şubesi")
+    );
+    const hqCity = profileForm.city || profileForm.addressDetails?.city || settings.city || "İstanbul";
+    const hqDistrict = profileForm.district || profileForm.addressDetails?.district || settings.district || "Merkez";
+    const hqNeighborhood = profileForm.neighborhood || profileForm.addressDetails?.neighborhood || settings.neighborhood || "";
+    const hqStreet = profileForm.street || profileForm.addressDetails?.street || settings.street || "";
+    const hqBuildingNo = profileForm.buildingNo || profileForm.addressDetails?.buildingNo || settings.buildingNo || "";
+    const hqDoorNo = profileForm.doorNo || profileForm.addressDetails?.doorNo || settings.doorNo || "";
+    const hqPostalCode = profileForm.postalCode || profileForm.addressDetails?.postalCode || settings.postalCode || "";
+    const hqExplicitFull = String(
+      profileForm.address || profileForm.addressDetails?.fullAddress || settings.address || ""
+    ).trim();
+    const hqCompiledFull =
+      hqExplicitFull ||
+      compileStructuredAddress(hqNeighborhood, hqStreet, hqDistrict, hqCity, hqBuildingNo, hqDoorNo, hqPostalCode) ||
+      `${hqDistrict} / ${hqCity}`;
+
+    const hqAddress: AddressDetails = {
+      country: profileForm.country || profileForm.addressDetails?.country || "Türkiye",
+      city: hqCity,
+      district: hqDistrict,
+      neighborhood: hqNeighborhood,
+      street: hqStreet,
+      buildingNo: hqBuildingNo,
+      doorNo: hqDoorNo,
+      postalCode: hqPostalCode,
+      fullAddress: hqCompiledFull,
+    };
+
+    const existingMain = cleanedList.find((b) => b.isMain) || cleanedList[0];
+    const mainBranch: Branch = existingMain
+      ? {
+          ...existingMain,
+          code: existingMain.code || "MRK-001",
+          name: "Merkez",
+          isMain: true,
+          phone: profileForm.phone || existingMain.phone || settings.phone || "",
+          email: profileForm.email || existingMain.email || settings.email || "",
+          address: hqAddress,
+        }
+      : {
+          id: "br_1",
+          code: "MRK-001",
+          name: "Merkez",
+          isMain: true,
+          managerName: "Merkez Yönetimi",
+          phone: profileForm.phone || settings.phone || "",
+          email: profileForm.email || settings.email || "",
+          status: "active",
+          address: hqAddress,
+          createdAt: new Date().toISOString().split("T")[0],
+        };
+
+    const subBranches = cleanedList
+      .filter((b) => b.id !== mainBranch.id && !b.isMain)
+      .map((b) => ({ ...b, isMain: false }));
+
+    return [mainBranch, ...subBranches];
+  }, [branches, profileForm, settings]);
+
   // Open Branch Detail
   const handleOpenBranchModal = (branch?: Branch) => {
     if (branch) {
@@ -747,14 +1092,16 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       setBranchForm(branch);
       companyNav.openEdit(branch, branch.id);
     } else {
+      const subBranchCount = effectiveBranches.filter((b) => !b.isMain).length;
+      const nextSubNumber = String(subBranchCount + 1).padStart(3, "0");
       setEditingBranch(null);
       setBranchForm({
-        code: `SUB-00${branches.length + 1}`,
+        code: `SUB-${nextSubNumber}`,
         name: "",
         managerName: "",
         phone: "",
         email: "",
-        isMain: branches.length === 0,
+        isMain: false,
         status: "active",
         address: {
           country: "Türkiye",
@@ -802,11 +1149,47 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     };
 
     if (editingBranch) {
-      onUpdateBranch({
+      const isEditingMain = editingBranch.isMain;
+      const updatedBranch: Branch = {
         ...editingBranch,
         ...branchForm,
+        name: isEditingMain ? "Merkez" : branchForm.name!,
+        isMain: isEditingMain,
         address: normalizedAddr,
-      } as Branch);
+      } as Branch;
+      onUpdateBranch(updatedBranch);
+
+      // If Merkez (Ana Şube) address was edited, sync it back to Firma Profili address
+      if (isEditingMain) {
+        updateAndAutoSaveProfile(
+          (prev) => ({
+            ...prev,
+            phone: updatedBranch.phone || prev.phone,
+            email: updatedBranch.email || prev.email,
+            city: normalizedAddr.city || prev.city,
+            district: normalizedAddr.district || prev.district,
+            neighborhood: normalizedAddr.neighborhood ?? prev.neighborhood,
+            street: normalizedAddr.street ?? prev.street,
+            buildingNo: normalizedAddr.buildingNo ?? prev.buildingNo,
+            doorNo: normalizedAddr.doorNo ?? prev.doorNo,
+            postalCode: normalizedAddr.postalCode ?? prev.postalCode,
+            address: normalizedAddr.fullAddress || prev.address,
+            addressDetails: {
+              ...(prev.addressDetails || { country: "Türkiye" }),
+              country: normalizedAddr.country || "Türkiye",
+              city: normalizedAddr.city || prev.city || "İstanbul",
+              district: normalizedAddr.district || prev.district || "",
+              neighborhood: normalizedAddr.neighborhood || "",
+              street: normalizedAddr.street || "",
+              buildingNo: normalizedAddr.buildingNo || "",
+              doorNo: normalizedAddr.doorNo || "",
+              postalCode: normalizedAddr.postalCode || "",
+              fullAddress: normalizedAddr.fullAddress || prev.address || "",
+            },
+          }),
+          true
+        );
+      }
     } else {
       const newBranch: Branch = {
         id: `br_${Date.now()}`,
@@ -815,7 +1198,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         managerName: branchForm.managerName || "",
         phone: branchForm.phone || "",
         email: branchForm.email || "",
-        isMain: !!branchForm.isMain,
+        isMain: false,
         status: (branchForm.status as "active" | "passive") || "active",
         address: normalizedAddr,
         createdAt: new Date().toISOString().split("T")[0],
@@ -840,8 +1223,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         capacityM2: 1000,
         managerName: "",
         phone: "",
-        branchId: branches[0]?.id || "",
-        branchName: branches[0]?.name || "",
+        branchId: effectiveBranches[0]?.id || "",
+        branchName: effectiveBranches[0]?.name || "Merkez",
         status: "active",
         address: {
           country: "Türkiye",
@@ -865,7 +1248,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     e.preventDefault();
     if (!warehouseForm.name || !warehouseForm.code) return;
 
-    const selectedBranch = branches.find((b) => b.id === warehouseForm.branchId);
+    const selectedBranch = effectiveBranches.find((b) => b.id === warehouseForm.branchId);
     const rawAddr = (warehouseForm.address as AddressDetails) || {
       country: "Türkiye",
       city: "İstanbul",
@@ -902,7 +1285,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         capacityM2: warehouseForm.capacityM2 || 500,
         managerName: warehouseForm.managerName || "",
         phone: warehouseForm.phone || "",
-        branchId: warehouseForm.branchId || branches[0]?.id || "",
+        branchId: warehouseForm.branchId || effectiveBranches[0]?.id || "",
         branchName: selectedBranch?.name || "Merkez",
         status: (warehouseForm.status as "active" | "passive") || "active",
         address: normalizedAddr,
@@ -914,12 +1297,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   };
 
   // Filtered Lists
-  const filteredBranches = branches.filter(
+  const filteredBranches = effectiveBranches.filter(
     (b) =>
       b.name.toLowerCase().includes(branchSearch.toLowerCase()) ||
       b.code.toLowerCase().includes(branchSearch.toLowerCase()) ||
-      b.address.city.toLowerCase().includes(branchSearch.toLowerCase()) ||
-      b.address.district.toLowerCase().includes(branchSearch.toLowerCase())
+      (b.address.city || "").toLowerCase().includes(branchSearch.toLowerCase()) ||
+      (b.address.district || "").toLowerCase().includes(branchSearch.toLowerCase())
   );
 
   const filteredWarehouses = warehouses.filter(
@@ -2806,10 +3189,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
                   <div className="flex items-start gap-2 text-[11px] pt-1">
                     <MapPin className="w-3.5 h-3.5 text-[#0f6bae] shrink-0 mt-0.5" />
-                    <span className="text-slate-700 leading-snug">
-                      {branch.address.fullAddress ||
-                        `${branch.address.street || ""} ${branch.address.neighborhood || ""} ${branch.address.district}/${branch.address.city}`}
-                    </span>
+                    <div className="space-y-1">
+                      <span className="text-slate-700 leading-snug block">
+                        {branch.address.fullAddress ||
+                          `${branch.address.street || ""} ${branch.address.neighborhood || ""} ${branch.address.district}/${branch.address.city}`}
+                      </span>
+                      {branch.isMain && (
+                        <span className="inline-block text-[10px] font-semibold text-[#0f6bae] bg-[#eaedff]/70 px-1.5 py-0.5 rounded">
+                          Firma Profili Merkez Adresi ile Senkronize
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -3223,19 +3613,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       {/* SUB-TAB: MYSOFT ENTEGRASYON & VKN/TCKN EŞLEŞTİRME MASASI */}
       {currentSubTab === "mysoft" && (
-        !isAdmin ? (
-          <div className="p-8 max-w-xl mx-auto bg-white rounded-2xl border border-amber-200 shadow-xs text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-slate-900">
-              Yönetici Yetkisi Gerekli
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Mysoft şirket eşleştirmesi ve iş ortakları yönetimi münhasıran <strong>Admin / Sistem Yöneticisi</strong> yetkisindedir.
-            </p>
-          </div>
-        ) : (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
             <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -3245,7 +3622,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   Mysoft e-Belge Entegrasyonu — VKN / TCKN Eşleştirme Masası
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Yönetici (Admin) olarak sistemdeki şirketlerin Vergi Kimlik Numarası (VKN) ve T.C. Kimlik Numarası (TCKN) eşleştirmesini yapabilir, Mysoft portal mükellef kimliğiyle bağlayabilirsiniz.
+                  Şirketin Vergi Kimlik Numarası (VKN) / T.C. Kimlik Numarası (TCKN) eşleştirmesini, Mysoft resmi belge ön eklerini (Prefix) ve en son kalan e-Belge sayısından devam eden ardışık fatura numaratörlerini buradan yönetebilirsiniz.
                 </p>
               </div>
 
@@ -3272,12 +3649,36 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             {(() => {
               const selectedComp = effectiveCompanies.find((c) => c.id === selectedMysoftCompId) || effectiveCompanies[0];
               if (!selectedComp) return null;
+              const currentYear = new Date().getFullYear();
+              const activeEFatPrefix = (deskEFaturaPrefix || selectedComp.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
+              const activeEArsPrefix = (deskEArsivPrefix || selectedComp.eArsivPrefix || "EAR").toUpperCase().slice(0, 3);
+              const activeEFatNext = deskEFaturaNextNo || selectedComp.eFaturaNextNumber || `${activeEFatPrefix}${currentYear}000000001`;
+              const activeEArsNext = deskEArsivNextNo || selectedComp.eArsivNextNumber || `${activeEArsPrefix}${currentYear}000000001`;
+
+              const handleSavePrefixSettingsOnDesk = () => {
+                const normEFatPfx = activeEFatPrefix.replace(/[^A-Z0-9]/g, "").slice(0, 3).padEnd(3, "X");
+                const normEArsPfx = activeEArsPrefix.replace(/[^A-Z0-9]/g, "").slice(0, 3).padEnd(3, "X");
+                const updatedComp: CompanyItem = {
+                  ...selectedComp,
+                  eFaturaPrefix: normEFatPfx,
+                  eFaturaNextNumber: activeEFatNext.trim().toUpperCase(),
+                  eArsivPrefix: normEArsPfx,
+                  eArsivNextNumber: activeEArsNext.trim().toUpperCase(),
+                  defaultInvoicePrefix: normEFatPfx,
+                };
+                handleSaveCompanyFromModal(updatedComp, false);
+                setMysoftDeskFeedback(
+                  `Şirketin resmi belge ön ekleri (${normEFatPfx} / ${normEArsPfx}) ve sıradaki ardışık fatura numaraları (${activeEFatNext} / ${activeEArsNext}) başarıyla kaydedildi.`,
+                );
+                setTimeout(() => setMysoftDeskFeedback(null), 5000);
+              };
+
               return (
                 <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50/70 to-blue-50/40 p-5 rounded-2xl border border-indigo-150 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 block">
-                        Seçili Şirket
+                        Seçili Şirket & Resmi Mükellef Bilgisi
                       </span>
                       <h4 className="text-base font-bold text-slate-900">
                         {selectedComp.companyTitle || selectedComp.companyName}
@@ -3287,15 +3688,34 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenMysoftMatch(selectedComp)}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      <span>VKN & TCKN Eşleştirmesini Düzenle</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isSyncingMysoftPrefixes}
+                        onClick={() => void syncSelectedCompanyMysoftPrefixes(selectedComp.id, true)}
+                        className="px-3.5 py-2 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMysoftPrefixes ? "animate-spin" : ""}`} />
+                        <span>Mysoft Ön Eklerini & Son Sayıyı Eşitle</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenMysoftMatch(selectedComp)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>VKN & TCKN Eşleştirmesini Düzenle</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {mysoftDeskFeedback && (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{mysoftDeskFeedback}</span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
                     <div className="bg-white p-3.5 rounded-xl border border-slate-200">
@@ -3332,28 +3752,263 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
                     <div className="bg-white p-3.5 rounded-xl border border-blue-200">
                       <div className="text-[11px] text-blue-700 font-bold mb-1 flex items-center justify-between">
-                        <span>e-Fatura Ön Eki</span>
-                        <span className="text-[9px] bg-blue-100 text-blue-800 px-1 py-0.2 rounded font-mono font-bold">
-                          {selectedComp.eFaturaPrefix || "GIB"}
+                        <span>Resmi e-Fatura Ön Eki</span>
+                        <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                          {activeEFatPrefix}
                         </span>
                       </div>
                       <div className="text-xs font-mono font-bold text-blue-950 truncate mt-1">
-                        {selectedComp.eFaturaNextNumber || `${selectedComp.eFaturaPrefix || "GIB"}2026000000001`}
+                        {activeEFatNext}
                       </div>
-                      <span className="text-[10px] text-blue-600 mt-1 block">Sıradaki Ardışık No</span>
+                      <span className="text-[10px] text-blue-600 mt-1 block">
+                        {deskEFaturaLastNo ? `Son: ${deskEFaturaLastNo}` : "Sıradaki Ardışık No"}
+                      </span>
                     </div>
 
                     <div className="bg-white p-3.5 rounded-xl border border-purple-200">
                       <div className="text-[11px] text-purple-700 font-bold mb-1 flex items-center justify-between">
-                        <span>e-Arşiv Ön Eki</span>
-                        <span className="text-[9px] bg-purple-100 text-purple-800 px-1 py-0.2 rounded font-mono font-bold">
-                          {selectedComp.eArsivPrefix || "EAR"}
+                        <span>Resmi e-Arşiv Ön Eki</span>
+                        <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                          {activeEArsPrefix}
                         </span>
                       </div>
                       <div className="text-xs font-mono font-bold text-purple-950 truncate mt-1">
-                        {selectedComp.eArsivNextNumber || `${selectedComp.eArsivPrefix || "EAR"}2026000000001`}
+                        {activeEArsNext}
                       </div>
-                      <span className="text-[10px] text-purple-600 mt-1 block">Sıradaki Ardışık No</span>
+                      <span className="text-[10px] text-purple-600 mt-1 block">
+                        {deskEArsivLastNo ? `Son: ${deskEArsivLastNo}` : "Sıradaki Ardışık No"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Şirketin Resmi Belge Ön Ekleri (Prefix) ve Ardışık Fatura Numaratörü Masası */}
+                  <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div>
+                        <h5 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-indigo-600" />
+                          Şirketin Resmi Belge Ön Ekleri (Prefix) ve Mysoft Ardışık Numaratör Tablosu
+                        </h5>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Mysoft e-Belgelerde en son hangi sayıda kalındıysa programdan kesilecek yeni faturalar bu ön ek ve sıradaki numarayla ardışık olarak devam eder.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSavePrefixSettingsOnDesk}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Resmi Ön Ekleri & Sırayı Kaydet</span>
+                      </button>
+                    </div>
+
+                    {/* All Official Prefixes Table / Badges */}
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                        <span>Şirkete Tanımlı Resmi Belge Ön Ekleri (Mysoft Portal & GİB Serileri)</span>
+                        <span className="text-[10px] text-slate-500 font-normal">
+                          Üzerine tıklayarak aktif ön ek olarak seçebilirsiniz
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {(mysoftDeskDefaults?.prefixes && mysoftDeskDefaults.prefixes.length > 0
+                          ? mysoftDeskDefaults.prefixes
+                          : [
+                              {
+                                prefix: activeEFatPrefix,
+                                edocumentType: 1,
+                                isDefault: true,
+                                lastNumber: deskEFaturaLastNo || undefined,
+                                nextNumber: activeEFatNext,
+                              },
+                              {
+                                prefix: activeEArsPrefix,
+                                edocumentType: 2,
+                                isDefault: true,
+                                lastNumber: deskEArsivLastNo || undefined,
+                                nextNumber: activeEArsNext,
+                              },
+                            ]
+                        ).map((p, idx) => {
+                          const isEArs = p.edocumentType === 2 || String(p.prefix || "").toUpperCase() === activeEArsPrefix;
+                          const docTypeLabel =
+                            p.edocumentType === 2
+                              ? "e-Arşiv Fatura"
+                              : p.edocumentType === 3
+                                ? "e-İrsaliye"
+                                : "e-Fatura (GİB)";
+                          const pfxCode = String(p.prefix || "").toUpperCase().slice(0, 3);
+                          const isSelected = isEArs
+                            ? pfxCode === activeEArsPrefix
+                            : pfxCode === activeEFatPrefix;
+                          return (
+                            <div
+                              key={`${pfxCode}-${idx}`}
+                              onClick={() => {
+                                const nextNumVal = p.nextNumber || `${pfxCode}${currentYear}000000001`;
+                                if (isEArs) {
+                                  setDeskEArsivPrefix(pfxCode);
+                                  setDeskEArsivNextNo(nextNumVal);
+                                  if (p.lastNumber) setDeskEArsivLastNo(p.lastNumber);
+                                  handleSaveCompanyFromModal(
+                                    {
+                                      ...selectedComp,
+                                      eArsivPrefix: pfxCode,
+                                      eArsivNextNumber: nextNumVal,
+                                    },
+                                    false,
+                                  );
+                                } else {
+                                  setDeskEFaturaPrefix(pfxCode);
+                                  setDeskEFaturaNextNo(nextNumVal);
+                                  if (p.lastNumber) setDeskEFaturaLastNo(p.lastNumber);
+                                  handleSaveCompanyFromModal(
+                                    {
+                                      ...selectedComp,
+                                      eFaturaPrefix: pfxCode,
+                                      eFaturaNextNumber: nextNumVal,
+                                      defaultInvoicePrefix: pfxCode,
+                                    },
+                                    false,
+                                  );
+                                }
+                              }}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                isSelected
+                                  ? "bg-indigo-50/80 border-indigo-400 ring-1 ring-indigo-300"
+                                  : "bg-slate-50/70 border-slate-200 hover:border-indigo-300"
+                              }`}
+                            >
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono text-xs font-extrabold tracking-wider">
+                                    {pfxCode}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-800 truncate">
+                                    {docTypeLabel}
+                                  </span>
+                                  {p.isDefault && (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                                      Varsayılan
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-mono truncate">
+                                  En Son: <strong className="text-slate-700">{p.lastNumber || "Henüz kesilmedi (0)"}</strong>
+                                </div>
+                                <div className="text-[10px] text-indigo-700 font-mono truncate">
+                                  Sıradaki: <strong>{p.nextNumber || `${pfxCode}${currentYear}000000001`}</strong>
+                                </div>
+                              </div>
+                              <CheckCircle2
+                                className={`w-4 h-4 shrink-0 ${
+                                  isSelected ? "text-indigo-600" : "text-slate-300"
+                                }`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Editable Official Prefix & Next Sequential Inputs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      {/* e-Fatura Card */}
+                      <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-blue-600" />
+                            e-Fatura Resmi Ön Eki ve Sıradaki Sayı
+                          </span>
+                          <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold">
+                            Mysoft Son No: {deskEFaturaLastNo || "Yok (Yeni Seri)"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-blue-800 mb-1">
+                              Ön Ek (3 Harf)
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={3}
+                              value={deskEFaturaPrefix}
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                setDeskEFaturaPrefix(val);
+                                if (val.length === 3) {
+                                  const seqInfo = getLocalNextSequentialInvoiceNumber("e_fatura", selectedComp.id, val);
+                                  setDeskEFaturaLastNo(seqInfo.lastInvoiceNumber || "");
+                                  setDeskEFaturaNextNo(seqInfo.nextInvoiceNumber);
+                                }
+                              }}
+                              className="w-full h-9 px-2.5 bg-white border border-blue-300 rounded-lg font-mono text-xs font-extrabold text-blue-950 uppercase text-center"
+                              placeholder="GIB"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-[10px] font-bold text-blue-800 mb-1">
+                              Programdan Kesilecek Sıradaki Fatura No
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={16}
+                              value={activeEFatNext}
+                              onChange={(e) => setDeskEFaturaNextNo(e.target.value.toUpperCase().trim())}
+                              className="w-full h-9 px-3 bg-white border border-blue-300 rounded-lg font-mono text-xs font-bold text-blue-950"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* e-Arşiv Card */}
+                      <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-purple-600" />
+                            e-Arşiv Resmi Ön Eki ve Sıradaki Sayı
+                          </span>
+                          <span className="text-[10px] font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-bold">
+                            Mysoft Son No: {deskEArsivLastNo || "Yok (Yeni Seri)"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-purple-800 mb-1">
+                              Ön Ek (3 Harf)
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={3}
+                              value={deskEArsivPrefix}
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                setDeskEArsivPrefix(val);
+                                if (val.length === 3) {
+                                  const seqInfo = getLocalNextSequentialInvoiceNumber("e_arsiv", selectedComp.id, val);
+                                  setDeskEArsivLastNo(seqInfo.lastInvoiceNumber || "");
+                                  setDeskEArsivNextNo(seqInfo.nextInvoiceNumber);
+                                }
+                              }}
+                              className="w-full h-9 px-2.5 bg-white border border-purple-300 rounded-lg font-mono text-xs font-extrabold text-purple-950 uppercase text-center"
+                              placeholder="EAR"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-[10px] font-bold text-purple-800 mb-1">
+                              Programdan Kesilecek Sıradaki Fatura No
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={16}
+                              value={activeEArsNext}
+                              onChange={(e) => setDeskEArsivNextNo(e.target.value.toUpperCase().trim())}
+                              className="w-full h-9 px-3 bg-white border border-purple-300 rounded-lg font-mono text-xs font-bold text-purple-950"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -3380,6 +4035,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                           };
                           handleSaveCompanyFromModal(updated, false);
                           writeStoredMysoftTenantVkn(newVkn);
+                          void syncSelectedCompanyMysoftPrefixes(selectedComp.id, true);
                         }
                       }}
                     />
@@ -3389,7 +4045,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             })()}
           </div>
         </div>
-        )
       )}
 
       {/* Şube Ekle / Düzenle Modal */}
@@ -3479,15 +4134,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <label className="flex items-center gap-2 font-bold text-slate-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!branchForm.isMain}
-                    onChange={(e) => setBranchForm({ ...branchForm, isMain: e.target.checked })}
-                    className="w-4 h-4 rounded border-slate-300 text-[#0f6bae] focus:ring-[#0f6bae]"
-                  />
-                  <span>Ana / Merkez Şube Olarak İşaretle</span>
-                </label>
+                {editingBranch?.isMain ? (
+                  <div className="flex items-center gap-2 font-bold text-[#0f6bae]">
+                    <span className="bg-[#eaedff] text-[#0f6bae] text-[11px] font-bold px-2.5 py-1 rounded border border-[#c6cdff]">
+                      Merkez (Ana Şube — Firma Profili Adresi)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 font-semibold text-slate-600">
+                    <span>Şube Türü: <strong className="text-slate-900">Ek Şube</strong> (Merkez şubeye bağlı)</span>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2">
                   <span className="font-bold text-slate-700">Durum:</span>
