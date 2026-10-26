@@ -1,0 +1,9 @@
+<svg id="Primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><style>
+ .cls-1 {
+ fill: none;
+ stroke: #000;
+ stroke-linecap: round;
+ stroke-linejoin: round;
+ stroke-width: 1.5px;
+ }
+ </style></defs><path class="cls-1" d="M30.96,17h20.04c3.31,0,6,2.69,6,6v4"/><path class="cls-1" d="M57,49v4c0,3.31-2.69,6-6,6H11c-3.31,0-6-2.69-6-6v-30c0-.71.12-1.38.35-2.01"/><line class="cls-1" x1="57" y1="43" x2="57" y2="33"/><path class="cls-1" d="M30.65,21h20.35c1.1,0,2,.9,2,2v4"/><path class="cls-1" d="M53,49v4c0,1.1-.9,2-2,2H11c-1.1,0-2-.9-2-2v-25.63"/><line class="cls-1" x1="53" y1="43" x2="53" y2="33"/><rect class="cls-1" x="49" y="27" width="10" height="6" rx="2" ry="2"/><rect class="cls-1" x="49" y="43" width="10" height="6" rx="2" ry="2"/><circle class="cls-1" cx="31" cy="41" r="9"/><circle class="cls-1" cx="31" cy="41" r="3"/><line class="cls-1" x1="31" y1="32" x2="31" y2="38"/><line class="cls-1" x1="31" y1="44" x2="31" y2="50"/><line class="cls-1" x1="40" y1="41" x2="34" y2="41"/><line class="cls-1" x1="28" y1="41" x2="22" y2="41"/><path class="cls-1" d="M21,14h-4c-1.1,0-2,.9-2,2h0c0,1.1.9,2,2,2h2c1.1,0,2,.9,2,2h0c0,1.1-.9,2-2,2h-4"/><line class="cls-1" x1="18" y1="12" x2="18" y2="14"/><line class="cls-1" x1="18" y1="22" x2="18" y2="24"/><circle class="cls-1" cx="18" cy="18" r="9"/><circle class="cls-1" cx="18" cy="18" r="13"/><line class="cls-1" x1="18" y1="5" x2="18" y2="9"/><line class="cls-1" x1="18" y1="27" x2="18" y2="31"/><line class="cls-1" x1="31" y1="18" x2="27" y2="18"/><line class="cls-1" x1="9" y1="18" x2="5" y2="18"/><line class="cls-1" x1="27.19" y1="8.81" x2="24.36" y2="11.64"/><line class="cls-1" x1="11.64" y1="24.36" x2="8.81" y2="27.19"/><line class="cls-1" x1="27.19" y1="27.19" x2="24.36" y2="24.36"/><line class="cls-1" x1="11.64" y1="11.64" x2="8.81" y2="8.81"/></svg>

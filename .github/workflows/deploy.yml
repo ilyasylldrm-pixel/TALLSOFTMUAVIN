@@ -1,0 +1,25 @@
+name: Build & Verify
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-tallsoft
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Derleme
+        run: |
+          npm install
+          npm run build
+      - name: Build kaniti
+        run: echo "actions-build OK | $(date -u +%FT%TZ) | ${GITHUB_SHA}" > dist/actions-deploy.txt

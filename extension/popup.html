@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Muavin E-İşlem Asistanı</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="logo-box">
+        <span class="logo-icon">⚡</span>
+        <div>
+          <h1 class="title">Muavin Asistanı</h1>
+          <p class="subtitle">Resmi E-İşlem & Giriş Köprüsü</p>
+        </div>
+      </div>
+      <span class="version-badge">v1.0</span>
+    </header>
+
+    <!-- ACTIVE COMPANY CARD -->
+    <section class="card" id="company-card">
+      <div class="card-header">
+        <span class="badge-status" id="status-badge">🟢 Eşlendi</span>
+        <span class="text-muted" id="last-synced">Az önce</span>
+      </div>
+      <div class="company-info">
+        <h2 class="company-name" id="company-name">Şirket Yükleniyor...</h2>
+        <p class="company-vkn" id="company-vkn">VKN: —</p>
+      </div>
+    </section>
+
+    <!-- QUICK PORTAL LAUNCHERS -->
+    <section class="section-portals">
+      <div class="section-title">Tek Tıkla Portala Git & Giriş Yap</div>
+      <div class="portals-grid">
+        <button class="portal-btn" data-url="https://dijital.gib.gov.tr" data-type="gib_dijital">
+          <span class="portal-icon">🏛️</span>
+          <div class="portal-text">
+            <span class="portal-name">Dijital Vergi Dairesi</span>
+            <span class="portal-sub">GİB & İVD</span>
+          </div>
+          <span class="portal-arrow">→</span>
+        </button>
+
+        <button class="portal-btn" data-url="https://earsivportal.efatura.gov.tr/intragiris.html" data-type="gib_earsiv">
+          <span class="portal-icon">📄</span>
+          <div class="portal-text">
+            <span class="portal-name">GİB e-Arşiv Fatura</span>
+            <span class="portal-sub">5.000 / 30.000</span>
+          </div>
+          <span class="portal-arrow">→</span>
+        </button>
+
+        <button class="portal-btn" data-url="https://uyg.sgk.gov.tr/IsverenSistemi" data-type="sgk_isveren">
+          <span class="portal-icon">🏢</span>
+          <div class="portal-text">
+            <span class="portal-name">SGK İşveren Sistemi</span>
+            <span class="portal-sub">İşveren / Teşvik</span>
+          </div>
+          <span class="portal-arrow">→</span>
+        </button>
+
+        <button class="portal-btn" data-url="https://ebildirge.sgk.gov.tr/EBildirgeV2" data-type="sgk_ebildirge">
+          <span class="portal-icon">📋</span>
+          <div class="portal-text">
+            <span class="portal-name">SGK e-Bildirge v2</span>
+            <span class="portal-sub">MUHSGK & Prim</span>
+          </div>
+          <span class="portal-arrow">→</span>
+        </button>
+
+        <button class="portal-btn" data-url="https://giris.turkiye.gov.tr/Giris/" data-type="edevlet">
+          <span class="portal-icon">🇹🇷</span>
+          <div class="portal-text">
+            <span class="portal-name">e-Devlet Kapısı</span>
+            <span class="portal-sub">Kurumsal Giriş</span>
+          </div>
+          <span class="portal-arrow">→</span>
+        </button>
+
+        <button class="portal-btn" data-url="https://mersis.gtb.gov.tr/" data-type="mersis">
+          <span class="portal-icon">🏛️</span>
+          <div class="portal-text">
+            <span class="portal-name">Ticaret MERSİS</span>
+            <span class="portal-sub">Ticaret Sicil</span>
+          </div>
+          <span class="portal-arrow">→</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <button id="btn-open-muavin" class="btn-secondary">
+        🖥️ Muavin'e Git
+      </button>
+      <button id="btn-sync" class="btn-primary">
+        🔄 Şifreleri Eşle
+      </button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
