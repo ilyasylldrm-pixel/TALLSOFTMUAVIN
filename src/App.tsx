@@ -238,7 +238,10 @@ export default function App() {
   // Automated 7-day manual backup check on mount, company switch, settings change, and 60s interval
   useEffect(() => {
     const refreshBackupStatus = () => {
-      setBackupStatus(getManualBackupStatus(activeCompanyId, data.settings));
+      setBackupStatus((prev) => {
+        const next = getManualBackupStatus(activeCompanyId, data.settings);
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
     };
     refreshBackupStatus();
     const intervalId = window.setInterval(refreshBackupStatus, 60 * 1000);

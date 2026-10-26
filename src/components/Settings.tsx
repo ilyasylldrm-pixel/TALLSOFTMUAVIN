@@ -138,13 +138,19 @@ export const Settings: React.FC<SettingsProps> = ({
       lastSettingsRef.current = sStr;
       setFormData(settings);
       setInvoiceDesign(resolveInvoiceDesignSettings(settings));
-      setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings));
+      setBackupStatus((prev) => {
+        const next = getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings);
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
     }
   }, [settings, activeCompany?.id]);
 
   React.useEffect(() => {
     const refresh = () => {
-      setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), formData));
+      setBackupStatus((prev) => {
+        const next = getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), formData);
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
     };
     window.addEventListener("muavin:backup-status-changed", refresh);
     return () => window.removeEventListener("muavin:backup-status-changed", refresh);
@@ -2199,6 +2205,7 @@ export const Settings: React.FC<SettingsProps> = ({
             onChangePreviewDocType={setPreviewDocType}
             onChangeDesign={(patch) => {
               const nextDesign = { ...invoiceDesign, ...patch };
+              if (JSON.stringify(invoiceDesign) === JSON.stringify(nextDesign)) return;
               setInvoiceDesign(nextDesign);
               const nextSettings = { ...formData, invoiceDesign: nextDesign };
               setFormData(nextSettings);
@@ -2210,6 +2217,7 @@ export const Settings: React.FC<SettingsProps> = ({
               );
             }}
             onSaveToCompanySettings={(updatedSettings) => {
+              if (JSON.stringify(formData) === JSON.stringify(updatedSettings)) return;
               setFormData(updatedSettings);
               onSaveSettings(updatedSettings);
             }}

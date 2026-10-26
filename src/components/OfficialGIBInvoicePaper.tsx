@@ -3273,16 +3273,8 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
     window.addEventListener("muavin:invoice-css-config-changed", sync);
     const unsubFirestore = subscribeToCompanyInvoiceCssFromFirestore(
       activeCompanyId,
-      ({ cssConfig: remoteCss, invoiceDesign: remoteDesign, updatedAt }) => {
+      ({ cssConfig: remoteCss, updatedAt }) => {
         setCssConfig((prev) => (JSON.stringify(prev) === JSON.stringify(remoteCss) ? prev : remoteCss));
-        if (remoteDesign) {
-          const hasDiff = Object.entries(remoteDesign).some(
-            ([k, v]) => (design as any)[k] !== v
-          );
-          if (hasDiff) {
-            onChangeDesign({ ...design, ...remoteDesign, cssConfig: remoteCss });
-          }
-        }
         if (updatedAt) {
           setLastFirestoreSavedAt(updatedAt);
         }
