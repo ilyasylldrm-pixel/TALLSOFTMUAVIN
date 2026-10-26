@@ -1503,81 +1503,112 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
           1. GİB 3-COLUMN OFFICIAL HEADER (SATICI | GİB MÜHÜR & BAŞLIK | KAREKOD & TABLO)
          ===================================================================== */}
       <div className="grid grid-cols-12 gap-3 items-stretch pb-3 border-b-2 border-slate-900">
-        {/* LEFT COLUMN (5 cols): SATICI / DÜZENLEYEN MÜKELLEF BİLGİLERİ & ALICI CARİ (SAYIN) */}
+        {/* LEFT COLUMN (5 cols): SOL ÜST LOGO (QR KODLA AYNI HİZADA) + SATICI / DÜZENLEYEN BİLGİLERİ (ABDURRAHMAN ŞİMŞEK) + ALICI CARİ (SAYIN) */}
         <div className="col-span-12 sm:col-span-5 flex flex-col justify-between h-full">
-          <div
-            style={{ borderColor: palette.border }}
-            className="issuer-seller-css-target border-y-2 py-2 px-1 space-y-1 text-[10.5px] leading-snug"
-          >
-            <p
-              style={{ color: palette.primary }}
-              className="font-black text-xs sm:text-[13px] uppercase tracking-tight leading-tight"
-            >
-              {sellerTitle}
-            </p>
-            {isSellerSubBranchSelected && sellerBranchName && (
-              <p className="font-bold text-slate-800 text-[10px]">
-                <strong className="text-slate-900">Şube:</strong> {sellerBranchName}
-                {sellerBranchCode ? ` (${sellerBranchCode})` : ""}
-              </p>
+          <div className="space-y-2">
+            {/* SOL ÜST KÖŞE: FİRMA LOGOSU (SAĞDAKİ KAREKOD İLE AYNI YATAY HİZADA) */}
+            {design.showCompanyLogo !== false && (
+              <div className="flex items-center justify-start shrink-0">
+                {companySettings?.logoUrl ? (
+                  <img
+                    src={companySettings.logoUrl}
+                    alt={companySettings.companyName || "Firma Logosu"}
+                    style={{
+                      width: `${resolvedLogoDims.widthPx}px`,
+                      height: `${resolvedLogoDims.heightPx}px`,
+                      objectFit: resolvedLogoDims.objectFit,
+                    }}
+                    className="max-w-full"
+                  />
+                ) : (
+                  <Logo
+                    size={design.logoSize || "md"}
+                    className="justify-start"
+                    imageStyle={{
+                      width: `${resolvedLogoDims.widthPx}px`,
+                      height: `${resolvedLogoDims.heightPx}px`,
+                      objectFit: resolvedLogoDims.objectFit,
+                    }}
+                  />
+                )}
+              </div>
             )}
-            <p className="text-slate-700 leading-snug">
-              <strong className="text-slate-900">Adres:</strong> {sellerDisplayAddress}
-            </p>
 
-            <div className="pt-1 border-t border-slate-200 space-y-0.5 text-[10px]">
-              {(companySettings?.phone || companySettings?.email) && (
-                <div className="flex flex-wrap gap-x-3">
-                  {companySettings?.phone && (
-                    <span>
-                      <strong className="text-slate-900">Tel:</strong> {companySettings.phone}
-                    </span>
-                  )}
-                  {companySettings?.email && (
-                    <span>
-                      <strong className="text-slate-900">E-Posta:</strong> {companySettings.email}
-                    </span>
-                  )}
-                </div>
+            {/* SATICI / DÜZENLEYEN BİLGİLERİ (ABDURRAHMAN ŞİMŞEK) */}
+            <div
+              style={{ borderColor: palette.border }}
+              className="issuer-seller-css-target border-y-2 py-2 px-1 space-y-1 text-[10.5px] leading-snug"
+            >
+              <p
+                style={{ color: palette.primary }}
+                className="font-black text-xs sm:text-[13px] uppercase tracking-tight leading-tight"
+              >
+                {sellerTitle}
+              </p>
+              {isSellerSubBranchSelected && sellerBranchName && (
+                <p className="font-bold text-slate-800 text-[10px]">
+                  <strong className="text-slate-900">Şube:</strong> {sellerBranchName}
+                  {sellerBranchCode ? ` (${sellerBranchCode})` : ""}
+                </p>
               )}
-              {companySettings?.website && (
+              <p className="text-slate-700 leading-snug">
+                <strong className="text-slate-900">Adres:</strong> {sellerDisplayAddress}
+              </p>
+
+              <div className="pt-1 border-t border-slate-200 space-y-0.5 text-[10px]">
+                {(companySettings?.phone || companySettings?.email) && (
+                  <div className="flex flex-wrap gap-x-3">
+                    {companySettings?.phone && (
+                      <span>
+                        <strong className="text-slate-900">Tel:</strong> {companySettings.phone}
+                      </span>
+                    )}
+                    {companySettings?.email && (
+                      <span>
+                        <strong className="text-slate-900">E-Posta:</strong> {companySettings.email}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {companySettings?.website && (
+                  <div>
+                    <strong className="text-slate-900">Web Sitesi:</strong> {companySettings.website}
+                  </div>
+                )}
                 <div>
-                  <strong className="text-slate-900">Web Sitesi:</strong> {companySettings.website}
+                  <strong className="text-slate-900">Vergi Dairesi:</strong> {sellerTaxOffice}
                 </div>
-              )}
-              <div>
-                <strong className="text-slate-900">Vergi Dairesi:</strong> {sellerTaxOffice}
-              </div>
-              <div>
-                <strong className="text-slate-900">
-                  {String(sellerTaxNo).replace(/\D/g, "").length === 11 ? "TCKN:" : "VKN:"}
-                </strong>{" "}
-                <span className="font-mono font-black text-slate-900">{sellerTaxNo}</span>
-              </div>
-              {(companySettings?.tradeRegisterNo ||
-                companySettings?.esnafSicilNo ||
-                companySettings?.mersisNo) && (
-                <div className="flex flex-wrap gap-x-3 text-[9.5px] text-slate-700 pt-0.5">
-                  {companySettings?.tradeRegisterNo && (
-                    <span>
-                      <strong className="text-slate-900">Ticaret Sicil No:</strong>{" "}
-                      {companySettings.tradeRegisterNo}
-                    </span>
-                  )}
-                  {companySettings?.esnafSicilNo && (
-                    <span>
-                      <strong className="text-slate-900">Esnaf Sicil No:</strong>{" "}
-                      {companySettings.esnafSicilNo}
-                    </span>
-                  )}
-                  {companySettings?.mersisNo && (
-                    <span>
-                      <strong className="text-slate-900">MERSİS No:</strong>{" "}
-                      {companySettings.mersisNo}
-                    </span>
-                  )}
+                <div>
+                  <strong className="text-slate-900">
+                    {String(sellerTaxNo).replace(/\D/g, "").length === 11 ? "TCKN:" : "VKN:"}
+                  </strong>{" "}
+                  <span className="font-mono font-black text-slate-900">{sellerTaxNo}</span>
                 </div>
-              )}
+                {(companySettings?.tradeRegisterNo ||
+                  companySettings?.esnafSicilNo ||
+                  companySettings?.mersisNo) && (
+                  <div className="flex flex-wrap gap-x-3 text-[9.5px] text-slate-700 pt-0.5">
+                    {companySettings?.tradeRegisterNo && (
+                      <span>
+                        <strong className="text-slate-900">Ticaret Sicil No:</strong>{" "}
+                        {companySettings.tradeRegisterNo}
+                      </span>
+                    )}
+                    {companySettings?.esnafSicilNo && (
+                      <span>
+                        <strong className="text-slate-900">Esnaf Sicil No:</strong>{" "}
+                        {companySettings.esnafSicilNo}
+                      </span>
+                    )}
+                    {companySettings?.mersisNo && (
+                      <span>
+                        <strong className="text-slate-900">MERSİS No:</strong>{" "}
+                        {companySettings.mersisNo}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1673,10 +1704,10 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
           {(activeCssConfig.signatureZone || "under_gib") === "under_gib" && signatureBlockNode}
         </div>
 
-        {/* RIGHT COLUMN (4 cols): SAĞ ÜST KAREKOD + ALTINDA FİRMA LOGOSU & ALTTA ALICI CARİ İLE HİZALI METAVERİ TABLOSU */}
+        {/* RIGHT COLUMN (4 cols): SAĞ ÜST KAREKOD (SOLDAKİ LOGO İLE AYNI HİZADA) & ALTTA ALICI CARİ İLE HİZALI METAVERİ TABLOSU */}
         <div className="col-span-12 sm:col-span-4 flex flex-col justify-between items-end h-full gap-2">
-          {/* Top-Right Stack: Uploaded GİB QR Code Template on Top, Company Logo Directly Underneath */}
-          <div className="w-full flex flex-col items-end justify-start gap-2">
+          {/* Top-Right: Uploaded GİB QR Code Template (Horizontally Aligned with Logo on Left) */}
+          <div className="w-full flex flex-col items-end justify-start">
             {design.showQrCode !== false && (
               <div
                 className="border border-slate-400 p-1 bg-white rounded shrink-0 flex flex-col items-center ml-auto"
@@ -1693,33 +1724,6 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
                   style={{ width: "80px", height: "80px" }}
                   className="w-20 h-20 object-contain block shrink-0"
                 />
-              </div>
-            )}
-
-            {design.showCompanyLogo !== false && (
-              <div className="flex items-center justify-end shrink-0 ml-auto">
-                {companySettings?.logoUrl ? (
-                  <img
-                    src={companySettings.logoUrl}
-                    alt={companySettings.companyName || "Firma Logosu"}
-                    style={{
-                      width: `${resolvedLogoDims.widthPx}px`,
-                      height: `${resolvedLogoDims.heightPx}px`,
-                      objectFit: resolvedLogoDims.objectFit,
-                    }}
-                    className="max-w-full"
-                  />
-                ) : (
-                  <Logo
-                    size={design.logoSize || "md"}
-                    className="justify-end"
-                    imageStyle={{
-                      width: `${resolvedLogoDims.widthPx}px`,
-                      height: `${resolvedLogoDims.heightPx}px`,
-                      objectFit: resolvedLogoDims.objectFit,
-                    }}
-                  />
-                )}
               </div>
             )}
           </div>
@@ -2360,6 +2364,26 @@ function generateGibQrCodeSvgMarkup(payload: string, sizePx: number = 84): strin
  * 2. Dynamic UBL-TR XML GİB Karekod JSON extraction (#gib-qr-ubl-payload-data),
  * 3. Pre-rendered GİB vector SVG QR code & automatic top-right placement script (placeGibQrCodeTopRight).
  */
+export function buildTopLeftCompanyLogoXsltBlock(options: {
+  logoUrl?: string;
+  logoWidthPx?: number;
+  logoHeightPx?: number;
+  logoObjectFit?: "contain" | "fill" | "cover";
+}): string {
+  const {
+    logoUrl = "",
+    logoWidthPx = 100,
+    logoHeightPx = 100,
+    logoObjectFit = "contain",
+  } = options;
+  if (!logoUrl) return "";
+
+  return `<!-- SOL ÜST KÖŞE: FİRMA LOGOSU (KAREKOD İLE AYNI HİZADA) -->
+              <div id="gib-top-left-logo-slot" class="gib-top-left-logo-container" style="display: block; margin-bottom: 8px; text-align: left;">
+                <img src="${logoUrl}" alt="Firma Logosu" style="width: ${logoWidthPx}px; height: ${logoHeightPx}px; max-width: ${logoWidthPx}px; max-height: ${logoHeightPx}px; object-fit: ${logoObjectFit}; display: block;" />
+              </div>`;
+}
+
 export function buildTopRightGibQrCodeXsltBlock(options: {
   qrSvgMarkup: string;
   sizePx?: number;
@@ -2373,102 +2397,89 @@ export function buildTopRightGibQrCodeXsltBlock(options: {
   const {
     qrSvgMarkup,
     sizePx = 80,
-    logoUrl = "",
-    logoWidthPx = 100,
-    logoHeightPx = 100,
-    logoObjectFit = "contain",
     defaultSellerTaxNo = "1111111111",
     isEArsiv = false,
   } = options;
-  if (!qrSvgMarkup && !logoUrl) return "";
+  if (!qrSvgMarkup) return "";
 
-  return `<!-- GİB MEVZUATINA (VUK 509) UYGUN SAĞ ÜST KÖŞE OTOMATİK KAREKOD (QR KOD) & ALTINDA FİRMA LOGOSU BLOĞU -->
-              <div id="gib-top-right-qr-slot" class="gib-top-right-qr-container" style="width: 100%; display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start; gap: 8px; text-align: right; margin-bottom: 8px;">
-                ${
-                  qrSvgMarkup
-                    ? `<div id="gib-qr-top-right-box" class="gib-qr-box" style="display: inline-block; margin-left: auto; border: 1px solid #94a3b8; border-radius: 4px; padding: 4px; background: #ffffff; width: ${sizePx + 10}px; height: ${sizePx + 10}px; text-align: center;">
-                        <!-- GİB VUK 509 Karekod Standardı UBL-TR 1.2 Dinamik JSON Verisi -->
-                        <div id="gib-qr-ubl-payload-data" style="display:none;">
-                          <xsl:text>{"vkntckn":"</xsl:text>
-                          <xsl:choose>
-                            <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'])">
-                              <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'][1])" />
-                            </xsl:when>
-                            <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID)">
-                              <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID[1])" />
-                            </xsl:when>
-                            <xsl:otherwise>${escapeXmlText(defaultSellerTaxNo)}</xsl:otherwise>
-                          </xsl:choose>
-                          <xsl:text>","avkntckn":"</xsl:text>
-                          <xsl:choose>
-                            <xsl:when test="string(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'])">
-                              <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'][1])" />
-                            </xsl:when>
-                            <xsl:otherwise>
-                              <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID[1])" />
-                            </xsl:otherwise>
-                          </xsl:choose>
-                          <xsl:text>","senaryo":"</xsl:text>
-                          <xsl:choose>
-                            <xsl:when test="string(//n1:Invoice/cbc:ProfileID)">
-                              <xsl:value-of select="normalize-space(//n1:Invoice/cbc:ProfileID)" />
-                            </xsl:when>
-                            <xsl:otherwise>${isEArsiv ? "EARSIVFATURA" : "TICARIFATURA"}</xsl:otherwise>
-                          </xsl:choose>
-                          <xsl:text>","tip":"</xsl:text>
-                          <xsl:choose>
-                            <xsl:when test="string(//n1:Invoice/cbc:InvoiceTypeCode)">
-                              <xsl:value-of select="normalize-space(//n1:Invoice/cbc:InvoiceTypeCode)" />
-                            </xsl:when>
-                            <xsl:otherwise>SATIS</xsl:otherwise>
-                          </xsl:choose>
-                          <xsl:text>","tarih":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cbc:IssueDate)" />
-                          <xsl:text>","no":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cbc:ID)" />
-                          <xsl:text>","ettn":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cbc:UUID)" />
-                          <xsl:text>","parabirimi":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cbc:DocumentCurrencyCode)" />
-                          <xsl:text>","malhizmettoplam":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount)" />
-                          <xsl:for-each select="//n1:Invoice/cac:TaxTotal/cac:TaxSubtotal">
-                            <xsl:text>","kdvmatrah(</xsl:text>
-                            <xsl:value-of select="normalize-space(cbc:Percent)" />
-                            <xsl:text>)":"</xsl:text>
-                            <xsl:value-of select="normalize-space(cbc:TaxableAmount)" />
-                            <xsl:text>","hesaplanankdv(</xsl:text>
-                            <xsl:value-of select="normalize-space(cbc:Percent)" />
-                            <xsl:text>)":"</xsl:text>
-                            <xsl:value-of select="normalize-space(cbc:TaxAmount)" />
-                          </xsl:for-each>
-                          <xsl:text>","vergilerdahil":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount)" />
-                          <xsl:text>","odenecek":"</xsl:text>
-                          <xsl:value-of select="normalize-space(//n1:Invoice/cac:LegalMonetaryTotal/cbc:PayableAmount)" />
-                          <xsl:text>"}</xsl:text>
-                        </div>
-                        <xsl:choose>
-                          <xsl:when test="string(//n1:Invoice/cac:AdditionalDocumentReference[cbc:DocumentType='KAREKOD' or cbc:DocumentType='QRCODE' or cbc:DocumentTypeCode='QRCODE' or cbc:DocumentTypeCode='KAREKOD']/cac:Attachment/cbc:EmbeddedDocumentBinaryObject)">
-                            <img id="gib-qr-top-right-img" alt="GİB e-Belge Karekodu" style="width: ${sizePx}px; height: ${sizePx}px; object-fit: contain; display: block;">
-                              <xsl:attribute name="src">
-                                <xsl:text>data:image/png;base64,</xsl:text>
-                                <xsl:value-of select="//n1:Invoice/cac:AdditionalDocumentReference[cbc:DocumentType='KAREKOD' or cbc:DocumentType='QRCODE' or cbc:DocumentTypeCode='QRCODE' or cbc:DocumentTypeCode='KAREKOD'][1]/cac:Attachment/cbc:EmbeddedDocumentBinaryObject" />
-                              </xsl:attribute>
-                            </img>
-                          </xsl:when>
-                          <xsl:otherwise>
-                            <img id="gib-qr-template-img" src="${GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI}" alt="GİB e-Belge Karekod Şablonu" style="width: ${sizePx}px; height: ${sizePx}px; object-fit: contain; display: block;" />
-                          </xsl:otherwise>
-                        </xsl:choose>
-                      </div>`
-                    : ""
-                }
-                ${
-                  logoUrl
-                    ? `<div id="gib-company-logo-under-qr" style="display: inline-block; margin-left: auto; width: ${logoWidthPx}px; max-width: 100%;"><img src="${logoUrl}" alt="Firma Logosu" style="width: ${logoWidthPx}px; height: ${logoHeightPx}px; max-width: ${logoWidthPx}px; max-height: ${logoHeightPx}px; object-fit: ${logoObjectFit}; display: block; margin-left: auto;" /></div>`
-                    : ""
-                }
+  return `<!-- GİB MEVZUATINA (VUK 509) UYGUN SAĞ ÜST KÖŞE OTOMATİK KAREKOD (QR KOD) BLOĞU -->
+              <div id="gib-top-right-qr-slot" class="gib-top-right-qr-container" style="width: 100%; display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start; text-align: right; margin-bottom: 8px;">
+                <div id="gib-qr-top-right-box" class="gib-qr-box" style="display: inline-block; margin-left: auto; border: 1px solid #94a3b8; border-radius: 4px; padding: 4px; background: #ffffff; width: ${sizePx + 8}px; height: ${sizePx + 8}px; text-align: center;">
+                  <!-- GİB VUK 509 Karekod Standardı UBL-TR 1.2 Dinamik JSON Verisi -->
+                  <div id="gib-qr-ubl-payload-data" style="display:none;">
+                    <xsl:text>{"vkntckn":"</xsl:text>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'])">
+                        <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'][1])" />
+                      </xsl:when>
+                      <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID)">
+                        <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID[1])" />
+                      </xsl:when>
+                      <xsl:otherwise>${escapeXmlText(defaultSellerTaxNo)}</xsl:otherwise>
+                    </xsl:choose>
+                    <xsl:text>","avkntckn":"</xsl:text>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'])">
+                        <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID[@schemeID='VKN' or @schemeID='TCKN'][1])" />
+                      </xsl:when>
+                      <xsl:otherwise>
+                        <xsl:value-of select="normalize-space(//n1:Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID[1])" />
+                      </xsl:otherwise>
+                    </xsl:choose>
+                    <xsl:text>","senaryo":"</xsl:text>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cbc:ProfileID)">
+                        <xsl:value-of select="normalize-space(//n1:Invoice/cbc:ProfileID)" />
+                      </xsl:when>
+                      <xsl:otherwise>${isEArsiv ? "EARSIVFATURA" : "TICARIFATURA"}</xsl:otherwise>
+                    </xsl:choose>
+                    <xsl:text>","tip":"</xsl:text>
+                    <xsl:choose>
+                      <xsl:when test="string(//n1:Invoice/cbc:InvoiceTypeCode)">
+                        <xsl:value-of select="normalize-space(//n1:Invoice/cbc:InvoiceTypeCode)" />
+                      </xsl:when>
+                      <xsl:otherwise>SATIS</xsl:otherwise>
+                    </xsl:choose>
+                    <xsl:text>","tarih":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cbc:IssueDate)" />
+                    <xsl:text>","no":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cbc:ID)" />
+                    <xsl:text>","ettn":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cbc:UUID)" />
+                    <xsl:text>","parabirimi":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cbc:DocumentCurrencyCode)" />
+                    <xsl:text>","malhizmettoplam":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount)" />
+                    <xsl:for-each select="//n1:Invoice/cac:TaxTotal/cac:TaxSubtotal">
+                      <xsl:text>","kdvmatrah(</xsl:text>
+                      <xsl:value-of select="normalize-space(cbc:Percent)" />
+                      <xsl:text>)":"</xsl:text>
+                      <xsl:value-of select="normalize-space(cbc:TaxableAmount)" />
+                      <xsl:text>","hesaplanankdv(</xsl:text>
+                      <xsl:value-of select="normalize-space(cbc:Percent)" />
+                      <xsl:text>)":"</xsl:text>
+                      <xsl:value-of select="normalize-space(cbc:TaxAmount)" />
+                    </xsl:for-each>
+                    <xsl:text>","vergilerdahil":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount)" />
+                    <xsl:text>","odenecek":"</xsl:text>
+                    <xsl:value-of select="normalize-space(//n1:Invoice/cac:LegalMonetaryTotal/cbc:PayableAmount)" />
+                    <xsl:text>"}</xsl:text>
+                  </div>
+                  <xsl:choose>
+                    <xsl:when test="string(//n1:Invoice/cac:AdditionalDocumentReference[cbc:DocumentType='KAREKOD' or cbc:DocumentType='QRCODE' or cbc:DocumentTypeCode='QRCODE' or cbc:DocumentTypeCode='KAREKOD']/cac:Attachment/cbc:EmbeddedDocumentBinaryObject)">
+                      <img id="gib-qr-top-right-img" alt="GİB e-Belge Karekodu" style="width: ${sizePx}px; height: ${sizePx}px; object-fit: contain; display: block;">
+                        <xsl:attribute name="src">
+                          <xsl:text>data:image/png;base64,</xsl:text>
+                          <xsl:value-of select="//n1:Invoice/cac:AdditionalDocumentReference[cbc:DocumentType='KAREKOD' or cbc:DocumentType='QRCODE' or cbc:DocumentTypeCode='QRCODE' or cbc:DocumentTypeCode='KAREKOD'][1]/cac:Attachment/cbc:EmbeddedDocumentBinaryObject" />
+                        </xsl:attribute>
+                      </img>
+                    </xsl:when>
+                    <xsl:otherwise>
+                      <img id="gib-qr-template-img" src="${GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI}" alt="GİB e-Belge Karekod Şablonu" style="width: ${sizePx}px; height: ${sizePx}px; object-fit: contain; display: block;" />
+                    </xsl:otherwise>
+                  </xsl:choose>
+                </div>
               </div>`;
 }
 
@@ -2625,13 +2636,15 @@ export function generateOfficialGibXsltStylesheet(
   });
   const qrSvgMarkup =
     design.showQrCode !== false ? generateGibQrCodeSvgMarkup(qrPayloadJson, qrSizePx) : "";
-  const topRightQrCodeBlock = buildTopRightGibQrCodeXsltBlock({
-    qrSvgMarkup,
-    sizePx: qrSizePx,
+  const topLeftLogoBlock = buildTopLeftCompanyLogoXsltBlock({
     logoUrl,
     logoWidthPx: xsltLogoDims.widthPx,
     logoHeightPx: xsltLogoDims.heightPx,
     logoObjectFit: xsltLogoDims.objectFit,
+  });
+  const topRightQrCodeBlock = buildTopRightGibQrCodeXsltBlock({
+    qrSvgMarkup,
+    sizePx: qrSizePx,
     defaultSellerTaxNo: rawSellerTaxNo || "1111111111",
     isEArsiv,
   });
@@ -2845,6 +2858,12 @@ export function generateOfficialGibXsltStylesheet(
               var qrBox = document.getElementById("gib-qr-top-right-box");
               var payloadEl = document.getElementById("gib-qr-ubl-payload-data");
 
+              var leftCol = document.querySelector(".header-col-left");
+              var logoSlot = document.getElementById("gib-top-left-logo-slot");
+              if (leftCol && logoSlot && logoSlot.parentNode !== leftCol) {
+                leftCol.insertBefore(logoSlot, leftCol.firstChild);
+              }
+
               if (rightCol && qrSlot && qrSlot.parentNode !== rightCol) {
                 rightCol.insertBefore(qrSlot, rightCol.firstChild);
               }
@@ -2878,9 +2897,11 @@ export function generateOfficialGibXsltStylesheet(
         <div id="gib-xslt-paper">
           <!-- ÜST BAŞLIK: DÜZENLEYEN & SAYIN ALICI (SOL) / GİB MÜHÜR & BAŞLIK (ORTA) / SAĞ ÜST QR KOD & ALTTA ALICI İLE HİZALI METAVERİ TABLOSU (SAĞ) -->
           <div class="header-grid">
-            <!-- SOL SÜTUN: SATICI (DÜZENLEYEN) BİLGİLERİ VE ALTTA SAYIN (ALICI CARİ) BÖLÜMÜ -->
+            <!-- SOL SÜTUN: SOL ÜST LOGO (QR KODLA AYNI HİZADA) + SATICI (DÜZENLEYEN) BİLGİLERİ VE ALTTA SAYIN (ALICI CARİ) BÖLÜMÜ -->
             <div class="header-col-left">
-              <div class="party-box issuer-seller-css-target">
+              <div>
+                ${topLeftLogoBlock}
+                <div class="party-box issuer-seller-css-target">
                 <div style="font-weight: 900; font-size: 11px; color: ${palette.primary}; text-transform: uppercase; margin-bottom: 3px;">
                   <xsl:choose>
                     <xsl:when test="string(//n1:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name)">
@@ -2930,8 +2951,9 @@ export function generateOfficialGibXsltStylesheet(
                 ${sellerEsnafSicil ? `<div><strong>Esnaf Sicil No: </strong>${sellerEsnafSicil}</div>` : ""}
                 ${sellerMersis ? `<div><strong>MERSİS No: </strong>${sellerMersis}</div>` : ""}
               </div>
+            </div>
 
-              <!-- SAYIN (ALICI CARİ BİLGİLERİ) — Sağdaki Metaveri Tablosu ile Alttan Hizalı -->
+            <!-- SAYIN (ALICI CARİ BİLGİLERİ) — Sağdaki Metaveri Tablosu ile Alttan Hizalı -->
               <div class="party-box" style="margin-top: auto; margin-top: 10px;">
                 <div class="party-title">SAYIN</div>
                 <div style="font-weight: 800; font-size: 11px;">
