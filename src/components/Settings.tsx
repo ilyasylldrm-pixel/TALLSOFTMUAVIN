@@ -446,6 +446,59 @@ export const Settings: React.FC<SettingsProps> = ({
     void syncMatchedCompanyPrefixes();
   }, [activeCompany?.id]);
 
+  const samplePreviewInvoice = React.useMemo<Invoice>(() => {
+    const currentYear = new Date().getFullYear();
+    const invNo =
+      previewDocType === "e_arsiv"
+        ? formData.eArsivNextNumber || `${formData.eArsivPrefix || "EAR"}${currentYear}000000001`
+        : formData.eFaturaNextNumber || `${formData.eFaturaPrefix || "GIB"}${currentYear}000000001`;
+    return {
+      id: "sample_preview_inv",
+      invoiceNumber: invNo,
+      type: "sales",
+      eDocumentType: previewDocType,
+      invoiceScenario: previewDocType === "e_arsiv" ? "EARSIVFATURA" : "TICARIFATURA",
+      invoiceProfileType: "SATIS",
+      contactId: "sample_contact",
+      contactName: "ÖRNEK ALICI KURUMSAL TEKNOLOJİ A.Ş.",
+      issueDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      items: [
+        {
+          id: "sample_item_1",
+          description: "Kurumsal Yazılım Lisans ve Entegrasyon Hizmeti",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: 15000,
+          vatRate: 20,
+          totalWithoutVat: 15000,
+          vatAmount: 3000,
+          totalWithVat: 18000,
+        },
+      ],
+      subtotal: 15000,
+      totalVat: 3000,
+      grandTotal: 18000,
+      paidAmount: 0,
+      remainingAmount: 18000,
+      status: "sent",
+      currency: "TRY",
+      notes: "",
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+  }, [
+    previewDocType,
+    formData.eArsivNextNumber,
+    formData.eArsivPrefix,
+    formData.eFaturaNextNumber,
+    formData.eFaturaPrefix,
+  ]);
+
+  const previewCompanySettings = React.useMemo(
+    () => ({ ...formData, invoiceDesign }),
+    [formData, invoiceDesign]
+  );
+
   const persistFormatParamsToCompanyAndSettings = (nextForm: CompanySettings) => {
     setFormData(nextForm);
     onSaveSettings(nextForm);
@@ -2165,57 +2218,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
           <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
             <OfficialGIBInvoicePaper
-              invoice={React.useMemo<Invoice>(() => {
-                const currentYear = new Date().getFullYear();
-                const invNo =
-                  previewDocType === "e_arsiv"
-                    ? formData.eArsivNextNumber || `${formData.eArsivPrefix || "EAR"}${currentYear}000000001`
-                    : formData.eFaturaNextNumber || `${formData.eFaturaPrefix || "GIB"}${currentYear}000000001`;
-                return {
-                  id: "sample_preview_inv",
-                  invoiceNumber: invNo,
-                  type: "sales",
-                  eDocumentType: previewDocType,
-                  invoiceScenario: previewDocType === "e_arsiv" ? "EARSIVFATURA" : "TICARIFATURA",
-                  invoiceProfileType: "SATIS",
-                  contactId: "sample_contact",
-                  contactName: "ÖRNEK ALICI KURUMSAL TEKNOLOJİ A.Ş.",
-                  issueDate: new Date().toISOString().split("T")[0],
-                  dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-                  items: [
-                    {
-                      id: "sample_item_1",
-                      description: "Kurumsal Yazılım Lisans ve Entegrasyon Hizmeti",
-                      quantity: 1,
-                      unit: "Adet",
-                      unitPrice: 15000,
-                      vatRate: 20,
-                      totalWithoutVat: 15000,
-                      vatAmount: 3000,
-                      totalWithVat: 18000,
-                    },
-                  ],
-                  subtotal: 15000,
-                  totalVat: 3000,
-                  grandTotal: 18000,
-                  paidAmount: 0,
-                  remainingAmount: 18000,
-                  status: "sent",
-                  currency: "TRY",
-                  notes: "",
-                  createdAt: new Date().toISOString().split("T")[0],
-                };
-              }, [
-                previewDocType,
-                formData.eArsivNextNumber,
-                formData.eArsivPrefix,
-                formData.eFaturaNextNumber,
-                formData.eFaturaPrefix,
-              ])}
-              companySettings={React.useMemo(
-                () => ({ ...formData, invoiceDesign }),
-                [formData, invoiceDesign]
-              )}
+              invoice={samplePreviewInvoice}
+              companySettings={previewCompanySettings}
               designOverride={invoiceDesign}
               previewDocTypeOverride={previewDocType}
               paperId="settings-invoice-design-preview-paper"
