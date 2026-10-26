@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "NODE_OPTIONS=\"--max-old-space-size=2048\" npx --no-install vite build && npx --no-install esbuild server.ts --bundle --platform=node --target=node22 --format=cjs --define:process.env.NODE_ENV=\\\"production\\\" --minify --outfile=dist/server.cjs && node scripts/prepare-build-artifact.mjs",
-    "start": "node server.ts",
+    "start": "node dist/server.cjs",
     "clean": "rm -rf dist build",
     "deploy:cloudrun": "bash deploy-cloudrun.sh",
     "lint": "tsc --noEmit"

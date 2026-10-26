@@ -100,8 +100,6 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
     branchCode: invoice.branchCode,
     branchName: invoice.branchName,
     fallbackBranchAddress: invoice.branchAddress,
-    fallbackBranchCity: invoice.branchCity,
-    fallbackBranchDistrict: invoice.branchDistrict,
   });
   const sellerBranchName = (invoice.branchName || resolvedSellerBranch.branchName || "").trim();
   const sellerBranchAddress = (resolvedSellerBranch.branchAddress || "").trim();

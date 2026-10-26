@@ -3,7 +3,7 @@ import {
   CompanySettings,
   CompanyItem,
   Invoice,
-  InvoiceDesignConfig,
+  InvoiceDesignSettings,
   isAdminOrSysAdmin,
   isCompanyMysoftMatched,
 } from "../types";
@@ -78,6 +78,10 @@ import {
   saveCompanyInvoiceCssToFirestore,
   getIndependentInvoiceCssConfig,
 } from "./OfficialGIBInvoicePaper";
+import {
+  GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI,
+  GIB_OFFICIAL_UPLOADED_QR_CODE_PATH,
+} from "../utils/gibOfficialAssets";
 
 interface SettingsProps {
   settings: CompanySettings;
@@ -112,17 +116,10 @@ export const Settings: React.FC<SettingsProps> = ({
     initialTab === "github" && !isAdmin ? (embedded ? "system" : "theme") : initialTab || (embedded ? "system" : "theme")
   );
   const [formData, setFormData] = useState<CompanySettings>(settings);
-  const [invoiceDesign, setInvoiceDesign] = useState<InvoiceDesignConfig>(() => ({
+  const [invoiceDesign, setInvoiceDesign] = useState<InvoiceDesignSettings>(() => ({
     ...resolveInvoiceDesignSettings(settings),
-    template: settings.invoiceDesign?.template || "classic_gib",
-    primaryColor: settings.invoiceDesign?.primaryColor || "#8B0000",
-    showLogo: settings.invoiceDesign?.showLogo ?? Boolean(settings.logoUrl),
-    logoUrl: settings.invoiceDesign?.logoUrl || settings.logoUrl,
-    showStamp: settings.invoiceDesign?.showStamp ?? Boolean(settings.stampUrl),
-    stampUrl: settings.invoiceDesign?.stampUrl || settings.stampUrl,
-    customCss: settings.invoiceDesign?.customCss,
   }));
-  const [previewDocType, setPreviewDocType] = useState<"e_fatura" | "e_arsiv">("e_fatura");
+  const [previewDocType, setPreviewDocType] = useState<"auto" | "e_fatura" | "e_arsiv">("e_fatura");
   const [backupStatus, setBackupStatus] = useState<ManualBackupStatus>(() =>
     getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings)
   );
@@ -138,13 +135,6 @@ export const Settings: React.FC<SettingsProps> = ({
     setFormData(settings);
     setInvoiceDesign({
       ...resolveInvoiceDesignSettings(settings),
-      template: settings.invoiceDesign?.template || "classic_gib",
-      primaryColor: settings.invoiceDesign?.primaryColor || "#8B0000",
-      showLogo: settings.invoiceDesign?.showLogo ?? Boolean(settings.logoUrl),
-      logoUrl: settings.invoiceDesign?.logoUrl || settings.logoUrl,
-      showStamp: settings.invoiceDesign?.showStamp ?? Boolean(settings.stampUrl),
-      stampUrl: settings.invoiceDesign?.stampUrl || settings.stampUrl,
-      customCss: settings.invoiceDesign?.customCss,
     });
     setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings));
   }, [settings, activeCompany?.id]);
@@ -1453,8 +1443,8 @@ export const Settings: React.FC<SettingsProps> = ({
                     invoiceDesign,
                   };
                   persistFormatParamsToCompanyAndSettings(updated);
-                  setShowToast(true);
-                  setTimeout(() => setShowToast(false), 3000);
+                  setIsSaved(true);
+                  setTimeout(() => setIsSaved(false), 3000);
                 }}
                 className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
               >
@@ -1837,7 +1827,19 @@ export const Settings: React.FC<SettingsProps> = ({
             <div className="pt-3 border-t border-slate-100 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-center shrink-0 min-w-[120px] min-h-[60px]">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center gap-2 shrink-0 min-w-[130px]">
+                    <div className="border border-slate-300 p-1 bg-white rounded shadow-2xs flex flex-col items-center">
+                      <img
+                        src={GIB_OFFICIAL_UPLOADED_QR_CODE_PATH}
+                        onError={(e) => {
+                          if (e.currentTarget.src !== GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI) {
+                            e.currentTarget.src = GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI;
+                          }
+                        }}
+                        alt="GİB Karekod Şablonu"
+                        className="w-16 h-16 object-contain"
+                      />
+                    </div>
                     {formData.logoUrl && formData.logoUrl !== "/logo.svg" ? (
                       <img
                         src={formData.logoUrl}
@@ -1859,10 +1861,10 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                   <div>
                     <span className="font-bold text-slate-900 block">
-                      Şirkete Özel Fatura &amp; Sistem Logosu ({formData.companyName || "Aktif Şirket"})
+                      QR Kod Altında Şirket Logosu &amp; Karekod Şablonu ({formData.companyName || "Aktif Şirket"})
                     </span>
-                    <span className="text-[11px] text-slate-500">
-                      Yüklenen logoyu faturada istediğiniz genişlik (px) ve yükseklik (px) boyutunda özelleştirebilirsiniz.
+                    <span className="text-[11px] text-slate-500 block">
+                      e-Fatura ve e-Arşiv belgelerinde sağ üst köşede yüklediğiniz QR kod şablonu yer alır, şirket logosu doğrudan QR kodun altında gösterilir.
                     </span>
                   </div>
                 </div>
@@ -1901,8 +1903,8 @@ export const Settings: React.FC<SettingsProps> = ({
               {/* Fatura Logosu Özel Boyutlandırma (Genişlik px × Yükseklik px) */}
               {(() => {
                 const currentDims = resolveInvoiceLogoDimensions(invoiceDesign);
-                const applyInvoiceLogoDims = (patch: Partial<InvoiceDesignConfig>) => {
-                  const nextDesign: InvoiceDesignConfig = {
+                const applyInvoiceLogoDims = (patch: Partial<InvoiceDesignSettings>) => {
+                  const nextDesign: InvoiceDesignSettings = {
                     ...invoiceDesign,
                     ...patch,
                     showCompanyLogo: true,
@@ -1916,7 +1918,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   onSaveSettings(nextSettings);
                   void saveCompanyInvoiceCssToFirestore(
                     nextSettings,
-                    nextDesign.cssConfig || getIndependentInvoiceCssConfig(undefined, nextSettings.id),
+                    getIndependentInvoiceCssConfig(nextDesign.cssConfig, nextSettings.id),
                     nextDesign
                   );
                 };

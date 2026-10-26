@@ -71,7 +71,11 @@ import { readAndOptimizeLogoFile } from "../utils/logoUpload";
 import { saveCloudLogo } from "../services/cloudBrandingService";
 import { pushCompanyDataToCloud } from "../services/systemSyncService";
 import { Logo } from "./Logo";
-import { GIB_OFFICIAL_UPLOADED_LOGO_DATA_URI } from "../utils/gibOfficialAssets";
+import {
+  GIB_OFFICIAL_UPLOADED_LOGO_DATA_URI,
+  GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI,
+  GIB_OFFICIAL_UPLOADED_QR_CODE_PATH,
+} from "../utils/gibOfficialAssets";
 import { EArsivSignatureStudioModal } from "./EArsivSignatureStudioModal";
 
 export interface ThemePalette {
@@ -689,7 +693,7 @@ export function resolveOfficialEDocumentKind(
   invoice: Partial<Invoice>,
   companySettings?: CompanySettings | null,
   contact?: Contact | null,
-  overrideMode: "auto" | "e_fatura" | "e_arsiv" = "auto"
+  overrideMode: "auto" | "e_fatura" | "e_arsiv" | string = "auto"
 ): {
   isReceipt: boolean;
   isPurchase: boolean;
@@ -987,7 +991,7 @@ export interface OfficialGIBInvoicePaperProps {
   contact?: Contact;
   isDraft?: boolean;
   designOverride?: Partial<InvoiceDesignSettings>;
-  previewDocTypeOverride?: "auto" | "e_fatura" | "e_arsiv";
+  previewDocTypeOverride?: "auto" | "e_fatura" | "e_arsiv" | string;
   compactScale?: boolean;
   paperId?: string;
 }
@@ -1007,7 +1011,9 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     [companySettings?.id]
   );
 
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>(
+    GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI
+  );
   const [independentCssConfig, setIndependentCssConfig] = useState<InvoicePreviewCssConfig>(() =>
     getIndependentInvoiceCssConfig(designOverride?.cssConfig, activeCompanyId)
   );
@@ -1248,17 +1254,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
       odenecek: payableAmount,
     });
 
-    QRCode.toDataURL(qrPayload, {
-      width: 240,
-      margin: 1,
-      errorCorrectionLevel: "M",
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
-    })
-      .then((url) => setQrCodeDataUrl(url))
-      .catch(() => {});
+    setQrCodeDataUrl(GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI);
   }, [
     sellerTaxNo,
     contactTaxNo,
@@ -1693,12 +1689,27 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
           {(activeCssConfig.signatureZone || "under_gib") === "under_gib" && signatureBlockNode}
         </div>
 
-        {/* RIGHT COLUMN (4 cols): SAĞ ÜST FİRMA LOGOSU + KAREKOD & ALTTA ALICI CARİ İLE HİZALI METAVERİ TABLOSU */}
+        {/* RIGHT COLUMN (4 cols): SAĞ ÜST KAREKOD + ALTINDA FİRMA LOGOSU & ALTTA ALICI CARİ İLE HİZALI METAVERİ TABLOSU */}
         <div className="col-span-12 sm:col-span-4 flex flex-col justify-between items-end h-full gap-2">
-          {/* Top-Right Row: Customizable Company Logo & GİB QR Code */}
-          <div className="w-full flex items-start justify-between sm:justify-end gap-2">
+          {/* Top-Right Stack: Uploaded GİB QR Code Template on Top, Company Logo Directly Underneath */}
+          <div className="w-full flex flex-col items-end justify-start gap-2">
+            {design.showQrCode !== false && (
+              <div className="border border-slate-400 p-1 bg-white rounded shrink-0 flex flex-col items-center ml-auto">
+                <img
+                  src={qrCodeDataUrl || GIB_OFFICIAL_UPLOADED_QR_CODE_PATH}
+                  onError={(e) => {
+                    if (e.currentTarget.src !== GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI) {
+                      e.currentTarget.src = GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI;
+                    }
+                  }}
+                  alt="GİB e-Belge Karekodu"
+                  className={isCompact ? "w-16 h-16 object-contain" : "w-20 h-20 object-contain"}
+                />
+              </div>
+            )}
+
             {design.showCompanyLogo !== false && (
-              <div className="flex items-center justify-center shrink-0">
+              <div className="flex items-center justify-end shrink-0 ml-auto">
                 {companySettings?.logoUrl ? (
                   <img
                     src={companySettings.logoUrl}
@@ -1713,7 +1724,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
                 ) : (
                   <Logo
                     size={design.logoSize || "md"}
-                    className="justify-center"
+                    className="justify-end"
                     imageStyle={{
                       width: `${resolvedLogoDims.widthPx}px`,
                       height: `${resolvedLogoDims.heightPx}px`,
@@ -1721,16 +1732,6 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
                     }}
                   />
                 )}
-              </div>
-            )}
-
-            {design.showQrCode !== false && qrCodeDataUrl && (
-              <div className="border border-slate-400 p-1 bg-white rounded shrink-0 flex flex-col items-center ml-auto sm:ml-0">
-                <img
-                  src={qrCodeDataUrl}
-                  alt="GİB e-Belge Karekodu"
-                  className={isCompact ? "w-16 h-16 object-contain" : "w-20 h-20 object-contain"}
-                />
               </div>
             )}
           </div>
@@ -2393,16 +2394,11 @@ export function buildTopRightGibQrCodeXsltBlock(options: {
   } = options;
   if (!qrSvgMarkup && !logoUrl) return "";
 
-  return `<!-- GİB MEVZUATINA (VUK 509) UYGUN SAĞ ÜST KÖŞE OTOMATİK KAREKOD (QR KOD) & FİRMA LOGOSU BLOĞU -->
-              <div id="gib-top-right-qr-slot" class="gib-top-right-qr-container" style="width: 100%; display: flex; align-items: flex-start; justify-content: flex-end; gap: 8px; text-align: right; margin-bottom: 8px;">
-                ${
-                  logoUrl
-                    ? `<div style="display: inline-block; vertical-align: top; margin-right: auto; width: ${logoWidthPx}px; max-width: 100%;"><img src="${logoUrl}" alt="Firma Logosu" style="width: ${logoWidthPx}px; height: ${logoHeightPx}px; max-width: ${logoWidthPx}px; max-height: ${logoHeightPx}px; object-fit: ${logoObjectFit}; display: block;" /></div>`
-                    : ""
-                }
+  return `<!-- GİB MEVZUATINA (VUK 509) UYGUN SAĞ ÜST KÖŞE OTOMATİK KAREKOD (QR KOD) & ALTINDA FİRMA LOGOSU BLOĞU -->
+              <div id="gib-top-right-qr-slot" class="gib-top-right-qr-container" style="width: 100%; display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start; gap: 8px; text-align: right; margin-bottom: 8px;">
                 ${
                   qrSvgMarkup
-                    ? `<div id="gib-qr-top-right-box" class="gib-qr-box" style="display: inline-block; float: right; margin-left: auto; border: 1px solid #94a3b8; border-radius: 4px; padding: 4px; background: #ffffff; width: ${sizePx + 10}px; height: ${sizePx + 10}px; text-align: center;">
+                    ? `<div id="gib-qr-top-right-box" class="gib-qr-box" style="display: inline-block; margin-left: auto; border: 1px solid #94a3b8; border-radius: 4px; padding: 4px; background: #ffffff; width: ${sizePx + 10}px; height: ${sizePx + 10}px; text-align: center;">
                         <!-- GİB VUK 509 Karekod Standardı UBL-TR 1.2 Dinamik JSON Verisi -->
                         <div id="gib-qr-ubl-payload-data" style="display:none;">
                           <xsl:text>{"vkntckn":"</xsl:text>
@@ -2474,12 +2470,15 @@ export function buildTopRightGibQrCodeXsltBlock(options: {
                             </img>
                           </xsl:when>
                           <xsl:otherwise>
-                            <div id="gib-qr-svg-holder" style="width: ${sizePx}px; height: ${sizePx}px; display: block;">
-                              ${qrSvgMarkup}
-                            </div>
+                            <img id="gib-qr-template-img" src="${GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI}" alt="GİB e-Belge Karekod Şablonu" style="width: ${sizePx}px; height: ${sizePx}px; object-fit: contain; display: block;" />
                           </xsl:otherwise>
                         </xsl:choose>
                       </div>`
+                    : ""
+                }
+                ${
+                  logoUrl
+                    ? `<div id="gib-company-logo-under-qr" style="display: inline-block; margin-left: auto; width: ${logoWidthPx}px; max-width: 100%;"><img src="${logoUrl}" alt="Firma Logosu" style="width: ${logoWidthPx}px; height: ${logoHeightPx}px; max-width: ${logoWidthPx}px; max-height: ${logoHeightPx}px; object-fit: ${logoObjectFit}; display: block; margin-left: auto;" /></div>`
                     : ""
                 }
               </div>`;
@@ -2863,13 +2862,13 @@ export function generateOfficialGibXsltStylesheet(
               }
               if (qrSlot) {
                 qrSlot.style.display = "flex";
-                qrSlot.style.justifyContent = "flex-end";
-                qrSlot.style.alignItems = "flex-start";
+                qrSlot.style.flexDirection = "column";
+                qrSlot.style.justifyContent = "flex-start";
+                qrSlot.style.alignItems = "flex-end";
                 qrSlot.style.width = "100%";
               }
               if (qrBox) {
                 qrBox.style.marginLeft = "auto";
-                qrBox.style.float = "right";
                 if (payloadEl && payloadEl.textContent) {
                   qrBox.setAttribute("data-gib-qr-json", payloadEl.textContent.replace(/\\s+/g, " ").trim());
                 }

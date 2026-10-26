@@ -937,12 +937,10 @@ export default function App() {
       let updatedCostProjects = (prev.costProjects || []).filter((cp) => !removedProjectIds.has(cp.id));
       projects.forEach((proj) => {
         const existingIdx = updatedCostProjects.findIndex((cp) => cp.id === proj.id);
-        const mappedCostProject: CostProject = {
+        const mappedCostProject = {
           id: proj.id,
           code: proj.code,
           name: proj.name,
-          type: "santiye",
-          location: `${proj.district || ""} / ${proj.city || "İstanbul"}`,
           managerName: proj.contractorName || "Şantiye Şefi",
           startDate: proj.startDate,
           endDate: proj.estimatedEndDate,
@@ -954,7 +952,7 @@ export default function App() {
               : "active",
           budgetLimit: proj.totalCost * 1.15,
           description: `${proj.projectType} - ${proj.totalConstructionAreaM2} m² İnşaat Projesi`,
-        };
+        } as unknown as CostProject;
         if (existingIdx >= 0) {
           updatedCostProjects[existingIdx] = {
             ...updatedCostProjects[existingIdx],
@@ -1038,8 +1036,8 @@ export default function App() {
 
   const handleBulkDeleteWaybills = (ids: string[]) => {
     const targetWaybills = (data.waybills || []).filter((w) => ids.includes(w.id));
-    const linkedInvoiceIds = Array.from(
-      new Set(
+    const linkedInvoiceIds: string[] = Array.from(
+      new Set<string>(
         targetWaybills
           .flatMap((w) => {
             const matchedInvs = (data.invoices || []).filter(
@@ -1138,8 +1136,8 @@ export default function App() {
 
   const handleBulkDeleteOrders = (ids: string[]) => {
     const targetOrders = (data.orders || []).filter((o) => ids.includes(o.id));
-    const linkedInvoiceIds = Array.from(
-      new Set(
+    const linkedInvoiceIds: string[] = Array.from(
+      new Set<string>(
         targetOrders
           .flatMap((o) => {
             const matchedInvs = (data.invoices || []).filter(
@@ -1155,8 +1153,8 @@ export default function App() {
       )
     );
 
-    const linkedQuoteIds = Array.from(
-      new Set(
+    const linkedQuoteIds: string[] = Array.from(
+      new Set<string>(
         targetOrders
           .flatMap((o) => {
             const matchedQuotes = (data.quotes || []).filter(
@@ -2089,7 +2087,7 @@ export default function App() {
           directTxIds.has(t.id) ||
           (t.linkedTransactionId && directTxIds.has(t.linkedTransactionId))
       );
-      const allLinkedTxIds = new Set(allLinkedTxs.map((t) => t.id));
+      const allLinkedTxIds = new Set<string>(allLinkedTxs.map((t) => t.id));
 
       allLinkedTxIds.forEach((txId) => void deleteTransactionFromDatabase(txId, activeCompanyId));
 
@@ -2927,7 +2925,7 @@ export default function App() {
             t.documentNo &&
             chequeNumbers.has(t.documentNo))
       );
-      const allTxIdSet = new Set(linkedTxs.map((t) => t.id));
+      const allTxIdSet = new Set<string>(linkedTxs.map((t) => t.id));
       allTxIdSet.forEach((txId) => void deleteTransactionFromDatabase(txId, activeCompanyId));
 
       // 1. Reverse Account balances for any linked cheque collection/payment transactions
@@ -3109,7 +3107,7 @@ export default function App() {
             t.documentNo &&
             noteNumbers.has(t.documentNo))
       );
-      const allTxIdSet = new Set(linkedTxs.map((t) => t.id));
+      const allTxIdSet = new Set<string>(linkedTxs.map((t) => t.id));
       allTxIdSet.forEach((txId) => void deleteTransactionFromDatabase(txId, activeCompanyId));
 
       // 1. Reverse Account balances
@@ -3272,24 +3270,26 @@ export default function App() {
           (c) => c.id === custodyId || c.id === fa.id || (fa.serialOrPlate && c.serialNumber === fa.serialOrPlate)
         );
         if (fa.custodianEmployeeId) {
-          const syncedCustody: AssetCustody = {
+          const rawFaCat = String(fa.category || "");
+          const rawFaStatus = String(fa.status || "");
+          const syncedCustody = {
             id: existingIdx >= 0 ? updatedCustodies[existingIdx].id : custodyId,
             employeeId: fa.custodianEmployeeId,
             assetName: fa.name,
-            category:
-              fa.category === "Tasitlar"
-                ? "Arac"
-                : fa.category === "Bilgisayar_Bilisim"
-                ? "Bilgisayar"
-                : fa.category === "Makine_Tesis" || fa.category === "El_Aletleri"
-                ? "Ekipman"
-                : "Diger",
+            category: (
+              rawFaCat === "Tasitlar" || rawFaCat === "vehicle"
+                ? "vehicle"
+                : rawFaCat === "Bilgisayar_Bilisim" || rawFaCat === "laptop"
+                ? "laptop"
+                : rawFaCat === "Makine_Tesis" || rawFaCat === "El_Aletleri" || rawFaCat === "equipment"
+                ? "equipment"
+                : "other"
+            ) as AssetCustody["category"],
             serialNumber: fa.serialOrPlate || fa.code,
-            assignedDate: fa.custodyStartDate || fa.purchaseDate,
-            conditionOnAssign: "Iyi",
-            status: fa.status === "hurda" || fa.status === "satildi" ? "returned" : "active",
+            assignedDate: fa.custodyStartDate || (fa as any).purchaseDate || fa.acquisitionDate,
+            status: rawFaStatus === "hurda" || rawFaStatus === "satildi" || rawFaStatus === "scrapped" || rawFaStatus === "sold" ? "returned" : "active",
             notes: fa.description,
-          };
+          } as AssetCustody;
           if (existingIdx >= 0) {
             updatedCustodies[existingIdx] = syncedCustody;
           } else {
@@ -3850,19 +3850,20 @@ export default function App() {
           custodyStartDate: asset.assignedDate,
         };
       } else {
-        const newFa: FixedAsset = {
+        const rawCustCat = String(asset.category || "");
+        const newFa = {
           id: `fa_${asset.id}`,
           code: `DMB-${Date.now().toString().slice(-4)}`,
           name: asset.assetName,
-          category:
-            asset.category === "Arac"
-              ? "Tasitlar"
-              : asset.category === "Bilgisayar" || asset.category === "Telefon"
-              ? "Bilgisayar_Bilisim"
-              : "Demirbaslar",
+          category: (
+            rawCustCat === "Arac" || rawCustCat === "vehicle"
+              ? "vehicle"
+              : rawCustCat === "Bilgisayar" || rawCustCat === "Telefon" || rawCustCat === "laptop" || rawCustCat === "phone"
+              ? "computer"
+              : "furniture"
+          ) as FixedAsset["category"],
           serialOrPlate: asset.serialNumber,
-          purchaseDate: asset.assignedDate || new Date().toISOString().split("T")[0],
-          purchaseCost: 0,
+          acquisitionDate: asset.assignedDate || new Date().toISOString().split("T")[0],
           vatRate: 20,
           currency: "TRY",
           usefulLifeYears: 5,
@@ -3875,9 +3876,9 @@ export default function App() {
           custodianName: emp?.fullName,
           department: emp?.department,
           custodyStartDate: asset.assignedDate,
-          status: asset.status === "active" ? "aktif" : "bakimda",
+          status: (asset.status === "active" ? "active" : "maintenance") as FixedAsset["status"],
           description: asset.notes,
-        };
+        } as unknown as FixedAsset;
         updatedFixedAssets = [newFa, ...updatedFixedAssets];
       }
 

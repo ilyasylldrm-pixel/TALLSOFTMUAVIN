@@ -482,9 +482,8 @@ export class GitHubSyncService {
     const cwd = process.cwd();
 
     try {
-      gitInitialized = await this.ensureGitInitialized(`https://github.com/${owner}/${repo}.git`, currentBranch);
+      gitInitialized = fs.existsSync(path.join(cwd, ".git"));
       if (gitInitialized) {
-        await this.restoreDeletedBuildArtifacts(cwd);
 
         try {
           const { stdout: branchOut } = await execPromise("git rev-parse --abbrev-ref HEAD", { cwd });
@@ -691,20 +690,8 @@ export class GitHubSyncService {
             await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {});
           }
 
-          await this.restoreDeletedBuildArtifacts(cwd);
-          await execPromise("git merge --abort", { cwd }).catch(() => {});
-
-          const { stdout: statusOut } = await execPromise("git status --porcelain", { cwd }).catch(() => ({ stdout: "" }));
-          if (statusOut.trim().length > 0) {
-            await this.safeGitAddAll(cwd);
-            await execPromise(
-              `git commit -m "chore: Yerel değişiklikler senkronizasyon öncesi kaydedildi"`,
-              { cwd }
-            ).catch(() => {});
-          }
-
           await execPromise(
-            `git merge origin/${branch} --allow-unrelated-histories -X theirs --no-edit`,
+            `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
             { cwd }
           ).catch(async () => {
             await execPromise("git merge --abort", { cwd }).catch(() => {});
@@ -735,7 +722,7 @@ export class GitHubSyncService {
             }
           }
         } finally {
-          await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
+          await execPromise(`rm -rf .git build`, { cwd }).catch(() => {});
         }
       }
 
@@ -929,8 +916,10 @@ export class GitHubSyncService {
               }
             }
           } finally {
-            await execPromise(`git remote set-url origin "${cleanUrl}"`, { cwd }).catch(() => {});
+            await execPromise(`rm -rf .git build`, { cwd }).catch(() => {});
           }
+        } else {
+          await execPromise(`rm -rf .git build`, { cwd }).catch(() => {});
         }
       }
 

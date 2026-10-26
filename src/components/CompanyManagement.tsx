@@ -34,6 +34,8 @@ import {
   appendCityDistrictToAddress,
   compileStructuredAddress,
   getDeletedCompanyIds,
+  getStoredData,
+  saveStoredData,
   PROTECTED_COMPANY_IDS,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";

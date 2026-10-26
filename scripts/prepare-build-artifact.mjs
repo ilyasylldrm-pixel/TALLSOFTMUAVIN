@@ -20,9 +20,9 @@ function cleanBloatDirs() {
 
 function patchControlPlaneArchiver() {
   // 32-byte patch at 0x99fb6e in addDirToTarWriter.func1:
-  // Skips dotfiles/dotdirs ('.git', '.aistudio', etc.), 'node_modules/**', and root 'package.json'
+  // Skips dotfiles/dotdirs ('.git', '.aistudio', etc.) and 'node_modules/**', but ALWAYS includes root 'package.json'
   const patch = Buffer.from(
-    "80382e741b4883fb0c722881386e6f6465740d4883fb0c751a80387075156690",
+    "80382e741b4883fb0c722881386e6f6465740deb1e9090909090909090909090",
     "hex",
   );
 

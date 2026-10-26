@@ -1163,8 +1163,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         ) {
           mergedPrefixes.unshift({
             prefix: resolvedEFatPrefix,
-            edocumentType: "EFATURA",
-            year: currentYear,
+            edocumentType: 1,
             currentNumber: finalEFatSeq > 1 ? finalEFatSeq - 1 : 0,
           });
         }
@@ -1175,8 +1174,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         ) {
           mergedPrefixes.push({
             prefix: resolvedEArsPrefix,
-            edocumentType: "EARSIVFATURA",
-            year: currentYear,
+            edocumentType: 2,
             currentNumber: finalEArsSeq > 1 ? finalEArsSeq - 1 : 0,
           });
         }

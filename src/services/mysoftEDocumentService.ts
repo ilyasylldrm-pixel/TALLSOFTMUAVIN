@@ -2684,16 +2684,16 @@ function decodeBase64Payload(value: string): {
   }
 }
 
-function binaryDownloadShape(
+async function binaryDownloadShape(
   id: string,
   format: string,
   filename: string,
   contentType: string,
   data: string,
-): MysoftDocumentDownload | undefined {
+): Promise<MysoftDocumentDownload | undefined> {
   const decoded = decodeBase64Payload(data);
   if (!decoded || typeof Blob === "undefined") return undefined;
-  let bytes = decoded.bytes;
+  let bytes: Uint8Array<ArrayBufferLike> = decoded.bytes;
   const isZip = bytes.length >= 4 &&
     bytes[0] === 0x50 && bytes[1] === 0x4b &&
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
@@ -2703,10 +2703,10 @@ function binaryDownloadShape(
   let unpackedFromZip = false;
   if (isZip) {
     try {
-      const inner = extractFirstFileFromZip(bytes);
+      const inner = await extractFirstFileFromZip(bytes);
       if (inner && inner.bytes.length > 0) {
         bytes = inner.bytes;
-        extractedFilename = inner.fileName;
+        extractedFilename = inner.name;
         unpackedFromZip = true;
       }
     } catch {
@@ -2778,7 +2778,7 @@ export async function downloadMysoftEDocument(
       ? decodeURIComponent(filenameMatch[1].replace(/[\"]/g, ""))
       : `${id}.${fallbackExt}`;
     if (payload instanceof ArrayBuffer) {
-      let bytes = new Uint8Array(payload);
+      let bytes: Uint8Array<ArrayBufferLike> = new Uint8Array(payload);
       let finalMime = contentType;
       let finalFilename = filename;
       const isZip = bytes.length >= 4 &&
@@ -2787,10 +2787,10 @@ export async function downloadMysoftEDocument(
         (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
       if (isZip) {
         try {
-          const inner = extractFirstFileFromZip(bytes);
+          const inner = await extractFirstFileFromZip(bytes);
           if (inner && inner.bytes.length > 0) {
             bytes = inner.bytes;
-            finalFilename = inner.fileName || filename.replace(/\.zip$/i, "");
+            finalFilename = inner.name || filename.replace(/\.zip$/i, "");
             finalMime = format === "xml"
               ? "application/xml"
               : format === "html"
@@ -2801,13 +2801,13 @@ export async function downloadMysoftEDocument(
           // Keep original bytes if extraction fails
         }
       }
-      const blob = new Blob([bytes], { type: finalMime });
+      const blob = new Blob([bytes as BlobPart], { type: finalMime });
       return { id, format, filename: finalFilename, mimeType: finalMime, blob };
     }
     if (typeof payload === "string") {
       const isUrl = /^https?:\/\//i.test(payload) || /^data:/i.test(payload);
       if (!isUrl) {
-        const binary = binaryDownloadShape(
+        const binary = await binaryDownloadShape(
           id,
           format,
           filename,
@@ -2832,7 +2832,7 @@ export async function downloadMysoftEDocument(
     if (data) {
       const isUrl = /^https?:\/\//i.test(data) || /^data:/i.test(data);
       if (!isUrl) {
-        const binary = binaryDownloadShape(
+        const binary = await binaryDownloadShape(
           id,
           format,
           filename,
