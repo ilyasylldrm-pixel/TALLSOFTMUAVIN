@@ -1892,7 +1892,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center gap-2 shrink-0 min-w-[130px]">
                     <div
                       className="border border-slate-300 p-1 bg-white rounded shadow-2xs flex flex-col items-center"
-                      style={{ width: "88px", height: "88px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      style={{ width: "108px", height: "108px", display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
                       <img
                         src={GIB_OFFICIAL_UPLOADED_QR_CODE_PATH}
@@ -1902,8 +1902,8 @@ export const Settings: React.FC<SettingsProps> = ({
                           }
                         }}
                         alt="GİB Karekod Şablonu"
-                        style={{ width: "80px", height: "80px" }}
-                        className="w-20 h-20 object-contain block shrink-0"
+                        style={{ width: "100px", height: "100px" }}
+                        className="w-[100px] h-[100px] object-contain block shrink-0"
                       />
                     </div>
                     {formData.logoUrl && formData.logoUrl !== "/logo.svg" ? (

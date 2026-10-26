@@ -1711,7 +1711,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
             {design.showQrCode !== false && (
               <div
                 className="border border-slate-400 p-1 bg-white rounded shrink-0 flex flex-col items-center ml-auto"
-                style={{ width: "88px", height: "88px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ width: "108px", height: "108px", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
                 <img
                   src={qrCodeDataUrl || GIB_OFFICIAL_UPLOADED_QR_CODE_PATH}
@@ -1721,8 +1721,8 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
                     }
                   }}
                   alt="GİB e-Belge Karekodu"
-                  style={{ width: "80px", height: "80px" }}
-                  className="w-20 h-20 object-contain block shrink-0"
+                  style={{ width: "100px", height: "100px" }}
+                  className="w-[100px] h-[100px] object-contain block shrink-0"
                 />
               </div>
             )}
@@ -2396,7 +2396,7 @@ export function buildTopRightGibQrCodeXsltBlock(options: {
 }): string {
   const {
     qrSvgMarkup,
-    sizePx = 80,
+    sizePx = 100,
     defaultSellerTaxNo = "1111111111",
     isEArsiv = false,
   } = options;
@@ -2518,7 +2518,7 @@ export function ensureTopRightQrCodeInXslt(
     vergilerdahil: 18000,
     odenecek: 18000,
   });
-  const qrSize = 80;
+  const qrSize = 100;
   const qrSvg = generateGibQrCodeSvgMarkup(qrPayloadJson, qrSize);
   const block = buildTopRightGibQrCodeXsltBlock({
     qrSvgMarkup: qrSvg,
@@ -2617,7 +2617,7 @@ export function generateOfficialGibXsltStylesheet(
   const xsltSigColor = escapeXmlText(design.eArsivSignatureColor || "#1d4ed8");
   const xsltLogoDims = resolveInvoiceLogoDimensions(design);
   const gibSealSize = Number(cssCfg.gibLogoSize) || 76;
-  const qrSizePx = 80;
+  const qrSizePx = 100;
 
   // Build Official GİB VUK 509 Compliant QR Code SVG for the XSLT template and place it at the top-right corner
   const qrPayloadJson = buildGibLegislationCompliantQrPayload({
