@@ -661,6 +661,7 @@ export default function App() {
   }, [currentUser]);
 
   // Oturum açan kullanıcının tanımlı bir şirketi varsa aktif şirketi otomatik olarak o şirkete geçir ve en güncel verilerini yükle
+  const lastAutoSwitchedUserCompanyRef = useRef<string>("");
   useEffect(() => {
     if (!currentUser) return;
     const isSysAdmin = isAdminOrSysAdmin(currentUser);
@@ -690,6 +691,10 @@ export default function App() {
     }
 
     if (targetComp && (!isSysAdmin || currentUser.companyId === targetComp.id)) {
+      const switchKey = `${currentUser.id || currentUser.email || "user"}_${targetComp.id}_${activeCompanyId}`;
+      if (lastAutoSwitchedUserCompanyRef.current === switchKey) return;
+      lastAutoSwitchedUserCompanyRef.current = switchKey;
+
       if (currentUser.companyId !== targetComp.id) {
         const updatedUser = { ...currentUser, companyId: targetComp.id, companyName: targetComp.companyName };
         setCurrentUser(updatedUser);

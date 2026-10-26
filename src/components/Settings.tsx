@@ -131,12 +131,15 @@ export const Settings: React.FC<SettingsProps> = ({
     }
   }, [initialTab, isAdmin]);
 
+  const lastSettingsRef = React.useRef<string>("");
   React.useEffect(() => {
-    setFormData(settings);
-    setInvoiceDesign({
-      ...resolveInvoiceDesignSettings(settings),
-    });
-    setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings));
+    const sStr = JSON.stringify(settings || {});
+    if (lastSettingsRef.current !== sStr) {
+      lastSettingsRef.current = sStr;
+      setFormData(settings);
+      setInvoiceDesign(resolveInvoiceDesignSettings(settings));
+      setBackupStatus(getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings));
+    }
   }, [settings, activeCompany?.id]);
 
   React.useEffect(() => {
@@ -2158,13 +2161,15 @@ export const Settings: React.FC<SettingsProps> = ({
 
           <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
             <OfficialGIBInvoicePaper
-              invoice={
-                {
+              invoice={React.useMemo<Invoice>(() => {
+                const currentYear = new Date().getFullYear();
+                const invNo =
+                  previewDocType === "e_arsiv"
+                    ? formData.eArsivNextNumber || `${formData.eArsivPrefix || "EAR"}${currentYear}000000001`
+                    : formData.eFaturaNextNumber || `${formData.eFaturaPrefix || "GIB"}${currentYear}000000001`;
+                return {
                   id: "sample_preview_inv",
-                  invoiceNumber:
-                    previewDocType === "e_arsiv"
-                      ? formData.eArsivNextNumber || `${formData.eArsivPrefix || "EAR"}${new Date().getFullYear()}000000001`
-                      : formData.eFaturaNextNumber || `${formData.eFaturaPrefix || "GIB"}${new Date().getFullYear()}000000001`,
+                  invoiceNumber: invNo,
                   type: "sales",
                   eDocumentType: previewDocType,
                   invoiceScenario: previewDocType === "e_arsiv" ? "EARSIVFATURA" : "TICARIFATURA",
@@ -2195,9 +2200,18 @@ export const Settings: React.FC<SettingsProps> = ({
                   currency: "TRY",
                   notes: "",
                   createdAt: new Date().toISOString().split("T")[0],
-                } as Invoice
-              }
-              companySettings={{ ...formData, invoiceDesign }}
+                };
+              }, [
+                previewDocType,
+                formData.eArsivNextNumber,
+                formData.eArsivPrefix,
+                formData.eFaturaNextNumber,
+                formData.eFaturaPrefix,
+              ])}
+              companySettings={React.useMemo(
+                () => ({ ...formData, invoiceDesign }),
+                [formData, invoiceDesign]
+              )}
               designOverride={invoiceDesign}
               previewDocTypeOverride={previewDocType}
               paperId="settings-invoice-design-preview-paper"

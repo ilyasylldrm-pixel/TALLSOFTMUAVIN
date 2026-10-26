@@ -174,13 +174,24 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [localCompanies, setLocalCompanies] = useState<CompanyItem[]>(() => companies || getCompaniesList());
   const deletedIds = new Set(getDeletedCompanyIds());
   const rawCompanies = companies || localCompanies;
-  const effectiveCompanies = rawCompanies.filter(
-    (c) => c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))
+  const effectiveCompanies = React.useMemo(
+    () =>
+      rawCompanies.filter(
+        (c) => c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))
+      ),
+    [rawCompanies]
   );
   const currentActiveCompanyId = activeCompanyId || getActiveCompanyId();
 
+  const lastCompaniesJsonRef = React.useRef<string>("");
   React.useEffect(() => {
-    if (companies) setLocalCompanies(companies);
+    if (companies) {
+      const cStr = JSON.stringify(companies);
+      if (lastCompaniesJsonRef.current !== cStr) {
+        lastCompaniesJsonRef.current = cStr;
+        setLocalCompanies(companies);
+      }
+    }
   }, [companies]);
 
   // Profile Form State
@@ -188,9 +199,14 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   const [isFetchingTaxpayer, setIsFetchingTaxpayer] = useState(false);
   const [vknFetchFeedback, setVknFetchFeedback] = useState<string | null>(null);
 
+  const lastSettingsJsonRef = React.useRef<string>("");
   React.useEffect(() => {
     if (settings) {
-      setProfileForm(settings);
+      const sStr = JSON.stringify(settings);
+      if (lastSettingsJsonRef.current !== sStr) {
+        lastSettingsJsonRef.current = sStr;
+        setProfileForm(settings);
+      }
     }
   }, [settings]);
 

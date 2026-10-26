@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Invoice, InvoiceItem, CompanySettings, Contact, InvoiceDesignSettings } from "../types";
 import { getCurrencySymbol, formatDate, exportElementToPDF, exportToExcel } from "../utils/exportUtils";
 import { openInvoicePrintModal, setActiveInvoicePrintContext } from "../utils/printEngine";
@@ -66,8 +66,14 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
     resolveInvoiceDesignSettings(companySettings)
   );
 
+  const lastResolvedDesignStrRef = useRef<string>("");
   useEffect(() => {
-    setLocalDesign(resolveInvoiceDesignSettings(companySettings));
+    const resolved = resolveInvoiceDesignSettings(companySettings);
+    const resolvedStr = JSON.stringify(resolved);
+    if (lastResolvedDesignStrRef.current !== resolvedStr) {
+      lastResolvedDesignStrRef.current = resolvedStr;
+      setLocalDesign(resolved);
+    }
   }, [companySettings]);
 
   useEffect(() => {

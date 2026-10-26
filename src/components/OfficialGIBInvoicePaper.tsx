@@ -1021,25 +1021,37 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     undefined
   );
 
+  const overrideCssConfigKey = useMemo(
+    () => JSON.stringify(designOverride?.cssConfig || {}),
+    [designOverride?.cssConfig]
+  );
+
   useEffect(() => {
-    setIndependentCssConfig(
-      getIndependentInvoiceCssConfig(designOverride?.cssConfig, activeCompanyId)
+    const nextCfg = getIndependentInvoiceCssConfig(designOverride?.cssConfig, activeCompanyId);
+    setIndependentCssConfig((prev) =>
+      JSON.stringify(prev) === JSON.stringify(nextCfg) ? prev : nextCfg
     );
     const syncCss = () => {
-      setIndependentCssConfig(
-        getIndependentInvoiceCssConfig(designOverride?.cssConfig, activeCompanyId)
+      const fresh = getIndependentInvoiceCssConfig(designOverride?.cssConfig, activeCompanyId);
+      setIndependentCssConfig((prev) =>
+        JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh
       );
     };
     window.addEventListener("muavin:invoice-css-config-changed", syncCss);
     const unsubFirestore = subscribeToCompanyInvoiceCssFromFirestore(
       activeCompanyId,
       ({ cssConfig: remoteCss, invoiceDesign: remoteDesign }) => {
-        setIndependentCssConfig({
+        const mergedCss = {
           ...remoteCss,
           ...(designOverride?.cssConfig || {}),
-        });
+        };
+        setIndependentCssConfig((prev) =>
+          JSON.stringify(prev) === JSON.stringify(mergedCss) ? prev : mergedCss
+        );
         if (remoteDesign) {
-          setRemoteDesignPatch(remoteDesign);
+          setRemoteDesignPatch((prev) =>
+            JSON.stringify(prev) === JSON.stringify(remoteDesign) ? prev : remoteDesign
+          );
         }
       }
     );
@@ -1047,7 +1059,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
       window.removeEventListener("muavin:invoice-css-config-changed", syncCss);
       unsubFirestore();
     };
-  }, [designOverride?.cssConfig, activeCompanyId]);
+  }, [overrideCssConfigKey, activeCompanyId]);
 
   const design = useMemo(
     () =>
@@ -1098,7 +1110,7 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     grandTotal: computedGrandTotal,
     payableAmount: computedPayableAmount,
     computedItems,
-  } = computeInvoiceTotals(items);
+  } = useMemo(() => computeInvoiceTotals(items), [items]);
 
   const grossTotal = invoice.grossTotal ?? computedGrossTotal;
   const totalDiscount = invoice.totalDiscount ?? computedTotalDiscount;
@@ -1236,40 +1248,12 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     return Array.from(groups.values()).sort((a, b) => a.rate - b.rate);
   }, [computedItems]);
 
-  // Generate Official GİB Legislation Compliant QR Code JSON (VUK 509 Karekod Standardı Kılavuzu)
+  // Official GİB Legislation Compliant QR Code (VUK 509 Karekod Standardı Kılavuzu)
   useEffect(() => {
-    const qrPayload = buildGibLegislationCompliantQrPayload({
-      vkntckn: sellerTaxNo !== "-" ? sellerTaxNo : "1111111111",
-      avkntckn: contactTaxNo !== "-" ? contactTaxNo : "11111111111",
-      senaryo: docMeta.scenarioCode,
-      tip: docMeta.profileCode,
-      tarih: issueDate,
-      no: invNumber,
-      ettn,
-      parabirimi: currency === "₺" ? "TRY" : currency,
-      malhizmettoplam: subtotal,
-      vatBreakdown,
-      totalVat,
-      vergilerdahil: grandTotal,
-      odenecek: payableAmount,
-    });
-
-    setQrCodeDataUrl(GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI);
-  }, [
-    sellerTaxNo,
-    contactTaxNo,
-    docMeta.scenarioCode,
-    docMeta.profileCode,
-    issueDate,
-    invNumber,
-    ettn,
-    currency,
-    subtotal,
-    vatBreakdown,
-    totalVat,
-    grandTotal,
-    payableAmount,
-  ]);
+    setQrCodeDataUrl((prev) =>
+      prev === GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI ? prev : GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI
+    );
+  }, []);
 
   // Bank Accounts list
   const bankRows = useMemo(() => {
@@ -3276,19 +3260,24 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
   const stampInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setCssConfig(getIndependentInvoiceCssConfig(design.cssConfig, activeCompanyId));
+    const initialCfg = getIndependentInvoiceCssConfig(design.cssConfig, activeCompanyId);
+    setCssConfig((prev) => (JSON.stringify(prev) === JSON.stringify(initialCfg) ? prev : initialCfg));
     const sync = () => {
-      setCssConfig(getIndependentInvoiceCssConfig(design.cssConfig, activeCompanyId));
+      const fresh = getIndependentInvoiceCssConfig(design.cssConfig, activeCompanyId);
+      setCssConfig((prev) => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh));
     };
     window.addEventListener("muavin:invoice-css-config-changed", sync);
     const unsubFirestore = subscribeToCompanyInvoiceCssFromFirestore(
       activeCompanyId,
       ({ cssConfig: remoteCss, invoiceDesign: remoteDesign, updatedAt }) => {
-        setCssConfig(remoteCss);
+        setCssConfig((prev) => (JSON.stringify(prev) === JSON.stringify(remoteCss) ? prev : remoteCss));
         if (remoteDesign) {
-          onChangeDesign({ ...remoteDesign, cssConfig: remoteCss });
-        } else {
-          onChangeDesign({ cssConfig: remoteCss });
+          const hasDiff = Object.entries(remoteDesign).some(
+            ([k, v]) => (design as any)[k] !== v
+          );
+          if (hasDiff) {
+            onChangeDesign({ ...design, ...remoteDesign, cssConfig: remoteCss });
+          }
         }
         if (updatedAt) {
           setLastFirestoreSavedAt(updatedAt);
