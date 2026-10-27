@@ -4544,6 +4544,90 @@ export const Invoices: React.FC<InvoicesProps> = ({
         />
       );
     }
+    const renderInvoiceScenarioAndProfile = () => (
+      <div className="w-full bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Sol Sütun: Fatura Senaryosu (GİB e-Belge) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                <FileText className="w-3 h-3 text-purple-600" />
+                <span>Fatura Senaryosu:</span>
+              </label>
+              <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
+                {invoiceScenario}
+              </span>
+            </div>
+            <select
+              value={invoiceScenario}
+              onChange={(e) => {
+                const val = e.target.value as InvoiceScenario;
+                setInvoiceScenario(val);
+                if (val === "EARSIVFATURA") {
+                  setMysoftEDocType("e_arsiv");
+                } else {
+                  setMysoftEDocType("e_fatura");
+                }
+              }}
+              className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+            >
+              <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
+              <option value="TEMELFATURA">TEMELFATURA - Temel Fatura (Doğrudan Kabul Edilen)</option>
+              <option value="EARSIVFATURA">EARSIVFATURA - e-Arşiv Fatura (Standart / Nihai Tüketici)</option>
+              <option value="IHRACAT">IHRACAT - İhracat e-Faturası (Gümrük Çıkışlı)</option>
+              <option value="KAMU">KAMU - Kamu Kurumu Faturası</option>
+              <option value="HAL">HAL - Hal Kayıt Sistemi (HKS) Faturası</option>
+            </select>
+            <p className="text-[9px] leading-tight text-slate-500 font-medium">
+              {invoiceScenario === "TICARIFATURA" && "Alıcı firma 7 gün içerisinde sistem üzerinden kabul veya ticari ret verebilir."}
+              {invoiceScenario === "TEMELFATURA" && "Sistemden doğrudan kabul edilir; itirazlar harici yollarla yapılır."}
+              {invoiceScenario === "EARSIVFATURA" && "e-Fatura mükellefi olmayanlara ve nihai tüketicilere iletilen arşiv faturası."}
+              {invoiceScenario === "IHRACAT" && "Gümrük ve Ticaret Bakanlığı GTİP onaylı mal ihracatı faturası senaryosu."}
+              {invoiceScenario === "KAMU" && "Kamu kurum ve kuruluşlarına yönelik harcama onaylı kamu faturası."}
+              {invoiceScenario === "HAL" && "Hal Kayıt Sistemi bildirimli toptancı hal satış faturası senaryosu."}
+            </p>
+          </div>
+
+          {/* Sağ Sütun: Fatura Türü (GİB Standardı) ve Ek Vergi Butonu */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                <Tag className="w-3 h-3 text-purple-600" />
+                <span>Fatura Türü (GİB Standardı):</span>
+              </label>
+              <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                {invoiceProfileType}
+              </span>
+            </div>
+            <select
+              value={invoiceProfileType}
+              onChange={(e) => handleSelectInvoiceProfile(e.target.value as InvoiceProfileType)}
+              className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+            >
+              <option value="SATIS">SATIŞ - Standart Satış Faturası</option>
+              <option value="TEVKIFAT">TEVKİFAT - KDV Tevkifatlı Fatura (2/10, 5/10, 7/10, 9/10 vb.)</option>
+              <option value="OZELMATRAH">ÖZEL MATRAH - 2. El Araç / Kâr Marjı / Kıymetli Maden (3065 SK. 23)</option>
+              <option value="ISTISNA">İSTİSNA - KDV'den Muaf / İstisna Satış (%0 KDV)</option>
+              <option value="IADE">İADE - Satış / Alış İade Faturası</option>
+              <option value="IHRACKAYITLI">İHRAÇ KAYITLI - İhraç Kaydıyla Teslim (3065 SK. 11/1-c)</option>
+              <option value="SGK">SGK - Sosyal Güvenlik Kurumu Faturası</option>
+              <option value="KOMISYONCU">KOMİSYONCU - Komisyoncu / Aracı Faturası</option>
+            </select>
+            <p className="text-[9px] leading-tight text-slate-500 font-medium">
+              {invoiceProfileType === "SATIS" && "Standart mal ve hizmet teslimi satış faturası profili."}
+              {invoiceProfileType === "TEVKIFAT" && "KDV'nin bir kısmının alıcı tarafından sorumlu sıfatıyla ödendiği fatura türü."}
+              {invoiceProfileType === "OZELMATRAH" && "KDV yalnızca kâr marjı veya işçilik farkı üzerinden hesaplanır."}
+              {invoiceProfileType === "ISTISNA" && "Kanuni istisna maddeleri uyarınca %0 KDV uygulanan teslimler."}
+              {invoiceProfileType === "IADE" && "Daha önce düzenlenen faturaya istinaden mal/hizmet iade faturası."}
+              {invoiceProfileType === "IHRACKAYITLI" && "3065 SK. 11/1-c uyarınca ihraç kaydıyla teslim edilen mallar."}
+              {invoiceProfileType === "SGK" && "Sosyal Güvenlik Kurumu'na yönelik sağlık ve medikal hizmet faturası."}
+              {invoiceProfileType === "KOMISYONCU" && "Komisyonculuk ve aracılık faaliyetlerine konu fatura türü."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+
     return (
       <div className="animate-fadeIn">
         <DetailPageLayout
@@ -5285,7 +5369,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     {/* Selected Cari Details Card */}
                     {(() => {
                       const selectedContact = contacts.find((c) => c.id === contactId);
-                      if (!selectedContact) return null;
+                      if (!selectedContact) {
+                        return (
+                          <div className="w-full lg:w-3/4">
+                            {renderInvoiceScenarioAndProfile()}
+                          </div>
+                        );
+                      }
 
                       const rawOpenAddr =
                         selectedContact.address ||
@@ -5370,14 +5460,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                           {/* Adres Önizlemesi ve Teslimat Adresi */}
                           <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
-                            <div className="md:col-span-7">
-                              <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
-                                <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
-                                <span>Faturada Kaydedilecek Müşteri Adresi:</span>
-                              </span>
-                              <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 min-h-[36px] flex items-center">
-                                {formattedAddressWithBranch || "Adres bilgisi girildiğinde burada görünür"}
+                            <div className="md:col-span-7 space-y-2">
+                              <div>
+                                <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
+                                  <span>Faturada Kaydedilecek Müşteri Adresi:</span>
+                                </span>
+                                <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 min-h-[36px] flex items-center">
+                                  {formattedAddressWithBranch || "Adres bilgisi girildiğinde burada görünür"}
+                                </div>
                               </div>
+                              {/* Fatura Senaryosu ve Fatura Türü */}
+                              {renderInvoiceScenarioAndProfile()}
                             </div>
                             <div className="md:col-span-5">
                               <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
@@ -5606,46 +5700,50 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                     {/* Açık Adres ve Teslimat Adresi Satırı */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                      <div className="md:col-span-7">
-                        <div className="flex items-center justify-between h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Faturada Kaydedilecek Müşteri Adresi</span>
-                          </label>
-                          {(manualCity || manualDistrict || customerBranchName) && (
-                            <span className="text-[10px] font-semibold text-purple-700">
-                              {[
-                                customerBranchName
-                                  ? `Şube: ${customerBranchName}${customerBranchCode ? ` (${customerBranchCode})` : ""}`
-                                  : "",
-                                [manualCity, manualDistrict].filter(Boolean).join(" / "),
-                              ]
-                                .filter(Boolean)
-                                .join(" • ")}
-                            </span>
-                          )}
-                        </div>
-                        <input
-                          ref={manualAddressInputRef}
-                          type="text"
-                          placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
-                          value={manualAddress}
-                          onFocus={clampManualAddressCaret}
-                          onClick={clampManualAddressCaret}
-                          onChange={handleManualAddressInputChange}
-                          onBlur={() =>
-                            setManualAddress((prev) =>
-                              formatAddressWithBranch(
-                                prev,
-                                manualCity,
-                                manualDistrict,
-                                customerBranchName,
-                                customerBranchCode
+                      <div className="md:col-span-7 space-y-2">
+                        <div>
+                          <div className="flex items-center justify-between h-5 mb-1">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <span>Faturada Kaydedilecek Müşteri Adresi</span>
+                            </label>
+                            {(manualCity || manualDistrict || customerBranchName) && (
+                              <span className="text-[10px] font-semibold text-purple-700">
+                                {[
+                                  customerBranchName
+                                    ? `Şube: ${customerBranchName}${customerBranchCode ? ` (${customerBranchCode})` : ""}`
+                                    : "",
+                                  [manualCity, manualDistrict].filter(Boolean).join(" / "),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" • ")}
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            ref={manualAddressInputRef}
+                            type="text"
+                            placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
+                            value={manualAddress}
+                            onFocus={clampManualAddressCaret}
+                            onClick={clampManualAddressCaret}
+                            onChange={handleManualAddressInputChange}
+                            onBlur={() =>
+                              setManualAddress((prev) =>
+                                formatAddressWithBranch(
+                                  prev,
+                                  manualCity,
+                                  manualDistrict,
+                                  customerBranchName,
+                                  customerBranchCode
+                                )
                               )
-                            )
-                          }
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
+                            }
+                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          />
+                        </div>
+                        {/* Fatura Senaryosu ve Fatura Türü */}
+                        {renderInvoiceScenarioAndProfile()}
                       </div>
 
                       <div className="md:col-span-5">
@@ -5709,89 +5807,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
                   </div>
                 )}
-
-                {/* Fatura Senaryosu ve Fatura Türü */}
-                <div className="w-full lg:w-3/4 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {/* Sol Sütun: Fatura Senaryosu (GİB e-Belge) */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                          <FileText className="w-3 h-3 text-purple-600" />
-                          <span>Fatura Senaryosu:</span>
-                        </label>
-                        <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
-                          {invoiceScenario}
-                        </span>
-                      </div>
-                      <select
-                        value={invoiceScenario}
-                        onChange={(e) => {
-                          const val = e.target.value as InvoiceScenario;
-                          setInvoiceScenario(val);
-                          if (val === "EARSIVFATURA") {
-                            setMysoftEDocType("e_arsiv");
-                          } else {
-                            setMysoftEDocType("e_fatura");
-                          }
-                        }}
-                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
-                      >
-                        <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
-                        <option value="TEMELFATURA">TEMELFATURA - Temel Fatura (Doğrudan Kabul Edilen)</option>
-                        <option value="EARSIVFATURA">EARSIVFATURA - e-Arşiv Fatura (Standart / Nihai Tüketici)</option>
-                        <option value="IHRACAT">IHRACAT - İhracat e-Faturası (Gümrük Çıkışlı)</option>
-                        <option value="KAMU">KAMU - Kamu Kurumu Faturası</option>
-                        <option value="HAL">HAL - Hal Kayıt Sistemi (HKS) Faturası</option>
-                      </select>
-                      <p className="text-[9px] leading-tight text-slate-500 font-medium">
-                        {invoiceScenario === "TICARIFATURA" && "Alıcı firma 7 gün içerisinde sistem üzerinden kabul veya ticari ret verebilir."}
-                        {invoiceScenario === "TEMELFATURA" && "Sistemden doğrudan kabul edilir; itirazlar harici yollarla yapılır."}
-                        {invoiceScenario === "EARSIVFATURA" && "e-Fatura mükellefi olmayanlara ve nihai tüketicilere iletilen arşiv faturası."}
-                        {invoiceScenario === "IHRACAT" && "Gümrük ve Ticaret Bakanlığı GTİP onaylı mal ihracatı faturası senaryosu."}
-                        {invoiceScenario === "KAMU" && "Kamu kurum ve kuruluşlarına yönelik harcama onaylı kamu faturası."}
-                        {invoiceScenario === "HAL" && "Hal Kayıt Sistemi bildirimli toptancı hal satış faturası senaryosu."}
-                      </p>
-                    </div>
-
-                    {/* Sağ Sütun: Fatura Türü (GİB Standardı) ve Ek Vergi Butonu */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                          <Tag className="w-3 h-3 text-purple-600" />
-                          <span>Fatura Türü (GİB Standardı):</span>
-                        </label>
-                        <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                          {invoiceProfileType}
-                        </span>
-                      </div>
-                      <select
-                        value={invoiceProfileType}
-                        onChange={(e) => handleSelectInvoiceProfile(e.target.value as InvoiceProfileType)}
-                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
-                      >
-                        <option value="SATIS">SATIŞ - Standart Satış Faturası</option>
-                        <option value="TEVKIFAT">TEVKİFAT - KDV Tevkifatlı Fatura (2/10, 5/10, 7/10, 9/10 vb.)</option>
-                        <option value="OZELMATRAH">ÖZEL MATRAH - 2. El Araç / Kâr Marjı / Kıymetli Maden (3065 SK. 23)</option>
-                        <option value="ISTISNA">İSTİSNA - KDV'den Muaf / İstisna Satış (%0 KDV)</option>
-                        <option value="IADE">İADE - Satış / Alış İade Faturası</option>
-                        <option value="IHRACKAYITLI">İHRAÇ KAYITLI - İhraç Kaydıyla Teslim (3065 SK. 11/1-c)</option>
-                        <option value="SGK">SGK - Sosyal Güvenlik Kurumu Faturası</option>
-                        <option value="KOMISYONCU">KOMİSYONCU - Komisyoncu / Aracı Faturası</option>
-                      </select>
-                      <p className="text-[9px] leading-tight text-slate-500 font-medium">
-                        {invoiceProfileType === "SATIS" && "Standart mal ve hizmet teslimi satış faturası profili."}
-                        {invoiceProfileType === "TEVKIFAT" && "KDV'nin bir kısmının alıcı tarafından sorumlu sıfatıyla ödendiği fatura türü."}
-                        {invoiceProfileType === "OZELMATRAH" && "KDV yalnızca kâr marjı veya işçilik farkı üzerinden hesaplanır."}
-                        {invoiceProfileType === "ISTISNA" && "Kanuni istisna maddeleri uyarınca %0 KDV uygulanan teslimler."}
-                        {invoiceProfileType === "IADE" && "Daha önce düzenlenen faturaya istinaden mal/hizmet iade faturası."}
-                        {invoiceProfileType === "IHRACKAYITLI" && "3065 SK. 11/1-c uyarınca ihraç kaydıyla teslim edilen mallar."}
-                        {invoiceProfileType === "SGK" && "Sosyal Güvenlik Kurumu'na yönelik sağlık ve medikal hizmet faturası."}
-                        {invoiceProfileType === "KOMISYONCU" && "Komisyonculuk ve aracılık faaliyetlerine konu fatura türü."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* Dynamic Invoice Items Table */}
