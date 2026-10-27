@@ -6380,18 +6380,81 @@ export const Invoices: React.FC<InvoicesProps> = ({
               {/* Bottom Calculations Summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end pt-2">
                 <div className="space-y-3">
-                  <div className="w-full sm:w-48">
-                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Son Ödeme (Vade) Tarihi *</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Vade Günü (Vade Süresi)</span>
+                      </label>
+                      {(() => {
+                        const presetDays = [0, 7, 10, 15, 30, 45, 60, 90, 120];
+                        let dayDiff: number | null = null;
+                        if (issueDate && dueDate) {
+                          const p1 = issueDate.split("-").map(Number);
+                          const p2 = dueDate.split("-").map(Number);
+                          if (p1.length === 3 && p2.length === 3) {
+                            const u1 = Date.UTC(p1[0], (p1[1] || 1) - 1, p1[2] || 1);
+                            const u2 = Date.UTC(p2[0], (p2[1] || 1) - 1, p2[2] || 1);
+                            if (!isNaN(u1) && !isNaN(u2)) {
+                              dayDiff = Math.round((u2 - u1) / (24 * 60 * 60 * 1000));
+                            }
+                          }
+                        }
+                        const selectVal =
+                          dayDiff !== null && presetDays.includes(dayDiff)
+                            ? String(dayDiff)
+                            : "custom";
+                        return (
+                          <select
+                            value={selectVal}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "custom") return;
+                              const days = parseInt(val, 10);
+                              if (isNaN(days)) return;
+                              const baseStr = issueDate || new Date().toISOString().split("T")[0];
+                              const p = baseStr.split("-").map(Number);
+                              if (p.length === 3) {
+                                const baseUtc = Date.UTC(p[0], (p[1] || 1) - 1, p[2] || 1);
+                                const targetUtc = new Date(baseUtc + days * 24 * 60 * 60 * 1000);
+                                if (!isNaN(targetUtc.getTime())) {
+                                  setDueDate(targetUtc.toISOString().split("T")[0]);
+                                }
+                              }
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs cursor-pointer"
+                          >
+                            <option value="0">Aynı Gün (Peşin / 0 Gün)</option>
+                            <option value="7">+7 Gün Vadeli</option>
+                            <option value="10">+10 Gün Vadeli</option>
+                            <option value="15">+15 Gün Vadeli</option>
+                            <option value="30">+30 Gün Vadeli</option>
+                            <option value="45">+45 Gün Vadeli</option>
+                            <option value="60">+60 Gün Vadeli</option>
+                            <option value="90">+90 Gün Vadeli</option>
+                            <option value="120">+120 Gün Vadeli</option>
+                            {selectVal === "custom" && (
+                              <option value="custom">
+                                Özel Vade Tarihi{dayDiff !== null ? ` (${dayDiff >= 0 ? `+${dayDiff}` : dayDiff} Gün)` : ""}
+                              </option>
+                            )}
+                          </select>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Son Ödeme (Vade) Tarihi *</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -6602,190 +6665,147 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </div>
 
               <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
-                {/* Ödeme Yöntemi Seçimi (Nakit, Cari, Kredi Kartı, EFT & Havale) - Resmi e-fatura / e-arşiv olarak kes (Mysoft) Bölümünün Üstünde */}
+                {/* Ödeme / Tahsilat Yöntemi ve Vade Günleri (Listbox) */}
                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                      <Wallet className="w-4 h-4 text-purple-600" />
-                      <span>Ödeme / Tahsilat Yöntemi:</span>
-                    </label>
-                    <span
-                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                        paymentMethod === "nakit"
-                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                          : paymentMethod === "kredi_karti"
-                          ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                          : paymentMethod === "eft_havale"
-                          ? "bg-sky-50 text-sky-800 border-sky-200"
-                          : "bg-amber-50 text-amber-800 border-amber-200"
-                      }`}
-                    >
-                      {paymentMethod === "nakit"
-                        ? "Nakit (Peşin / Kasa Tahsilatı)"
-                        : paymentMethod === "kredi_karti"
-                        ? "Kredi Kartı (POS / Banka Tahsilatı)"
-                        : paymentMethod === "eft_havale"
-                        ? "EFT & Havale (Banka Transferi)"
-                        : "Cari (Açık Hesap / Vadeli)"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                    {/* 1. NAKİT */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod("nakit");
-                        setDueDate(issueDate);
-                        const cashAcc = accounts.find((a) => a.type === "cash") || accounts[0];
-                        if (cashAcc) setPaymentAccountId(cashAcc.id);
-                      }}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                        paymentMethod === "nakit"
-                          ? "bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs"
-                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-emerald-300"
-                      }`}
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                          paymentMethod === "nakit"
-                            ? "bg-emerald-600 text-white shadow-2xs"
-                            : "bg-white text-emerald-600 border border-slate-200"
-                        }`}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* Sol Sütun: Ödeme / Tahsilat Yöntemi Listbox */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                          <Wallet className="w-4 h-4 text-purple-600" />
+                          <span>Ödeme / Tahsilat Yöntemi:</span>
+                        </label>
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                            paymentMethod === "nakit"
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              : paymentMethod === "kredi_karti"
+                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                              : paymentMethod === "eft_havale"
+                              ? "bg-sky-50 text-sky-800 border-sky-200"
+                              : "bg-amber-50 text-amber-800 border-amber-200"
+                          }`}
+                        >
+                          {paymentMethod === "nakit"
+                            ? "Nakit (Peşin)"
+                            : paymentMethod === "kredi_karti"
+                            ? "Kredi Kartı (POS)"
+                            : paymentMethod === "eft_havale"
+                            ? "EFT & Havale"
+                            : "Cari (Vadeli)"}
+                        </span>
+                      </div>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => {
+                          const nextMethod = e.target.value as InvoicePaymentMethod;
+                          if (nextMethod === "nakit") {
+                            setPaymentMethod("nakit");
+                            setDueDate(issueDate);
+                            const cashAcc = accounts.find((a) => a.type === "cash") || accounts[0];
+                            if (cashAcc) setPaymentAccountId(cashAcc.id);
+                          } else if (nextMethod === "cari") {
+                            setPaymentMethod("cari");
+                          } else if (nextMethod === "kredi_karti") {
+                            setPaymentMethod("kredi_karti");
+                            setDueDate(issueDate);
+                            const posOrBankAcc =
+                              accounts.find(
+                                (a) => a.type === "credit_card" || a.type === "pos" || a.type === "bank"
+                              ) || accounts[0];
+                            if (posOrBankAcc) setPaymentAccountId(posOrBankAcc.id);
+                          } else if (nextMethod === "eft_havale") {
+                            setPaymentMethod("eft_havale");
+                            setDueDate(issueDate);
+                            const bankAcc = accounts.find((a) => a.type === "bank") || accounts[0];
+                            if (bankAcc) {
+                              setPaymentAccountId(bankAcc.id);
+                              if (bankAcc.iban) {
+                                setPaymentIban(bankAcc.iban);
+                              } else if (!paymentIban) {
+                                setPaymentIban(companySettings.defaultBankIban || companySettings.iban || "");
+                              }
+                            }
+                          }
+                        }}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
                       >
-                        <Banknote className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-xs font-extrabold text-slate-900">Nakit</span>
-                          {paymentMethod === "nakit" && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
-                          Peşin tahsilat • Kasa hesabına anında işlenir ve ödendi kapatılır
-                        </p>
-                      </div>
-                    </button>
+                        <option value="cari">Cari — Açık Hesap / Vadeli (Müşteri Cari Bakiyesine İşlenir)</option>
+                        <option value="nakit">Nakit — Peşin / Kasa Tahsilatı (Anında Ödendi Kapatılır)</option>
+                        <option value="kredi_karti">Kredi Kartı — POS / Banka Tahsilatı (Anında Ödendi Kapatılır)</option>
+                        <option value="eft_havale">EFT & Havale — Banka Transferi / IBAN (Anında Ödendi Kapatılır)</option>
+                      </select>
+                    </div>
 
-                    {/* 2. CARİ */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod("cari");
-                      }}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                        paymentMethod === "cari"
-                          ? "bg-purple-50/90 border-purple-400 ring-2 ring-purple-500/20 shadow-xs"
-                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-purple-300"
-                      }`}
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                          paymentMethod === "cari"
-                            ? "bg-purple-600 text-white shadow-2xs"
-                            : "bg-white text-purple-600 border border-slate-200"
-                        }`}
-                      >
-                        <Users className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-xs font-extrabold text-slate-900">Cari</span>
-                          {paymentMethod === "cari" && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
-                          Açık hesap / Vadeli • Müşteri cari bakiyesine borç olarak işlenir
-                        </p>
-                      </div>
-                    </button>
-
-                    {/* 3. KREDİ KARTI */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod("kredi_karti");
-                        setDueDate(issueDate);
-                        const posOrBankAcc =
-                          accounts.find(
-                            (a) => a.type === "credit_card" || a.type === "pos" || a.type === "bank"
-                          ) || accounts[0];
-                        if (posOrBankAcc) setPaymentAccountId(posOrBankAcc.id);
-                      }}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                        paymentMethod === "kredi_karti"
-                          ? "bg-indigo-50/90 border-indigo-400 ring-2 ring-indigo-500/20 shadow-xs"
-                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-indigo-300"
-                      }`}
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                          paymentMethod === "kredi_karti"
-                            ? "bg-indigo-600 text-white shadow-2xs"
-                            : "bg-white text-indigo-600 border border-slate-200"
-                        }`}
-                      >
-                        <CreditCard className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-xs font-extrabold text-slate-900">Kredi Kartı</span>
-                          {paymentMethod === "kredi_karti" && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
-                          POS / Kart tahsilatı • Banka/POS hesabına işlenir ve ödendi kapatılır
-                        </p>
-                      </div>
-                    </button>
-
-                    {/* 4. EFT & HAVALE */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod("eft_havale");
-                        setDueDate(issueDate);
-                        const bankAcc =
-                          accounts.find((a) => a.type === "bank") || accounts[0];
-                        if (bankAcc) {
-                          setPaymentAccountId(bankAcc.id);
-                          if (bankAcc.iban) {
-                            setPaymentIban(bankAcc.iban);
-                          } else if (!paymentIban) {
-                            setPaymentIban(companySettings.defaultBankIban || companySettings.iban || "");
+                    {/* Sağ Sütun: Vade Günleri Listbox */}
+                    <div className="space-y-1.5">
+                      {(() => {
+                        const presetDays = [0, 7, 10, 15, 30, 45, 60, 90, 120];
+                        let dayDiff: number | null = null;
+                        if (issueDate && dueDate) {
+                          const p1 = issueDate.split("-").map(Number);
+                          const p2 = dueDate.split("-").map(Number);
+                          if (p1.length === 3 && p2.length === 3) {
+                            const u1 = Date.UTC(p1[0], (p1[1] || 1) - 1, p1[2] || 1);
+                            const u2 = Date.UTC(p2[0], (p2[1] || 1) - 1, p2[2] || 1);
+                            if (!isNaN(u1) && !isNaN(u2)) {
+                              dayDiff = Math.round((u2 - u1) / (24 * 60 * 60 * 1000));
+                            }
                           }
                         }
-                      }}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                        paymentMethod === "eft_havale"
-                          ? "bg-sky-50/90 border-sky-400 ring-2 ring-sky-500/20 shadow-xs"
-                          : "bg-slate-50/70 hover:bg-white border-slate-200 hover:border-sky-300"
-                      }`}
-                    >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                          paymentMethod === "eft_havale"
-                            ? "bg-sky-600 text-white shadow-2xs"
-                            : "bg-white text-sky-600 border border-slate-200"
-                        }`}
-                      >
-                        <Landmark className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-xs font-extrabold text-slate-900">EFT & Havale</span>
-                          {paymentMethod === "eft_havale" && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
-                          Banka transferi • Seçilen banka/IBAN hesabına işlenir ve ödendi kapatılır
-                        </p>
-                      </div>
-                    </button>
+                        const selectVal =
+                          dayDiff !== null && presetDays.includes(dayDiff)
+                            ? String(dayDiff)
+                            : "custom";
+                        return (
+                          <>
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                                <Clock className="w-4 h-4 text-amber-600" />
+                                <span>Vade Günü (Hızlı Vade Seçimi):</span>
+                              </label>
+                              <span className="text-[10px] font-mono font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md border border-amber-200">
+                                Vade: {dueDate ? formatDate(dueDate) : "—"}
+                              </span>
+                            </div>
+                            <select
+                              value={selectVal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "custom") return;
+                                const days = parseInt(val, 10);
+                                if (isNaN(days)) return;
+                                const baseStr = issueDate || new Date().toISOString().split("T")[0];
+                                const p = baseStr.split("-").map(Number);
+                                if (p.length === 3) {
+                                  const baseUtc = Date.UTC(p[0], (p[1] || 1) - 1, p[2] || 1);
+                                  const targetUtc = new Date(baseUtc + days * 24 * 60 * 60 * 1000);
+                                  if (!isNaN(targetUtc.getTime())) {
+                                    setDueDate(targetUtc.toISOString().split("T")[0]);
+                                  }
+                                }
+                              }}
+                              className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                            >
+                              <option value="0">Aynı Gün (0 Gün / Peşin)</option>
+                              <option value="7">+7 Gün Vadeli</option>
+                              <option value="10">+10 Gün Vadeli</option>
+                              <option value="15">+15 Gün Vadeli</option>
+                              <option value="30">+30 Gün Vadeli</option>
+                              <option value="45">+45 Gün Vadeli</option>
+                              <option value="60">+60 Gün Vadeli</option>
+                              <option value="90">+90 Gün Vadeli</option>
+                              <option value="120">+120 Gün Vadeli</option>
+                              {selectVal === "custom" && (
+                                <option value="custom">
+                                  Özel Vade Tarihi{dayDiff !== null ? ` (${dayDiff >= 0 ? `+${dayDiff}` : dayDiff} Gün)` : ""}
+                                </option>
+                              )}
+                            </select>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   {/* Seçilen Ödeme Yöntemine Göre Kasa / Banka / EFT-Havale / Vade Detay Alanı */}
@@ -6954,31 +6974,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           Fatura tutarı cari hesaba <strong>Açık Bakiye (Vadeli)</strong> olarak kaydedilir.
                         </span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[10px] font-bold text-amber-800 mr-1">Hızlı Vade:</span>
-                        {[
-                          { label: "Aynı Gün", days: 0 },
-                          { label: "+7 Gün", days: 7 },
-                          { label: "+15 Gün", days: 15 },
-                          { label: "+30 Gün", days: 30 },
-                          { label: "+60 Gün", days: 60 },
-                        ].map((preset) => (
-                          <button
-                            key={preset.days}
-                            type="button"
-                            onClick={() => {
-                              const base = issueDate ? new Date(issueDate) : new Date();
-                              const target = new Date(base.getTime() + preset.days * 24 * 60 * 60 * 1000);
-                              if (!isNaN(target.getTime())) {
-                                setDueDate(target.toISOString().split("T")[0]);
-                              }
-                            }}
-                            className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 cursor-pointer transition-colors"
-                          >
-                            {preset.label}
-                          </button>
-                        ))}
-                      </div>
+                      <span className="text-[10px] font-bold text-amber-800">
+                        Son Ödeme (Vade) Tarihi: <strong>{dueDate ? formatDate(dueDate) : "—"}</strong>
+                      </span>
                     </div>
                   )}
                 </div>
