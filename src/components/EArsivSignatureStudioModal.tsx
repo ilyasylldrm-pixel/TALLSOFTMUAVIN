@@ -38,12 +38,13 @@ interface EArsivSignatureStudioModalProps {
   isOpen: boolean;
   onClose: () => void;
   companySettings: CompanySettings;
-  currentDesign: InvoiceDesignSettings;
+  currentDesign?: InvoiceDesignSettings;
   initialSignatureUrl?: string;
   initialStampUrl?: string;
   initialSignerName?: string;
   initialSignerTitle?: string;
-  onApply: (result: EArsivSignatureResult, saveAsCompanyDefault: boolean) => void;
+  onApply?: (result: EArsivSignatureResult, saveAsCompanyDefault: boolean) => void;
+  onSaveCompanySettings?: (updatedSettings: CompanySettings) => void;
 }
 
 const PEN_COLORS = [
@@ -207,7 +208,11 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
   initialSignerName,
   initialSignerTitle,
   onApply,
+  onSaveCompanySettings,
 }) => {
+  const safeDesign: Partial<InvoiceDesignSettings> =
+    currentDesign || companySettings?.invoiceDesign || {};
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sigUploadRef = useRef<HTMLInputElement | null>(null);
   const stampUploadRef = useRef<HTMLInputElement | null>(null);
@@ -216,37 +221,37 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawnOnCanvas, setHasDrawnOnCanvas] = useState(false);
   const [penColor, setPenColor] = useState<string>(
-    currentDesign.eArsivSignatureColor || "#1d4ed8"
+    safeDesign.eArsivSignatureColor || "#1d4ed8"
   );
   const [penWidth, setPenWidth] = useState<number>(2.6);
   const [autoVariant, setAutoVariant] = useState<number>(0);
 
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | undefined>(
-    initialSignatureUrl ?? currentDesign.signatureImageUrl
+    initialSignatureUrl ?? safeDesign.signatureImageUrl
   );
   const [stampDataUrl, setStampDataUrl] = useState<string | undefined>(
-    initialStampUrl ?? currentDesign.stampImageUrl
+    initialStampUrl ?? safeDesign.stampImageUrl
   );
   const [signerName, setSignerName] = useState<string>(
     initialSignerName ??
-      currentDesign.signerName ??
-      companySettings.eDevletCredentials?.managerName ??
+      safeDesign.signerName ??
+      companySettings?.eDevletCredentials?.managerName ??
       ""
   );
   const [signerTitle, setSignerTitle] = useState<string>(
-    initialSignerTitle ?? currentDesign.signerTitle ?? "Şirket Yetkilisi"
+    initialSignerTitle ?? safeDesign.signerTitle ?? "Şirket Yetkilisi"
   );
   const [signatureMode, setSignatureMode] = useState<
     "stamp_and_signature" | "signature_only" | "stamp_only" | "auto_digital"
-  >(currentDesign.eArsivSignatureMode || "stamp_and_signature");
+  >(safeDesign.eArsivSignatureMode || "stamp_and_signature");
   const [showSigningTimestamp, setShowSigningTimestamp] = useState<boolean>(
-    currentDesign.showSigningTimestamp !== false
+    safeDesign.showSigningTimestamp !== false
   );
   const [signatureZone, setSignatureZone] = useState<IssuerSignatureCssZone>(
-    currentDesign.cssConfig?.signatureZone || "under_gib"
+    safeDesign.cssConfig?.signatureZone || "under_gib"
   );
   const [signatureScale, setSignatureScale] = useState<number>(
-    currentDesign.cssConfig?.signatureScale || 1
+    safeDesign.cssConfig?.signatureScale || 1
   );
   const [saveAsDefault, setSaveAsDefault] = useState<boolean>(true);
   const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
@@ -255,20 +260,20 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
 
   useEffect(() => {
     if (!isOpen) return;
-    setSignatureDataUrl(initialSignatureUrl ?? currentDesign.signatureImageUrl);
-    setStampDataUrl(initialStampUrl ?? currentDesign.stampImageUrl);
+    setSignatureDataUrl(initialSignatureUrl ?? safeDesign.signatureImageUrl);
+    setStampDataUrl(initialStampUrl ?? safeDesign.stampImageUrl);
     setSignerName(
       initialSignerName ??
-        currentDesign.signerName ??
-        companySettings.eDevletCredentials?.managerName ??
+        safeDesign.signerName ??
+        companySettings?.eDevletCredentials?.managerName ??
         ""
     );
-    setSignerTitle(initialSignerTitle ?? currentDesign.signerTitle ?? "Şirket Yetkilisi");
-    setSignatureMode(currentDesign.eArsivSignatureMode || "stamp_and_signature");
-    setPenColor(currentDesign.eArsivSignatureColor || "#1d4ed8");
-    setShowSigningTimestamp(currentDesign.showSigningTimestamp !== false);
-    setSignatureZone(currentDesign.cssConfig?.signatureZone || "under_gib");
-    setSignatureScale(currentDesign.cssConfig?.signatureScale || 1);
+    setSignerTitle(initialSignerTitle ?? safeDesign.signerTitle ?? "Şirket Yetkilisi");
+    setSignatureMode(safeDesign.eArsivSignatureMode || "stamp_and_signature");
+    setPenColor(safeDesign.eArsivSignatureColor || "#1d4ed8");
+    setShowSigningTimestamp(safeDesign.showSigningTimestamp !== false);
+    setSignatureZone(safeDesign.cssConfig?.signatureZone || "under_gib");
+    setSignatureScale(safeDesign.cssConfig?.signatureScale || 1);
     setHasDrawnOnCanvas(false);
   }, [
     isOpen,
@@ -277,7 +282,8 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
     initialSignerName,
     initialSignerTitle,
     currentDesign,
-    companySettings.eDevletCredentials?.managerName,
+    companySettings?.invoiceDesign,
+    companySettings?.eDevletCredentials?.managerName,
   ]);
 
   // Initialize drawing canvas
@@ -442,8 +448,8 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
     setAutoVariant(nextVar);
     const targetName =
       signerName.trim() ||
-      companySettings.eDevletCredentials?.managerName ||
-      companySettings.companyName ||
+      companySettings?.eDevletCredentials?.managerName ||
+      companySettings?.companyName ||
       "Yetkili İmza";
     const generated = generateStylizedSignatureDataUrl(targetName, penColor, nextVar);
     if (generated) {
@@ -460,33 +466,59 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
       finalSigUrl = canvasRef.current.toDataURL("image/png");
     }
 
-    onApply(
-      {
-        signatureImageUrl: finalSigUrl,
-        stampImageUrl: stampDataUrl,
-        signerName: signerName.trim() || undefined,
-        signerTitle: signerTitle.trim() || undefined,
-        eArsivSignatureMode: signatureMode,
-        eArsivSignatureColor: penColor,
-        showSigningTimestamp,
-        showSignatureStamp: true,
-        autoDigitalStamp: signatureMode !== "signature_only",
-        signatureZone,
-        signatureScale,
-      },
-      saveAsDefault
-    );
+    const resultPayload: EArsivSignatureResult = {
+      signatureImageUrl: finalSigUrl,
+      stampImageUrl: stampDataUrl,
+      signerName: signerName.trim() || undefined,
+      signerTitle: signerTitle.trim() || undefined,
+      eArsivSignatureMode: signatureMode,
+      eArsivSignatureColor: penColor,
+      showSigningTimestamp,
+      showSignatureStamp: true,
+      autoDigitalStamp: signatureMode !== "signature_only",
+      signatureZone,
+      signatureScale,
+    };
+
+    if (onApply) {
+      onApply(resultPayload, saveAsDefault);
+    } else if (onSaveCompanySettings && companySettings) {
+      const baseDesign = (companySettings.invoiceDesign || {}) as InvoiceDesignSettings;
+      const nextDesign: InvoiceDesignSettings = {
+        ...baseDesign,
+        signatureImageUrl: resultPayload.signatureImageUrl,
+        stampImageUrl: resultPayload.stampImageUrl,
+        signerName: resultPayload.signerName,
+        signerTitle: resultPayload.signerTitle,
+        eArsivSignatureMode: resultPayload.eArsivSignatureMode,
+        eArsivSignatureColor: resultPayload.eArsivSignatureColor,
+        showSigningTimestamp: resultPayload.showSigningTimestamp,
+        showSignatureStamp: resultPayload.showSignatureStamp,
+        autoDigitalStamp: resultPayload.autoDigitalStamp,
+        cssConfig: {
+          ...(baseDesign.cssConfig || ({} as any)),
+          ...(resultPayload.signatureZone ? { signatureZone: resultPayload.signatureZone } : {}),
+          ...(resultPayload.signatureScale !== undefined
+            ? { signatureScale: resultPayload.signatureScale }
+            : {}),
+        },
+      };
+      onSaveCompanySettings({
+        ...companySettings,
+        invoiceDesign: nextDesign,
+      });
+    }
     onClose();
   };
 
   const sellerTitle =
-    companySettings.companyTitle || companySettings.companyName || "KURUMSAL FİRMA ÜNVANI";
-  const sellerTaxOffice = companySettings.taxOffice || "Merkez";
+    companySettings?.companyTitle || companySettings?.companyName || "KURUMSAL FİRMA ÜNVANI";
+  const sellerTaxOffice = companySettings?.taxOffice || "Merkez";
   const sellerTaxNo =
-    companySettings.vkn ||
-    companySettings.tckn ||
-    companySettings.taxNumber ||
-    companySettings.tenantIdentifierNumber ||
+    companySettings?.vkn ||
+    companySettings?.tckn ||
+    companySettings?.taxNumber ||
+    companySettings?.tenantIdentifierNumber ||
     "1111111111";
 
   return (
@@ -812,7 +844,7 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
                           setPenColor(c.id);
                           const targetName =
                             signerName.trim() ||
-                            companySettings.companyName ||
+                            companySettings?.companyName ||
                             "Yetkili İmza";
                           setSignatureDataUrl(
                             generateStylizedSignatureDataUrl(targetName, c.id, autoVariant)
@@ -977,7 +1009,7 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
                           {sellerTitle}
                         </div>
                         <div className="border-t border-current/30 my-0.5" />
-                        {companySettings.address && (
+                        {companySettings?.address && (
                           <div className="text-[7px] font-medium leading-tight">
                             {companySettings.address}
                           </div>
@@ -989,14 +1021,14 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
                             : "Vergi Kimlik No"}
                           : <span className="font-mono font-black">{sellerTaxNo}</span>
                         </div>
-                        {(companySettings.phone || companySettings.email) && (
+                        {(companySettings?.phone || companySettings?.email) && (
                           <div className="text-[6.8px] font-semibold leading-tight">
                             {companySettings.phone ? `Tel: ${companySettings.phone}` : ""}
                             {companySettings.phone && companySettings.email ? " • " : ""}
                             {companySettings.email ? `E-Posta: ${companySettings.email}` : ""}
                           </div>
                         )}
-                        {(companySettings.tradeRegisterNo || companySettings.esnafSicilNo) && (
+                        {(companySettings?.tradeRegisterNo || companySettings?.esnafSicilNo) && (
                           <div className="text-[6.8px] font-semibold leading-tight">
                             {companySettings.tradeRegisterNo
                               ? `Ticaret Sicil No: ${companySettings.tradeRegisterNo}`
@@ -1009,7 +1041,7 @@ export const EArsivSignatureStudioModal: React.FC<EArsivSignatureStudioModalProp
                               : ""}
                           </div>
                         )}
-                        {companySettings.mersisNo && (
+                        {companySettings?.mersisNo && (
                           <div className="text-[6.8px] font-mono font-semibold leading-tight">
                             MERSİS No: {companySettings.mersisNo}
                           </div>
