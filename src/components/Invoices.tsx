@@ -5816,7 +5816,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           setSelectedBranchId(e.target.value);
                           setCustomBranchAddressOverride("");
                         }}
-                        className="w-full bg-purple-50/50 hover:bg-white border border-purple-300 focus:border-purple-600 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs cursor-pointer"
+                        style={{ textAlign: "center", textAlignLast: "center" }}
+                        className="w-full bg-purple-50/50 hover:bg-white border border-purple-300 focus:border-purple-600 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs cursor-pointer text-center mx-auto block"
                       >
                         {effectiveBranchesList
                           .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
@@ -5825,14 +5826,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             const brDist = b.address?.district || "";
                             const locStr = [brDist, brCity].filter(Boolean).join("/");
                             return (
-                              <option key={b.id} value={b.id}>
+                              <option key={b.id} value={b.id} className="text-center py-1">
                                 {b.isMain ? "🏢 [MERKEZ]" : "🏬 [ŞUBE]"} {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
                               </option>
                             );
                           })}
                       </select>
                       {/* Hızlı Şube & Merkez Değiştirme Butonları */}
-                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap pt-0.5">
                         {effectiveBranchesList
                           .filter((b) => b.status !== "passive")
                           .map((b) => {
