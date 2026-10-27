@@ -5366,8 +5366,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             </div>
                           </div>
 
-                          {/* Müşteri / Cari Şube Bilgisi Girişi ve Adres Önizlemesi */}
-                          <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+                          {/* Müşteri / Cari Şube Bilgisi Girişi, Adres Önizlemesi ve Teslimat Adresi */}
+                          <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
                             <div className="md:col-span-4">
                               <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1 flex items-center gap-1">
                                 <Building2 className="w-3 h-3 text-purple-600" />
@@ -5381,25 +5381,49 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                               />
                             </div>
-                            <div className="md:col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
-                                Şube Kodu
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Örn: SB-01"
-                                value={customerBranchCode}
-                                onChange={(e) => setCustomerBranchCode(e.target.value)}
-                                className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                              />
-                            </div>
-                            <div className="md:col-span-6">
+                            <div className="md:col-span-5">
                               <span className="text-[10px] font-bold text-purple-800 uppercase block mb-1 flex items-center gap-1">
                                 <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
                                 <span>Faturada Kaydedilecek Müşteri Adresi (Şube Bilgisi Dahil):</span>
                               </span>
                               <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg p-1.5 text-xs font-semibold text-slate-900 min-h-[32px] flex items-center">
                                 {formattedAddressWithBranch || "Adres veya şube bilgisi girildiğinde burada görünür"}
+                              </div>
+                            </div>
+                            <div className="md:col-span-3">
+                              <span className="text-[10px] font-bold text-purple-800 uppercase block mb-1 flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
+                                <span>Teslimat / Sevkiyat Adresi:</span>
+                              </span>
+                              <div className="bg-purple-50/60 px-2.5 py-1.5 rounded-lg border border-purple-200/80 min-h-[32px] flex flex-col justify-center space-y-1.5">
+                                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={hasDifferentDeliveryAddress}
+                                    onChange={(e) => {
+                                      setHasDifferentDeliveryAddress(e.target.checked);
+                                      if (!e.target.checked) {
+                                        setDeliveryAddress("");
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
+                                  />
+                                  <span>Teslimat / Sevkiyat Adresi Farklı mı?</span>
+                                </label>
+                                {hasDifferentDeliveryAddress && (
+                                  <div className="pt-1 animate-in fade-in duration-150 space-y-1">
+                                    <label className="block text-[10px] font-bold text-purple-900">
+                                      Farklı Teslimat Adresi (Faturaya not olarak eklenecektir):
+                                    </label>
+                                    <textarea
+                                      rows={2}
+                                      value={deliveryAddress}
+                                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                                      placeholder="Örnek: Sevkiyat Depo - Org. Sanayi Bölgesi 3. Cadde No:12 Nilüfer / Bursa"
+                                      className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 font-medium placeholder-slate-400 focus:ring-2 focus:ring-purple-500 outline-none"
+                                    />
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -5712,9 +5736,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* Şube Bilgileri & Açık Adres Satırı */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                      <div className="md:col-span-3">
+                    {/* Şube Bilgileri, Açık Adres ve Teslimat Adresi Satırı */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                      <div className="md:col-span-4">
                         <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                           <Building2 className="w-3.5 h-3.5 text-purple-600" />
                           <span>Müşteri Şube Adı / Birimi</span>
@@ -5742,35 +5766,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         />
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Şube Kodu
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Örn: SB-01"
-                          value={customerBranchCode}
-                          onChange={(e) => setCustomerBranchCode(e.target.value)}
-                          onBlur={() =>
-                            setManualAddress((prev) =>
-                              formatAddressWithBranch(
-                                prev,
-                                manualCity,
-                                manualDistrict,
-                                customerBranchName,
-                                customerBranchCode
-                              )
-                            )
-                          }
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
-
-                      <div className="md:col-span-7">
+                      <div className="md:col-span-5">
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <MapPin className="w-3.5 h-3.5 text-purple-600" />
-                            <span>Müşteri Açık Adresi (Şube Bilgisi Adreste Görünür)</span>
+                            <span>Faturada Kaydedilecek Müşteri Adresi</span>
                           </label>
                           {(manualCity || manualDistrict || customerBranchName) && (
                             <span className="text-[10px] font-semibold text-purple-700">
@@ -5807,6 +5807,43 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-xs font-bold text-purple-800 mb-1 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <span>Teslimat / Sevkiyat Adresi</span>
+                        </label>
+                        <div className="bg-purple-50/60 px-2.5 py-2 rounded-xl border border-purple-200/80 space-y-1.5">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
+                            <input
+                              type="checkbox"
+                              checked={hasDifferentDeliveryAddress}
+                              onChange={(e) => {
+                                setHasDifferentDeliveryAddress(e.target.checked);
+                                if (!e.target.checked) {
+                                  setDeliveryAddress("");
+                                }
+                              }}
+                              className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
+                            />
+                            <span>Teslimat / Sevkiyat Adresi Farklı mı?</span>
+                          </label>
+                          {hasDifferentDeliveryAddress && (
+                            <div className="pt-1 animate-in fade-in duration-150 space-y-1">
+                              <label className="block text-[10px] font-bold text-purple-900">
+                                Farklı Teslimat Adresi (Faturaya not olarak eklenecektir):
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={deliveryAddress}
+                                onChange={(e) => setDeliveryAddress(e.target.value)}
+                                placeholder="Örnek: Sevkiyat Depo - Org. Sanayi Bölgesi 3. Cadde No:12 Nilüfer / Bursa"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 font-medium placeholder-slate-400 focus:ring-2 focus:ring-purple-500 outline-none"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Cari Hesaba Kaydetme Seçeneği */}
@@ -5831,7 +5868,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </div>
                 )}
 
-                {/* Fatura Senaryosu ve Fatura Türü (Aynı Satırda - Teslimat / Sevkiyat Adresi Bölümünün Üstünde) */}
+                {/* Fatura Senaryosu ve Fatura Türü */}
                 <div className="w-full lg:w-3/4 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     {/* Sol Sütun: Fatura Senaryosu (GİB e-Belge) */}
@@ -5912,43 +5949,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </p>
                     </div>
                   </div>
-                </div>
-
-
-                {/* Delivery Address Section (Teslimat Adresi Farklı mı?) */}
-                <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
-                      <input
-                        type="checkbox"
-                        checked={hasDifferentDeliveryAddress}
-                        onChange={(e) => {
-                          setHasDifferentDeliveryAddress(e.target.checked);
-                          if (!e.target.checked) {
-                            setDeliveryAddress("");
-                          }
-                        }}
-                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
-                      />
-                      <MapPin className="w-4 h-4 text-purple-600" />
-                      <span>Teslimat / Sevkiyat Adresi Farklı mı?</span>
-                    </label>
-                  </div>
-
-                  {hasDifferentDeliveryAddress && (
-                    <div className="pt-1 animate-in fade-in duration-150 space-y-1">
-                      <label className="block text-[11px] font-bold text-purple-900">
-                        Farklı Teslimat Adresi (Faturaya not olarak eklenecektir):
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={deliveryAddress}
-                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Örnek: Sevkiyat Depo - Org. Sanayi Bölgesi 3. Cadde No:12 Nilüfer / Bursa"
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 font-medium placeholder-slate-400 focus:ring-2 focus:ring-purple-500 outline-none"
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
 
