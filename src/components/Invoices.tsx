@@ -6447,7 +6447,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
               <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
                 {/* Ödeme / Tahsilat Yöntemi ve Vade Günleri (Listbox) */}
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                <div className="w-full lg:w-1/2 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {/* Sol Sütun: Ödeme / Tahsilat Yöntemi Listbox */}
                     <div className="space-y-1.5">
