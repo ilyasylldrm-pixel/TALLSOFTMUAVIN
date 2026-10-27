@@ -4628,6 +4628,466 @@ export const Invoices: React.FC<InvoicesProps> = ({
       </div>
     );
 
+    const renderMysoftSalesDocumentSettings = () => {
+      if (invType !== "sales" || formDocKind !== "invoice" || (editingInvoiceId && !isEditingDraft)) {
+        return null;
+      }
+      return (
+        <div className="w-full rounded-xl border border-purple-200 bg-purple-50/70 p-3 space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sendToMysoft}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setSendToMysoft(checked);
+                setIsManualInvoiceNumber(false);
+                if (checked) {
+                  const targetDocType: "e_fatura" | "e_arsiv" =
+                    recipientStatus !== null
+                      ? recipientStatus.isEFaturaUser
+                        ? "e_fatura"
+                        : "e_arsiv"
+                      : isCurrentSalesEArsiv
+                        ? "e_arsiv"
+                        : "e_fatura";
+                  setMysoftEDocType(targetDocType);
+                  if (targetDocType === "e_arsiv") {
+                    setInvoiceScenario("EARSIVFATURA");
+                  } else if (invoiceScenario === "EARSIVFATURA") {
+                    setInvoiceScenario("TICARIFATURA");
+                  }
+                  const nextSequentialNo =
+                    computeMysoftSequentialNumber(targetDocType);
+                  setInvoiceNumberInput(nextSequentialNo);
+                  void fetchAndApplyNextInvoiceNumber(
+                    mysoftTenantVkn,
+                    targetDocType,
+                  );
+                } else {
+                  setInvoiceNumberInput(activeGyrNextNo);
+                }
+              }}
+              className="mt-0.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+            />
+            <span>
+              <span className="block text-xs font-bold text-purple-950">
+                Resmi e-fatura / e-arşiv olarak kes (Mysoft)
+              </span>
+              <span className="block text-[11px] text-purple-800/80 mt-0.5">
+                {sendToMysoft
+                  ? "Faturanız resmi e-Fatura veya e-Arşiv şablonuyla ardışık numaralandırılarak kaydedilir ve Giden e-Faturalara aktarılır."
+                  : "Seçilmediğinde fatura GYR ön eki ile ardışık numaralandırılarak (Örn: " +
+                    activeGyrNextNo +
+                    ") kaydedilir ve Giden e-Faturalara aktarılır."}
+              </span>
+            </span>
+          </label>
+          {sendToMysoft && (
+            <div className="pl-6 space-y-3">
+              <MysoftTenantPicker
+                value={mysoftTenantVkn}
+                variant="compact"
+                hideWhenMatched={true}
+                hintVkn={
+                  companySettings.tenantIdentifierNumber ||
+                  companySettings.taxNumber ||
+                  companySettings.vknTckn ||
+                  companySettings.mysoftCredentials?.tenantIdentifierNumber
+                }
+                onSelect={handleTenantSelect}
+              />
+              {/* Live GİB Recipient Taxpayer Status Card */}
+              {isCheckingRecipient ? (
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-600">
+                  <span className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                  <span>Alıcı GİB e-Fatura mükellefiyeti sorgulanıyor...</span>
+                </div>
+              ) : recipientStatus ? (
+                recipientStatus.isEFaturaUser ? (
+                  <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        🟢 GİB e-Fatura Mükellefi (Otomatik Algılandı)
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-800">
+                        e-Fatura Zorunlu
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700">
+                      Alıcı vergi kimlik numarası GİB sistemine kayıtlıdır. Fatura doğrudan UBL posta kutusuna iletilecektir.
+                    </p>
+                    {recipientStatus.pkAlias && (
+                      <div className="text-[10px] font-mono text-emerald-800 bg-white/70 border border-emerald-200 px-2 py-0.5 rounded inline-block">
+                        Posta Kutusu: {recipientStatus.pkAlias}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-sky-50/80 border border-sky-200 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-sky-900">
+                        <span className="w-2 h-2 rounded-full bg-sky-500" />
+                        🔵 e-Arşiv Fatura Alıcısı
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-sky-200 text-sky-800">
+                        e-Arşiv
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-sky-700">
+                      Alıcının GİB e-Fatura kaydı bulunmamaktadır (Şahıs / Nihai Tüketici / e-Faturaya geçmemiş). Belge resmi e-Arşiv Fatura olarak düzenlenecektir.
+                    </p>
+                  </div>
+                )
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleEDocTypeChange("e_fatura")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    !isCurrentSalesEArsiv
+                      ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <span>e-Fatura</span>
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                      !isCurrentSalesEArsiv
+                        ? "bg-purple-800/60 text-purple-100"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {selectedEFaturaPrefix}
+                  </span>
+                  {recipientStatus?.isEFaturaUser && (
+                    <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleEDocTypeChange("e_arsiv")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isCurrentSalesEArsiv
+                      ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <span>e-Arşiv</span>
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                      isCurrentSalesEArsiv
+                        ? "bg-purple-800/60 text-purple-100"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {selectedEArsivPrefix}
+                  </span>
+                  {recipientStatus && !recipientStatus.isEFaturaUser && (
+                    <span className="text-[9px] bg-sky-300 text-sky-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSignatureStudioOpen(true)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-extrabold border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ml-auto"
+                  title="e-Arşiv fatura için ıslak imza çiz, bilgisayarından imza/kaşe yükle veya otomatik kaligrafik imza oluştur"
+                >
+                  <PenTool className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>
+                    {companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl
+                      ? "e-Arşiv İmza & Kaşe Düzenle"
+                      : "e-Arşiv İmza & Kaşe Ekle"}
+                  </span>
+                  {(companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl) && (
+                    <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded font-extrabold">
+                      Hazır
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {isCurrentSalesEArsiv && (
+                <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl ? (
+                      <div className="h-9 px-2 bg-white border border-indigo-200 rounded-lg flex items-center justify-center shrink-0">
+                        <img
+                          src={companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl}
+                          alt="e-Arşiv İmza"
+                          className="max-h-7 max-w-[90px] object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                        <PenTool className="w-4 h-4" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-extrabold text-indigo-950 flex items-center gap-1.5">
+                        <span>e-Arşiv Fatura İmza & Kaşe Ayarı</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-200/80 text-indigo-900 font-bold">
+                          {companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl
+                            ? "Görsel İmza Aktif"
+                            : "Dijital Onay Mührü"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-indigo-700 truncate">
+                        {companySettings.invoiceDesign?.signerName
+                          ? `İmzalayan: ${companySettings.invoiceDesign.signerName}${
+                              companySettings.invoiceDesign.signerTitle
+                                ? ` (${companySettings.invoiceDesign.signerTitle})`
+                                : ""
+                            }`
+                          : "GİB e-Arşiv standartlarına uygun canlı imza çizebilir, imza/kaşe görseli yükleyebilir veya otomatik imza üretebilirsiniz."}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSignatureStudioOpen(true)}
+                    className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold flex items-center gap-1 cursor-pointer shrink-0 shadow-2xs"
+                  >
+                    <PenTool className="w-3 h-3" />
+                    <span>İmza Stüdyosunu Aç</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Mysoft e-Fatura ve e-Arşiv Seri / Ardışık Fatura Numarası Kartı */}
+              <div className="bg-white/95 border border-purple-200/80 rounded-xl p-3 space-y-2.5 shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5 text-purple-600" />
+                    <span className="text-xs font-extrabold text-slate-800">
+                      Mysoft e-Fatura & e-Arşiv Seri ve Ardışık Fatura Numaraları
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsManualInvoiceNumber(false);
+                      refreshMysoftSerialNumbers(mysoftTenantVkn);
+                    }}
+                    disabled={isLoadingMysoftSeries}
+                    className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
+                    title="Mysoft portalından tanımlı e-Fatura ve e-Arşiv seri numaralarını yeniden sorgula"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingMysoftSeries ? "animate-spin" : ""}`} />
+                    <span>{isLoadingMysoftSeries ? "Sorgulanıyor..." : "Mysoft'tan Seri/No Al"}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* e-Fatura Seri & Ardışık No */}
+                  <div
+                    onClick={() => {
+                      setMysoftEDocType("e_fatura");
+                      if (invoiceScenario === "EARSIVFATURA") {
+                        setInvoiceScenario("TICARIFATURA");
+                      }
+                      setIsManualInvoiceNumber(false);
+                      setInvoiceNumberInput(
+                        computeMysoftSequentialNumber("e_fatura"),
+                      );
+                      void fetchAndApplyNextInvoiceNumber(
+                        mysoftTenantVkn,
+                        "e_fatura",
+                      );
+                    }}
+                    className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                      !isCurrentSalesEArsiv
+                        ? "bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-300"
+                        : "bg-slate-50/70 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${!isCurrentSalesEArsiv ? "bg-emerald-500" : "bg-slate-400"}`} />
+                        <span>e-Fatura Serisi</span>
+                      </span>
+                      {!isCurrentSalesEArsiv && (
+                        <span className="text-[9px] font-extrabold bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded">
+                          Aktif Seri
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        maxLength={3}
+                        value={selectedEFaturaPrefix}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                          setSelectedEFaturaPrefix(p);
+                          setIsManualInvoiceNumber(false);
+                        }}
+                        className="w-14 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs font-mono font-extrabold text-center text-slate-900 uppercase"
+                        title="Mysoft e-Fatura 3 harfli ön ek (seri)"
+                      />
+                      <div className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-mono font-bold text-slate-900 truncate">
+                        {activeEFaturaNextNo}
+                      </div>
+                    </div>
+                    {mysoftMappingDefaults?.eFaturaLastNumber && (
+                      <p className="mt-1 text-[10px] text-emerald-800 font-mono truncate">
+                        Son: {mysoftMappingDefaults.eFaturaLastNumber} → Sıradaki: {activeEFaturaNextNo}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* e-Arşiv Seri & Ardışık No */}
+                  <div
+                    onClick={() => {
+                      setMysoftEDocType("e_arsiv");
+                      setInvoiceScenario("EARSIVFATURA");
+                      setIsManualInvoiceNumber(false);
+                      setInvoiceNumberInput(
+                        computeMysoftSequentialNumber("e_arsiv"),
+                      );
+                      void fetchAndApplyNextInvoiceNumber(mysoftTenantVkn, "e_arsiv");
+                    }}
+                    className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                      isCurrentSalesEArsiv
+                        ? "bg-sky-50/70 border-sky-300 ring-1 ring-sky-300"
+                        : "bg-slate-50/70 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isCurrentSalesEArsiv ? "bg-sky-500" : "bg-slate-400"}`} />
+                        <span>e-Arşiv Serisi</span>
+                      </span>
+                      {isCurrentSalesEArsiv && (
+                        <span className="text-[9px] font-extrabold bg-sky-200 text-sky-900 px-1.5 py-0.2 rounded">
+                          Aktif Seri
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        maxLength={3}
+                        value={selectedEArsivPrefix}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                          setSelectedEArsivPrefix(p);
+                          setIsManualInvoiceNumber(false);
+                        }}
+                        className="w-14 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs font-mono font-extrabold text-center text-slate-900 uppercase"
+                        title="Mysoft e-Arşiv 3 harfli ön ek (seri)"
+                      />
+                      <div className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-mono font-bold text-slate-900 truncate">
+                        {activeEArsivNextNo}
+                      </div>
+                    </div>
+                    {mysoftMappingDefaults?.eArsivLastNumber && (
+                      <p className="mt-1 text-[10px] text-sky-800 font-mono truncate">
+                        Son: {mysoftMappingDefaults.eArsivLastNumber} → Sıradaki: {activeEArsivNextNo}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {mysoftMappingDefaults?.prefixes && mysoftMappingDefaults.prefixes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      Mysoft Tanımlı Ön Ekler:
+                    </span>
+                    {mysoftMappingDefaults.prefixes.map((p, idx) => {
+                      const pfx = String(p.prefix || "").toUpperCase();
+                      const isEArs =
+                        Number(p.edocumentType) === 2 ||
+                        String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                      return (
+                        <button
+                          key={`${pfx}_${idx}`}
+                          type="button"
+                          onClick={() => {
+                            if (isEArs) {
+                              setSelectedEArsivPrefix(pfx);
+                              setMysoftEDocType("e_arsiv");
+                              setInvoiceScenario("EARSIVFATURA");
+                            } else {
+                              setSelectedEFaturaPrefix(pfx);
+                              setMysoftEDocType("e_fatura");
+                              if (invoiceScenario === "EARSIVFATURA") {
+                                setInvoiceScenario("TICARIFATURA");
+                              }
+                            }
+                            setIsManualInvoiceNumber(false);
+                          }}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 border border-slate-200 cursor-pointer transition-colors"
+                        >
+                          {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {mysoftSaveError && (
+            <div className="ml-6 mt-2 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-rose-900 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-bold text-rose-800">
+                  Mysoft Gönderim Kontrolü & Hata Detayı
+                </p>
+                {mysoftDiagnosticLog && (
+                  <span className="text-[10px] font-mono text-rose-600">
+                    {new Date(mysoftDiagnosticLog.timestamp).toLocaleTimeString("tr-TR")}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-semibold text-rose-700 leading-relaxed">
+                {mysoftSaveError}
+              </p>
+              {mysoftValidationIssues.length > 0 && (
+                <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-rose-800">
+                  {mysoftValidationIssues.map((issue, idx) => (
+                    <li key={`${issue.code}_${idx}`}>
+                      <span className="font-mono font-bold text-[10px] mr-1">
+                        [{issue.field}]
+                      </span>
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {mysoftDiagnosticLog && (
+                <div className="pt-1.5 mt-1 border-t border-rose-200/80 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-rose-700">
+                  <span>
+                    Mükellef VKN: {mysoftDiagnosticLog.tenantIdentifierNumber || "Eksik"}
+                  </span>
+                  <span>
+                    Alıcı VKN/TCKN: {mysoftDiagnosticLog.buyerVknTckn || "Eksik"}
+                  </span>
+                  <span>
+                    Kalem: {mysoftDiagnosticLog.lineCount} adet
+                  </span>
+                  <span>
+                    Dip Toplam Nesnesi:{" "}
+                    {mysoftDiagnosticLog.nullGuard.hasInvoiceCalculationObject
+                      ? "Tamam"
+                      : "Eksik"}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {mysoftSaveNotice && (
+            <p className="text-[11px] font-semibold text-emerald-700 pl-6">{mysoftSaveNotice}</p>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="animate-fadeIn">
         <DetailPageLayout
@@ -6236,7 +6696,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               </div>
 
               {/* Bottom Calculations Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-start pt-2">
                 <div className="space-y-3">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between flex-wrap gap-1.5">
@@ -6374,75 +6834,79 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </div>
                 </div>
 
-                {(() => {
-                  const totals = calculateTotals();
-                  return (
-                    <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
-                      {totals.totalDiscount > 0 && (
-                        <>
-                          <div className="flex justify-between text-slate-500">
-                            <span>Brüt Tutar (İskonto Öncesi):</span>
-                            <span className="font-mono font-bold text-slate-800">
-                              ₺{totals.grossTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-rose-700 bg-rose-50 p-1.5 rounded-lg border border-rose-100 font-medium">
-                            <span className="font-bold">(-) Toplam İskonto:</span>
+                <div className="space-y-3">
+                  {(() => {
+                    const totals = calculateTotals();
+                    return (
+                      <div className="bg-slate-50 p-4 border border-slate-200 rounded-xl space-y-2 text-xs">
+                        {totals.totalDiscount > 0 && (
+                          <>
+                            <div className="flex justify-between text-slate-500">
+                              <span>Brüt Tutar (İskonto Öncesi):</span>
+                              <span className="font-mono font-bold text-slate-800">
+                                ₺{totals.grossTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-rose-700 bg-rose-50 p-1.5 rounded-lg border border-rose-100 font-medium">
+                              <span className="font-bold">(-) Toplam İskonto:</span>
+                              <span className="font-mono font-bold">
+                                -₺{totals.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="flex justify-between text-slate-500">
+                          <span>{totals.totalDiscount > 0 ? "Ara Toplam (Net KDV Hariç):" : "Ara Toplam (KDV Hariç):"}</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        {totals.effectiveTaxableAmount !== totals.subtotal && (
+                          <div className="flex justify-between text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-200 font-medium">
+                            <span>Özel KDV Matrahı:</span>
                             <span className="font-mono font-bold">
-                              -₺{totals.totalDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                             </span>
                           </div>
-                        </>
-                      )}
+                        )}
 
-                      <div className="flex justify-between text-slate-500">
-                        <span>{totals.totalDiscount > 0 ? "Ara Toplam (Net KDV Hariç):" : "Ara Toplam (KDV Hariç):"}</span>
-                        <span className="font-mono font-bold text-slate-800">
-                          ₺{totals.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-
-                      {totals.effectiveTaxableAmount !== totals.subtotal && (
-                        <div className="flex justify-between text-amber-700 bg-amber-50 p-1.5 rounded-lg border border-amber-200 font-medium">
-                          <span>Özel KDV Matrahı:</span>
-                          <span className="font-mono font-bold">
-                            ₺{totals.effectiveTaxableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        <div className="flex justify-between text-slate-500">
+                          <span>Toplam Hesaplanan KDV:</span>
+                          <span className="font-mono font-bold text-slate-800">
+                            ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                      )}
 
-                      <div className="flex justify-between text-slate-500">
-                        <span>Toplam Hesaplanan KDV:</span>
-                        <span className="font-mono font-bold text-slate-800">
-                          ₺{totals.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                        {totals.totalWithholding > 0 && (
+                          <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-1.5 rounded-lg border border-purple-100">
+                            <span className="font-bold">(-) Tevkif Edilen KDV:</span>
+                            <span className="font-mono font-bold">
+                              -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
 
-                      {totals.totalWithholding > 0 && (
-                        <div className="flex justify-between text-purple-700 font-medium bg-purple-50 p-1.5 rounded-lg border border-purple-100">
-                          <span className="font-bold">(-) Tevkif Edilen KDV:</span>
+                        <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200">
+                          <span>Fatura Genel Toplamı:</span>
                           <span className="font-mono font-bold">
-                            -₺{totals.totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            ₺{totals.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                      )}
 
-                      <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200">
-                        <span>Fatura Genel Toplamı:</span>
-                        <span className="font-mono font-bold">
-                          ₺{totals.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
+                        <div className="pt-2 border-t border-slate-300 flex justify-between items-center text-sm font-black">
+                          <span className="text-slate-900">🎯 ÖDENECEK / TAHSİL EDİLECEK:</span>
+                          <span className="text-indigo-600 font-mono text-base">
+                            ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
                       </div>
+                    );
+                  })()}
 
-                      <div className="pt-2 border-t border-slate-300 flex justify-between items-center text-sm font-black">
-                        <span className="text-slate-900">🎯 ÖDENECEK / TAHSİL EDİLECEK:</span>
-                        <span className="text-indigo-600 font-mono text-base">
-                          ₺{totals.payableAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
+                  {renderMysoftSalesDocumentSettings()}
+                </div>
               </div>
 
               <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
@@ -6762,460 +7226,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   )}
                 </div>
 
-                {invType === "sales" && formDocKind === "invoice" && (!editingInvoiceId || isEditingDraft) && (
-                  <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-3 space-y-2">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={sendToMysoft}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setSendToMysoft(checked);
-                          setIsManualInvoiceNumber(false);
-                          if (checked) {
-                            const targetDocType: "e_fatura" | "e_arsiv" =
-                              recipientStatus !== null
-                                ? recipientStatus.isEFaturaUser
-                                  ? "e_fatura"
-                                  : "e_arsiv"
-                                : isCurrentSalesEArsiv
-                                  ? "e_arsiv"
-                                  : "e_fatura";
-                            setMysoftEDocType(targetDocType);
-                            if (targetDocType === "e_arsiv") {
-                              setInvoiceScenario("EARSIVFATURA");
-                            } else if (invoiceScenario === "EARSIVFATURA") {
-                              setInvoiceScenario("TICARIFATURA");
-                            }
-                            const nextSequentialNo =
-                              computeMysoftSequentialNumber(targetDocType);
-                            setInvoiceNumberInput(nextSequentialNo);
-                            void fetchAndApplyNextInvoiceNumber(
-                              mysoftTenantVkn,
-                              targetDocType,
-                            );
-                          } else {
-                            setInvoiceNumberInput(activeGyrNextNo);
-                          }
-                        }}
-                        className="mt-0.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
-                      />
-                      <span>
-                        <span className="block text-xs font-bold text-purple-950">
-                          Resmi e-fatura / e-arşiv olarak kes (Mysoft)
-                        </span>
-                        <span className="block text-[11px] text-purple-800/80 mt-0.5">
-                          {sendToMysoft
-                            ? "Faturanız resmi e-Fatura veya e-Arşiv şablonuyla ardışık numaralandırılarak kaydedilir ve Giden e-Faturalara aktarılır."
-                            : "Seçilmediğinde fatura GYR ön eki ile ardışık numaralandırılarak (Örn: " +
-                              activeGyrNextNo +
-                              ") kaydedilir ve Giden e-Faturalara aktarılır."}
-                        </span>
-                      </span>
-                    </label>
-                    {sendToMysoft && (
-                      <div className="pl-6 space-y-3">
-                        <MysoftTenantPicker
-                          value={mysoftTenantVkn}
-                          variant="compact"
-                          hideWhenMatched={true}
-                          hintVkn={
-                            companySettings.tenantIdentifierNumber ||
-                            companySettings.taxNumber ||
-                            companySettings.vknTckn ||
-                            companySettings.mysoftCredentials?.tenantIdentifierNumber
-                          }
-                          onSelect={handleTenantSelect}
-                        />
-                        {/* Live GİB Recipient Taxpayer Status Card */}
-                        {isCheckingRecipient ? (
-                          <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-600">
-                            <span className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                            <span>Alıcı GİB e-Fatura mükellefiyeti sorgulanıyor...</span>
-                          </div>
-                        ) : recipientStatus ? (
-                          recipientStatus.isEFaturaUser ? (
-                            <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  🟢 GİB e-Fatura Mükellefi (Otomatik Algılandı)
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-800">
-                                  e-Fatura Zorunlu
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-emerald-700">
-                                Alıcı vergi kimlik numarası GİB sistemine kayıtlıdır. Fatura doğrudan UBL posta kutusuna iletilecektir.
-                              </p>
-                              {recipientStatus.pkAlias && (
-                                <div className="text-[10px] font-mono text-emerald-800 bg-white/70 border border-emerald-200 px-2 py-0.5 rounded inline-block">
-                                  Posta Kutusu: {recipientStatus.pkAlias}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="p-2.5 bg-sky-50/80 border border-sky-200 rounded-xl space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="flex items-center gap-1.5 text-xs font-bold text-sky-900">
-                                  <span className="w-2 h-2 rounded-full bg-sky-500" />
-                                  🔵 e-Arşiv Fatura Alıcısı
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-sky-200 text-sky-800">
-                                  e-Arşiv
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-sky-700">
-                                Alıcının GİB e-Fatura kaydı bulunmamaktadır (Şahıs / Nihai Tüketici / e-Faturaya geçmemiş). Belge resmi e-Arşiv Fatura olarak düzenlenecektir.
-                              </p>
-                            </div>
-                          )
-                        ) : null}
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEDocTypeChange("e_fatura")}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                              !isCurrentSalesEArsiv
-                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                            }`}
-                          >
-                            <span>e-Fatura</span>
-                            <span
-                              className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
-                                !isCurrentSalesEArsiv
-                                  ? "bg-purple-800/60 text-purple-100"
-                                  : "bg-slate-100 text-slate-600"
-                              }`}
-                            >
-                              {selectedEFaturaPrefix}
-                            </span>
-                            {recipientStatus?.isEFaturaUser && (
-                              <span className="text-[9px] bg-emerald-400 text-emerald-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleEDocTypeChange("e_arsiv")}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                              isCurrentSalesEArsiv
-                                ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                            }`}
-                          >
-                            <span>e-Arşiv</span>
-                            <span
-                              className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
-                                isCurrentSalesEArsiv
-                                  ? "bg-purple-800/60 text-purple-100"
-                                  : "bg-slate-100 text-slate-600"
-                              }`}
-                            >
-                              {selectedEArsivPrefix}
-                            </span>
-                            {recipientStatus && !recipientStatus.isEFaturaUser && (
-                              <span className="text-[9px] bg-sky-300 text-sky-950 px-1 py-0.2 rounded font-extrabold">Önerilen</span>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setIsSignatureStudioOpen(true)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-extrabold border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ml-auto"
-                            title="e-Arşiv fatura için ıslak imza çiz, bilgisayarından imza/kaşe yükle veya otomatik kaligrafik imza oluştur"
-                          >
-                            <PenTool className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>
-                              {companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl
-                                ? "e-Arşiv İmza & Kaşe Düzenle"
-                                : "e-Arşiv İmza & Kaşe Ekle"}
-                            </span>
-                            {(companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl) && (
-                              <span className="text-[9px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded font-extrabold">
-                                Hazır
-                              </span>
-                            )}
-                          </button>
-                        </div>
-
-                        {isCurrentSalesEArsiv && (
-                          <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl ? (
-                                <div className="h-9 px-2 bg-white border border-indigo-200 rounded-lg flex items-center justify-center shrink-0">
-                                  <img
-                                    src={companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl}
-                                    alt="e-Arşiv İmza"
-                                    className="max-h-7 max-w-[90px] object-contain"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                                  <PenTool className="w-4 h-4" />
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-extrabold text-indigo-950 flex items-center gap-1.5">
-                                  <span>e-Arşiv Fatura İmza & Kaşe Ayarı</span>
-                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-200/80 text-indigo-900 font-bold">
-                                    {companySettings.invoiceDesign?.signatureImageUrl || companySettings.stampUrl
-                                      ? "Görsel İmza Aktif"
-                                      : "Dijital Onay Mührü"}
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-indigo-700 truncate">
-                                  {companySettings.invoiceDesign?.signerName
-                                    ? `İmzalayan: ${companySettings.invoiceDesign.signerName}${
-                                        companySettings.invoiceDesign.signerTitle
-                                          ? ` (${companySettings.invoiceDesign.signerTitle})`
-                                          : ""
-                                      }`
-                                    : "GİB e-Arşiv standartlarına uygun canlı imza çizebilir, imza/kaşe görseli yükleyebilir veya otomatik imza üretebilirsiniz."}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setIsSignatureStudioOpen(true)}
-                              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-extrabold flex items-center gap-1 cursor-pointer shrink-0 shadow-2xs"
-                            >
-                              <PenTool className="w-3 h-3" />
-                              <span>İmza Stüdyosunu Aç</span>
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Mysoft e-Fatura ve e-Arşiv Seri / Ardışık Fatura Numarası Kartı */}
-                        <div className="bg-white/95 border border-purple-200/80 rounded-xl p-3 space-y-2.5 shadow-2xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                            <div className="flex items-center gap-1.5">
-                              <Hash className="w-3.5 h-3.5 text-purple-600" />
-                              <span className="text-xs font-extrabold text-slate-800">
-                                Mysoft e-Fatura & e-Arşiv Seri ve Ardışık Fatura Numaraları
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsManualInvoiceNumber(false);
-                                refreshMysoftSerialNumbers(mysoftTenantVkn);
-                              }}
-                              disabled={isLoadingMysoftSeries}
-                              className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
-                              title="Mysoft portalından tanımlı e-Fatura ve e-Arşiv seri numaralarını yeniden sorgula"
-                            >
-                              <RefreshCw className={`w-3 h-3 ${isLoadingMysoftSeries ? "animate-spin" : ""}`} />
-                              <span>{isLoadingMysoftSeries ? "Sorgulanıyor..." : "Mysoft'tan Seri/No Al"}</span>
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {/* e-Fatura Seri & Ardışık No */}
-                            <div
-                              onClick={() => {
-                                setMysoftEDocType("e_fatura");
-                                if (invoiceScenario === "EARSIVFATURA") {
-                                  setInvoiceScenario("TICARIFATURA");
-                                }
-                                setIsManualInvoiceNumber(false);
-                                setInvoiceNumberInput(
-                                  computeMysoftSequentialNumber("e_fatura"),
-                                );
-                                void fetchAndApplyNextInvoiceNumber(
-                                  mysoftTenantVkn,
-                                  "e_fatura",
-                                );
-                              }}
-                              className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                !isCurrentSalesEArsiv
-                                  ? "bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-300"
-                                  : "bg-slate-50/70 border-slate-200 hover:border-slate-300"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${!isCurrentSalesEArsiv ? "bg-emerald-500" : "bg-slate-400"}`} />
-                                  <span>e-Fatura Serisi</span>
-                                </span>
-                                {!isCurrentSalesEArsiv && (
-                                  <span className="text-[9px] font-extrabold bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded">
-                                    Aktif Seri
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <input
-                                  type="text"
-                                  maxLength={3}
-                                  value={selectedEFaturaPrefix}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => {
-                                    const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-                                    setSelectedEFaturaPrefix(p);
-                                    setIsManualInvoiceNumber(false);
-                                  }}
-                                  className="w-14 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs font-mono font-extrabold text-center text-slate-900 uppercase"
-                                  title="Mysoft e-Fatura 3 harfli ön ek (seri)"
-                                />
-                                <div className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-mono font-bold text-slate-900 truncate">
-                                  {activeEFaturaNextNo}
-                                </div>
-                              </div>
-                              {mysoftMappingDefaults?.eFaturaLastNumber && (
-                                <p className="mt-1 text-[10px] text-emerald-800 font-mono truncate">
-                                  Son: {mysoftMappingDefaults.eFaturaLastNumber} → Sıradaki: {activeEFaturaNextNo}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* e-Arşiv Seri & Ardışık No */}
-                            <div
-                              onClick={() => {
-                                setMysoftEDocType("e_arsiv");
-                                setInvoiceScenario("EARSIVFATURA");
-                                setIsManualInvoiceNumber(false);
-                                setInvoiceNumberInput(
-                                  computeMysoftSequentialNumber("e_arsiv"),
-                                );
-                                void fetchAndApplyNextInvoiceNumber(mysoftTenantVkn, "e_arsiv");
-                              }}
-                              className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
-                                isCurrentSalesEArsiv
-                                  ? "bg-sky-50/70 border-sky-300 ring-1 ring-sky-300"
-                                  : "bg-slate-50/70 border-slate-200 hover:border-slate-300"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${isCurrentSalesEArsiv ? "bg-sky-500" : "bg-slate-400"}`} />
-                                  <span>e-Arşiv Serisi</span>
-                                </span>
-                                {isCurrentSalesEArsiv && (
-                                  <span className="text-[9px] font-extrabold bg-sky-200 text-sky-900 px-1.5 py-0.2 rounded">
-                                    Aktif Seri
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <input
-                                  type="text"
-                                  maxLength={3}
-                                  value={selectedEArsivPrefix}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => {
-                                    const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-                                    setSelectedEArsivPrefix(p);
-                                    setIsManualInvoiceNumber(false);
-                                  }}
-                                  className="w-14 bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs font-mono font-extrabold text-center text-slate-900 uppercase"
-                                  title="Mysoft e-Arşiv 3 harfli ön ek (seri)"
-                                />
-                                <div className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-mono font-bold text-slate-900 truncate">
-                                  {activeEArsivNextNo}
-                                </div>
-                              </div>
-                              {mysoftMappingDefaults?.eArsivLastNumber && (
-                                <p className="mt-1 text-[10px] text-sky-800 font-mono truncate">
-                                  Son: {mysoftMappingDefaults.eArsivLastNumber} → Sıradaki: {activeEArsivNextNo}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {mysoftMappingDefaults?.prefixes && mysoftMappingDefaults.prefixes.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                              <span className="text-[10px] font-semibold text-slate-500">
-                                Mysoft Tanımlı Ön Ekler:
-                              </span>
-                              {mysoftMappingDefaults.prefixes.map((p, idx) => {
-                                const pfx = String(p.prefix || "").toUpperCase();
-                                const isEArs =
-                                  Number(p.edocumentType) === 2 ||
-                                  String(p.edocumentType || "").toUpperCase().includes("ARSIV");
-                                return (
-                                  <button
-                                    key={`${pfx}_${idx}`}
-                                    type="button"
-                                    onClick={() => {
-                                      if (isEArs) {
-                                        setSelectedEArsivPrefix(pfx);
-                                        setMysoftEDocType("e_arsiv");
-                                        setInvoiceScenario("EARSIVFATURA");
-                                      } else {
-                                        setSelectedEFaturaPrefix(pfx);
-                                        setMysoftEDocType("e_fatura");
-                                        if (invoiceScenario === "EARSIVFATURA") {
-                                          setInvoiceScenario("TICARIFATURA");
-                                        }
-                                      }
-                                      setIsManualInvoiceNumber(false);
-                                    }}
-                                    className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-900 border border-slate-200 cursor-pointer transition-colors"
-                                  >
-                                    {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"})
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {mysoftSaveError && (
-                      <div className="ml-6 mt-2 rounded-xl border border-rose-200 bg-rose-50/90 p-3 text-rose-900 space-y-1.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-[11px] font-bold text-rose-800">
-                            Mysoft Gönderim Kontrolü & Hata Detayı
-                          </p>
-                          {mysoftDiagnosticLog && (
-                            <span className="text-[10px] font-mono text-rose-600">
-                              {new Date(mysoftDiagnosticLog.timestamp).toLocaleTimeString("tr-TR")}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] font-semibold text-rose-700 leading-relaxed">
-                          {mysoftSaveError}
-                        </p>
-                        {mysoftValidationIssues.length > 0 && (
-                          <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-rose-800">
-                            {mysoftValidationIssues.map((issue, idx) => (
-                              <li key={`${issue.code}_${idx}`}>
-                                <span className="font-mono font-bold text-[10px] mr-1">
-                                  [{issue.field}]
-                                </span>
-                                {issue.message}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        {mysoftDiagnosticLog && (
-                          <div className="pt-1.5 mt-1 border-t border-rose-200/80 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-rose-700">
-                            <span>
-                              Mükellef VKN: {mysoftDiagnosticLog.tenantIdentifierNumber || "Eksik"}
-                            </span>
-                            <span>
-                              Alıcı VKN/TCKN: {mysoftDiagnosticLog.buyerVknTckn || "Eksik"}
-                            </span>
-                            <span>
-                              Kalem: {mysoftDiagnosticLog.lineCount} adet
-                            </span>
-                            <span>
-                              Dip Toplam Nesnesi:{" "}
-                              {mysoftDiagnosticLog.nullGuard.hasInvoiceCalculationObject
-                                ? "Tamam"
-                                : "Eksik"}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {mysoftSaveNotice && (
-                      <p className="text-[11px] font-semibold text-emerald-700 pl-6">{mysoftSaveNotice}</p>
-                    )}
-                  </div>
-                )}
                 <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
                   <button
                     type="button"
