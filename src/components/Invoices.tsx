@@ -90,6 +90,7 @@ import {
   Search,
   Printer,
   MessageCircle,
+  Check,
   CheckCircle2,
   Clock,
   AlertTriangle,
@@ -656,6 +657,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
       if (onUpdateBranch) {
         onUpdateBranch(updatedBr);
       }
+      if (selectedCompanyBranch.isMain && onSaveCompanySettings) {
+        onSaveCompanySettings({
+          ...companySettings,
+          city: cleanCity || companySettings.city,
+          district: cleanDist || companySettings.district,
+          neighborhood: cleanNh || companySettings.neighborhood,
+          street: cleanSt || companySettings.street,
+          address: formattedFullAddr,
+          addressDetails: {
+            ...(companySettings.addressDetails || { country: "Türkiye" }),
+            city: cleanCity || companySettings.city,
+            district: cleanDist || companySettings.district,
+            neighborhood: cleanNh || companySettings.neighborhood,
+            street: cleanSt || companySettings.street,
+            fullAddress: formattedFullAddr,
+          },
+        });
+      }
       setCustomBranchAddressOverride("");
       setIsQuickBranchFormOpen(false);
     } else {
@@ -685,6 +704,38 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setCustomBranchAddressOverride("");
       setIsQuickBranchFormOpen(false);
     }
+  };
+
+  const handleSaveCurrentAddressOverrideToBranch = () => {
+    const rawVal = customBranchAddressOverride.trim();
+    if (!rawVal || !selectedCompanyBranch) return;
+    const cleanCity = selectedCompanyBranch.address?.city || companySettings.city || "İstanbul";
+    const cleanDist = selectedCompanyBranch.address?.district || companySettings.district || "";
+    const updatedBr: Branch = {
+      ...selectedCompanyBranch,
+      address: {
+        ...(selectedCompanyBranch.address || { country: "Türkiye", city: cleanCity, district: cleanDist }),
+        fullAddress: rawVal,
+      },
+    };
+    if (onUpdateBranch) {
+      onUpdateBranch(updatedBr);
+    }
+    if (selectedCompanyBranch.isMain && onSaveCompanySettings) {
+      onSaveCompanySettings({
+        ...companySettings,
+        city: cleanCity || companySettings.city,
+        district: cleanDist || companySettings.district,
+        address: rawVal,
+        addressDetails: {
+          ...(companySettings.addressDetails || { country: "Türkiye" }),
+          city: cleanCity || companySettings.city,
+          district: cleanDist || companySettings.district,
+          fullAddress: rawVal,
+        },
+      });
+    }
+    setCustomBranchAddressOverride("");
   };
 
   const applyQueriedTaxpayerToManualForm = useCallback(
@@ -5792,23 +5843,45 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               : "✓ Merkez Seçili: Faturanın Adres Bölümünde Merkez Adresi Gösterilir"}
                           </span>
                         </div>
-                        <input
-                          type="text"
-                          value={
-                            customBranchAddressOverride !== ""
-                              ? customBranchAddressOverride
-                              : selectedCompanyBranch && !selectedCompanyBranch.isMain
-                                ? computedCompanyBranchAddress || companyHeadquartersAddress || ""
-                                : computedCompanyBranchAddress || companyHeadquartersAddress || ""
-                          }
-                          onChange={(e) => setCustomBranchAddressOverride(e.target.value)}
-                          placeholder={
-                            selectedCompanyBranch && !selectedCompanyBranch.isMain
-                              ? "Seçilen şubenin adresi..."
-                              : "Firma merkez adresi..."
-                          }
-                          className="w-full bg-white border border-purple-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-                        />
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <input
+                            type="text"
+                            value={
+                              customBranchAddressOverride !== ""
+                                ? customBranchAddressOverride
+                                : selectedCompanyBranch && !selectedCompanyBranch.isMain
+                                  ? computedCompanyBranchAddress || companyHeadquartersAddress || ""
+                                  : computedCompanyBranchAddress || companyHeadquartersAddress || ""
+                            }
+                            onChange={(e) => setCustomBranchAddressOverride(e.target.value)}
+                            placeholder={
+                              selectedCompanyBranch && !selectedCompanyBranch.isMain
+                                ? "Seçilen şubenin adresi..."
+                                : "Firma merkez adresi..."
+                            }
+                            className="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                          />
+                          {customBranchAddressOverride.trim() && (
+                            <button
+                              type="button"
+                              onClick={handleSaveCurrentAddressOverrideToBranch}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold flex items-center justify-center gap-1 shrink-0 shadow-2xs transition-all cursor-pointer"
+                              title="Yazılan adresi bu şube veya merkez için kalıcı kaydet ve güncelle"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Adresi Güncelle</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleOpenQuickBranchEdit}
+                            className="px-2.5 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1 shrink-0 transition-all cursor-pointer"
+                            title="Şube/Merkez adres detaylarını (İl, İlçe, Mahalle, Cadde) detaylı güncelle"
+                          >
+                            <Edit2 className="w-3 h-3 text-purple-700" />
+                            <span>Detaylı Adres Düzenle</span>
+                          </button>
+                        </div>
                         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                           <span>
                             <strong>Seçili Birim:</strong>{" "}
@@ -7077,27 +7150,38 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>Faturanın Kesildiği Şube:</span>
                           </span>
-                          <select
-                            value={selectedCompanyBranch?.id || selectedBranchId}
-                            onChange={(e) => {
-                              setSelectedBranchId(e.target.value);
-                              setCustomBranchAddressOverride("");
-                            }}
-                            className="bg-white border border-purple-300 focus:border-purple-600 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-900 cursor-pointer shadow-2xs"
-                          >
-                            {effectiveBranchesList
-                              .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
-                              .map((b) => {
-                                const brCity = b.address?.city || "";
-                                const brDist = b.address?.district || "";
-                                const locStr = [brDist, brCity].filter(Boolean).join("/");
-                                return (
-                                  <option key={b.id} value={b.id}>
-                                    🏬 [ŞUBE] {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
-                                  </option>
-                                );
-                              })}
-                          </select>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <select
+                              value={selectedCompanyBranch?.id || selectedBranchId}
+                              onChange={(e) => {
+                                setSelectedBranchId(e.target.value);
+                                setCustomBranchAddressOverride("");
+                              }}
+                              className="bg-white border border-purple-300 focus:border-purple-600 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-900 cursor-pointer shadow-2xs"
+                            >
+                              {effectiveBranchesList
+                                .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
+                                .map((b) => {
+                                  const brCity = b.address?.city || "";
+                                  const brDist = b.address?.district || "";
+                                  const locStr = [brDist, brCity].filter(Boolean).join("/");
+                                  return (
+                                    <option key={b.id} value={b.id}>
+                                      {b.isMain ? "🏢 [MERKEZ]" : "🏬 [ŞUBE]"} {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
+                                    </option>
+                                  );
+                                })}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={handleOpenQuickBranchEdit}
+                              className="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                              title="Seçili şube veya merkez adresini düzenle / güncelle"
+                            >
+                              <Edit2 className="w-2.5 h-2.5" />
+                              <span>Adres Güncelle</span>
+                            </button>
+                          </div>
                         </div>
                         {selectedBranchNoteLine && (
                           <div className="text-[10px] text-purple-900 flex items-start gap-1.5">

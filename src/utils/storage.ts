@@ -1292,7 +1292,19 @@ export function getStoredData(targetCompanyId?: string) {
       const rawBranches: Branch[] = (() => {
         if (isDefault) {
           const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
-          return Array.isArray(stored) && stored.length > 0 ? stored : initialBranches;
+          if (Array.isArray(stored) && stored.length > 0) {
+            const merged = [...stored];
+            for (const initB of initialBranches) {
+              const existingIdx = merged.findIndex((b) => b.id === initB.id || b.code === initB.code);
+              if (existingIdx === -1) {
+                merged.push(initB);
+              } else if (!merged[existingIdx].address?.fullAddress) {
+                merged[existingIdx] = { ...merged[existingIdx], address: initB.address };
+              }
+            }
+            return merged;
+          }
+          return initialBranches;
         }
         const existingRaw = safeGetStorageItem(scopedKey);
         if (existingRaw) {
@@ -1304,12 +1316,7 @@ export function getStoredData(targetCompanyId?: string) {
         return [];
       })();
 
-      // Remove legacy hardcoded mock sub-branches so only "Merkez" appears initially unless user added new branches
-      const filteredBranches = rawBranches.filter(
-        (b) =>
-          !(b.id === "br_2" && b.name === "Ankara Bölge Müdürlüğü") &&
-          !(b.id === "br_3" && b.name === "İzmir Şubesi")
-      );
+      const filteredBranches = rawBranches;
 
       const hqFullAddress =
         getCompanyHeadquartersAddress(loadedSettings) ||
