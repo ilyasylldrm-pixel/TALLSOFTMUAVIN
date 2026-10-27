@@ -5460,18 +5460,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                           {/* Adres Önizlemesi ve Teslimat Adresi */}
                           <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
-                            <div className="md:col-span-7 space-y-2">
-                              <div>
-                                <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
-                                  <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
-                                  <span>Faturada Kaydedilecek Müşteri Adresi:</span>
-                                </span>
-                                <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 min-h-[36px] flex items-center">
-                                  {formattedAddressWithBranch || "Adres bilgisi girildiğinde burada görünür"}
-                                </div>
+                            <div className="md:col-span-7">
+                              <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
+                                <span>Faturada Kaydedilecek Müşteri Adresi:</span>
+                              </span>
+                              <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 min-h-[36px] flex items-center">
+                                {formattedAddressWithBranch || "Adres bilgisi girildiğinde burada görünür"}
                               </div>
-                              {/* Fatura Senaryosu ve Fatura Türü */}
-                              {renderInvoiceScenarioAndProfile()}
                             </div>
                             <div className="md:col-span-5">
                               <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
@@ -5508,6 +5504,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   </div>
                                 )}
                               </div>
+                            </div>
+                            {/* Fatura Senaryosu ve Fatura Türü (Teslimat/Sevkiyat bölümünün altına kadar genişletildi) */}
+                            <div className="md:col-span-12">
+                              {renderInvoiceScenarioAndProfile()}
                             </div>
                           </div>
                         </div>
@@ -5700,50 +5700,46 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                     {/* Açık Adres ve Teslimat Adresi Satırı */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                      <div className="md:col-span-7 space-y-2">
-                        <div>
-                          <div className="flex items-center justify-between h-5 mb-1">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                              <span>Faturada Kaydedilecek Müşteri Adresi</span>
-                            </label>
-                            {(manualCity || manualDistrict || customerBranchName) && (
-                              <span className="text-[10px] font-semibold text-purple-700">
-                                {[
-                                  customerBranchName
-                                    ? `Şube: ${customerBranchName}${customerBranchCode ? ` (${customerBranchCode})` : ""}`
-                                    : "",
-                                  [manualCity, manualDistrict].filter(Boolean).join(" / "),
-                                ]
-                                  .filter(Boolean)
-                                  .join(" • ")}
-                              </span>
-                            )}
-                          </div>
-                          <input
-                            ref={manualAddressInputRef}
-                            type="text"
-                            placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
-                            value={manualAddress}
-                            onFocus={clampManualAddressCaret}
-                            onClick={clampManualAddressCaret}
-                            onChange={handleManualAddressInputChange}
-                            onBlur={() =>
-                              setManualAddress((prev) =>
-                                formatAddressWithBranch(
-                                  prev,
-                                  manualCity,
-                                  manualDistrict,
-                                  customerBranchName,
-                                  customerBranchCode
-                                )
-                              )
-                            }
-                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                          />
+                      <div className="md:col-span-7">
+                        <div className="flex items-center justify-between h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Faturada Kaydedilecek Müşteri Adresi</span>
+                          </label>
+                          {(manualCity || manualDistrict || customerBranchName) && (
+                            <span className="text-[10px] font-semibold text-purple-700">
+                              {[
+                                customerBranchName
+                                  ? `Şube: ${customerBranchName}${customerBranchCode ? ` (${customerBranchCode})` : ""}`
+                                  : "",
+                                [manualCity, manualDistrict].filter(Boolean).join(" / "),
+                              ]
+                                .filter(Boolean)
+                                .join(" • ")}
+                            </span>
+                          )}
                         </div>
-                        {/* Fatura Senaryosu ve Fatura Türü */}
-                        {renderInvoiceScenarioAndProfile()}
+                        <input
+                          ref={manualAddressInputRef}
+                          type="text"
+                          placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
+                          value={manualAddress}
+                          onFocus={clampManualAddressCaret}
+                          onClick={clampManualAddressCaret}
+                          onChange={handleManualAddressInputChange}
+                          onBlur={() =>
+                            setManualAddress((prev) =>
+                              formatAddressWithBranch(
+                                prev,
+                                manualCity,
+                                manualDistrict,
+                                customerBranchName,
+                                customerBranchCode
+                              )
+                            )
+                          }
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
                       </div>
 
                       <div className="md:col-span-5">
@@ -5783,6 +5779,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             </div>
                           )}
                         </div>
+                      </div>
+
+                      {/* Fatura Senaryosu ve Fatura Türü (Teslimat/Sevkiyat bölümünün altına kadar genişletildi) */}
+                      <div className="md:col-span-12">
+                        {renderInvoiceScenarioAndProfile()}
                       </div>
                     </div>
 
