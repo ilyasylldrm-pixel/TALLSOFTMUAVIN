@@ -5050,17 +5050,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                 {customerMode === "registered" ? (
                   <>
-                    <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
                       {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
-                      <div className="w-full md:w-36 lg:w-40 shrink-0">
-                        <div className="flex items-center justify-between mb-1">
+                      <div className="w-full md:w-40 lg:w-44 shrink-0">
+                        <div className="flex items-center justify-between h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <CreditCard className="w-3.5 h-3.5 text-purple-600" />
+                            <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>VKN / TCKN No</span>
                           </label>
                           {vknSearchInput && (
                             <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
                                 contacts.some(
                                   (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
                                 )
@@ -5087,7 +5087,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             placeholder="10 VKN / 11 TCKN..."
                             value={vknSearchInput}
                             onChange={(e) => handleVknInputChange(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
                           {(vknSearchInput.length === 10 || vknSearchInput.length === 11) &&
                             !contacts.some(
@@ -5118,7 +5118,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                     })
                                     .finally(() => setIsCheckingRecipient(false));
                                 }}
-                                className="px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer shrink-0"
+                                className="h-[38px] px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer shrink-0"
                                 title="Sorgula ve müşteri bilgilerini doldur"
                               >
                                 <Sparkles className="w-3 h-3 text-purple-200" />
@@ -5130,11 +5130,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                       {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
                       <div className="flex-1 min-w-[180px]">
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700">
                             Cari Hesap *
                           </label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => {
@@ -5148,9 +5148,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   }
                                 }
                               }}
-                              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer flex items-center gap-0.5"
+                              className="h-5 px-1.5 rounded bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 cursor-pointer flex items-center gap-0.5 transition-colors"
                             >
-                              <UserPlus className="w-3 h-3" />
+                              <UserPlus className="w-3 h-3 shrink-0" />
                               <span>Elle Gir</span>
                             </button>
                             <button
@@ -5159,9 +5159,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 setNewContactTaxNo(vknSearchInput);
                                 setIsContactPickerOpen(true);
                               }}
-                              className="text-[11px] font-bold text-purple-600 hover:text-purple-800 cursor-pointer flex items-center gap-0.5"
+                              className="h-5 px-1.5 rounded bg-purple-50 border border-purple-200 text-[10px] font-bold text-purple-600 hover:bg-purple-100 hover:text-purple-800 cursor-pointer flex items-center gap-0.5 transition-colors"
                             >
-                              <Search className="w-3 h-3" />
+                              <Search className="w-3 h-3 shrink-0" />
                               <span>Rehber</span>
                             </button>
                           </div>
@@ -5169,7 +5169,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <select
                           value={contactId}
                           onChange={(e) => handleContactSelectChange(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 truncate shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 truncate shadow-2xs"
                         >
                           <option value="__manual_entry__" className="font-bold text-purple-700 bg-purple-50">
                             ✍️ [+ Cari Hesap Seçmeden Elle Müşteri Bilgisi Gir...]
@@ -5185,10 +5185,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* 3. Fatura Numarası */}
-                      <div className="w-full md:w-44 lg:w-48 shrink-0">
-                        <div className="flex items-center justify-between mb-1">
+                      <div className="w-full md:w-48 lg:w-52 shrink-0">
+                        <div className="flex items-center justify-between h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <Hash className="w-3.5 h-3.5 text-purple-600" />
+                            <Hash className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>Fatura Numarası</span>
                           </label>
                           {invType === "sales" && !editingInvoiceId ? (
@@ -5202,13 +5202,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 }}
                                 disabled={isFetchingNextDocNo}
                                 title="İlgili tenanttan son faturayı çek ve sıradaki numarayı otomatik ata"
-                                className="text-[10px] text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer disabled:opacity-50"
+                                className="h-5 px-1.5 rounded bg-purple-50 border border-purple-200 text-[10px] text-purple-700 hover:bg-purple-100 hover:text-purple-900 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
                               >
-                                <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                                <RefreshCw className={`w-3 h-3 shrink-0 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
                                 <span>{isFetchingNextDocNo ? "Çekiliyor..." : "Sıradaki No"}</span>
                               </button>
                             ) : (
-                              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                              <span className="h-5 px-1.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-mono font-bold flex items-center">
                                 GYR Ön Eki
                               </span>
                             )
@@ -5228,7 +5228,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 val.trim().length > 0 && val.trim() !== activeSalesSerialNumber,
                               );
                             }}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
                           {invType === "sales" && !editingInvoiceId && (
                             <button
@@ -5244,7 +5244,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               }}
                               disabled={isFetchingNextDocNo}
                               title="Sıradaki Fatura Numarasını Ata"
-                              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
                             >
                               <RefreshCw className={`w-3.5 h-3.5 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
                             </button>
@@ -5265,17 +5265,19 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* 4. Fatura Tarihi */}
-                      <div className="w-full md:w-36 lg:w-38 shrink-0">
-                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Fatura Tarihi *</span>
-                        </label>
+                      <div className="w-full md:w-36 lg:w-40 shrink-0">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Fatura Tarihi *</span>
+                          </label>
+                        </div>
                         <input
                           type="date"
                           required
                           value={issueDate}
                           onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
                     </div>
@@ -5369,20 +5371,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {/* Adres Önizlemesi ve Teslimat Adresi */}
                           <div className="pt-2 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
                             <div className="md:col-span-7">
-                              <span className="text-[10px] font-bold text-purple-800 uppercase block mb-1 flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
                                 <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
                                 <span>Faturada Kaydedilecek Müşteri Adresi:</span>
                               </span>
-                              <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg p-1.5 text-xs font-semibold text-slate-900 min-h-[32px] flex items-center">
+                              <div className="bg-purple-50/60 border border-purple-200/80 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 min-h-[36px] flex items-center">
                                 {formattedAddressWithBranch || "Adres bilgisi girildiğinde burada görünür"}
                               </div>
                             </div>
                             <div className="md:col-span-5">
-                              <span className="text-[10px] font-bold text-purple-800 uppercase block mb-1 flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-purple-800 uppercase h-5 mb-1 flex items-center gap-1">
                                 <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
                                 <span>Teslimat / Sevkiyat Adresi:</span>
                               </span>
-                              <div className="bg-purple-50/60 px-2.5 py-1.5 rounded-lg border border-purple-200/80 min-h-[32px] flex flex-col justify-center space-y-1.5">
+                              <div className="bg-purple-50/60 px-2.5 py-1.5 rounded-lg border border-purple-200/80 min-h-[36px] flex flex-col justify-center space-y-1.5">
                                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
                                   <input
                                     type="checkbox"
@@ -5422,28 +5424,30 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
                     {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                       {/* Müşteri / Firma Adı / Ünvanı */}
                       <div className="md:col-span-5">
-                        <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Müşteri Adı / Ticari Ünvanı *</span>
-                        </label>
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Müşteri Adı / Ticari Ünvanı *</span>
+                          </label>
+                        </div>
                         <input
                           type="text"
                           required
                           placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret Ltd. Şti."
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
-                          className="w-full bg-purple-50/20 border border-purple-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs"
+                          className="w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs"
                         />
                       </div>
 
                       {/* VKN / TCKN No */}
                       <div className="md:col-span-4">
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <CreditCard className="w-3.5 h-3.5 text-purple-600" />
+                            <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>VKN / TCKN</span>
                           </label>
                           <button
@@ -5453,7 +5457,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               setInvoiceScenario("EARSIVFATURA");
                               setMysoftEDocType("e_arsiv");
                             }}
-                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100"
+                            className="h-5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 cursor-pointer bg-indigo-50 px-1.5 rounded border border-indigo-100 flex items-center transition-colors"
                             title="e-Arşiv Nihai Tüketici için 11111111111 doldur"
                           >
                             11111111111 (Nihai)
@@ -5473,7 +5477,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 setMysoftEDocType("e_arsiv");
                               }
                             }}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
                           <button
                             type="button"
@@ -5495,7 +5499,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               }
                             }}
                             disabled={isCheckingRecipient || !manualTaxNumber || (manualTaxNumber.length !== 10 && manualTaxNumber.length !== 11) || manualTaxNumber === "11111111111"}
-                            className="px-2.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            className="h-[38px] px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                             title="GİB & Mysoft'tan firma ünvanı, vergi dairesi ve adresini otomatik getir"
                           >
                             {isCheckingRecipient ? (
@@ -5531,63 +5535,71 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                       {/* Vergi Dairesi */}
                       <div className="md:col-span-3">
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Vergi Dairesi
-                        </label>
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            Vergi Dairesi
+                          </label>
+                        </div>
                         <input
                           type="text"
                           placeholder="Örn: Kadıköy V.D."
                           value={manualTaxOffice}
                           onChange={(e) => setManualTaxOffice(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
                     </div>
 
-                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta (Üst satırla aynı 5-4-3 ızgara hizası) */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                       {/* Fatura Tarihi */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Fatura Tarihi *</span>
-                        </label>
+                      <div className="md:col-span-5">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Fatura Tarihi *</span>
+                          </label>
+                        </div>
                         <input
                           type="date"
                           required
                           value={issueDate}
                           onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
 
                       {/* Telefon No */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                          <Phone className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Telefon No</span>
-                        </label>
+                      <div className="md:col-span-4">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Telefon No</span>
+                          </label>
+                        </div>
                         <input
                           type="tel"
                           placeholder="05XX XXX XX XX"
                           value={manualPhone}
                           onChange={(e) => setManualPhone(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
 
                       {/* E-Posta */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                          <Mail className="w-3.5 h-3.5 text-purple-600" />
-                          <span>E-posta (e-Arşiv İçin)</span>
-                        </label>
+                      <div className="md:col-span-3">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>E-posta (e-Arşiv İçin)</span>
+                          </label>
+                        </div>
                         <input
                           type="email"
                           placeholder="musteri@ornek.com"
                           value={manualEmail}
                           onChange={(e) => setManualEmail(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
                     </div>
@@ -5595,9 +5607,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     {/* Açık Adres ve Teslimat Adresi Satırı */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                       <div className="md:col-span-7">
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-purple-600" />
+                            <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>Faturada Kaydedilecek Müşteri Adresi</span>
                           </label>
                           {(manualCity || manualDistrict || customerBranchName) && (
@@ -5632,16 +5644,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               )
                             )
                           }
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
 
                       <div className="md:col-span-5">
-                        <label className="block text-xs font-bold text-purple-800 mb-1 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          <span>Teslimat / Sevkiyat Adresi</span>
-                        </label>
-                        <div className="bg-purple-50/60 px-2.5 py-2 rounded-xl border border-purple-200/80 space-y-1.5">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-purple-800 flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Teslimat / Sevkiyat Adresi</span>
+                          </label>
+                        </div>
+                        <div className="bg-purple-50/60 px-2.5 py-2 min-h-[38px] flex flex-col justify-center rounded-xl border border-purple-200/80 space-y-1.5">
                           <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
                             <input
                               type="checkbox"
@@ -5675,7 +5689,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
 
                     {/* Cari Hesaba Kaydetme Seçeneği */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-purple-50/60 border border-purple-200/70 rounded-xl text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 min-h-[38px] bg-purple-50/60 border border-purple-200/70 rounded-xl text-xs">
                       <label className="flex items-center gap-2.5 cursor-pointer select-none">
                         <input
                           type="checkbox"
