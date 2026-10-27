@@ -5088,6 +5088,324 @@ export const Invoices: React.FC<InvoicesProps> = ({
       );
     };
 
+    const renderPaymentMethodAndDueSettings = () => {
+      return (
+        <div className="w-full bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Sol Sütun: Ödeme / Tahsilat Yöntemi Listbox */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-1">
+                <label className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Ödeme / Tahsilat Yöntemi:</span>
+                </label>
+                <span
+                  className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border ${
+                    paymentMethod === "nakit"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : paymentMethod === "kredi_karti"
+                      ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                      : paymentMethod === "eft_havale"
+                      ? "bg-sky-50 text-sky-800 border-sky-200"
+                      : "bg-amber-50 text-amber-800 border-amber-200"
+                  }`}
+                >
+                  {paymentMethod === "nakit"
+                    ? "Nakit (Peşin)"
+                    : paymentMethod === "kredi_karti"
+                    ? "Kredi Kartı (POS)"
+                    : paymentMethod === "eft_havale"
+                    ? "EFT & Havale"
+                    : "Cari (Vadeli)"}
+                </span>
+              </div>
+              <select
+                value={paymentMethod}
+                onChange={(e) => {
+                  const nextMethod = e.target.value as InvoicePaymentMethod;
+                  if (nextMethod === "nakit") {
+                    setPaymentMethod("nakit");
+                    setDueDate(issueDate);
+                    const cashAcc = accounts.find((a) => a.type === "cash") || accounts[0];
+                    if (cashAcc) setPaymentAccountId(cashAcc.id);
+                  } else if (nextMethod === "cari") {
+                    setPaymentMethod("cari");
+                  } else if (nextMethod === "kredi_karti") {
+                    setPaymentMethod("kredi_karti");
+                    setDueDate(issueDate);
+                    const posOrBankAcc =
+                      accounts.find(
+                        (a) => a.type === "credit_card" || a.type === "pos" || a.type === "bank"
+                      ) || accounts[0];
+                    if (posOrBankAcc) setPaymentAccountId(posOrBankAcc.id);
+                  } else if (nextMethod === "eft_havale") {
+                    setPaymentMethod("eft_havale");
+                    setDueDate(issueDate);
+                    const bankAcc = accounts.find((a) => a.type === "bank") || accounts[0];
+                    if (bankAcc) {
+                      setPaymentAccountId(bankAcc.id);
+                      if (bankAcc.iban) {
+                        setPaymentIban(bankAcc.iban);
+                      } else if (!paymentIban) {
+                        setPaymentIban(companySettings.defaultBankIban || companySettings.iban || "");
+                      }
+                    }
+                  }
+                }}
+                className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+              >
+                <option value="cari">Cari — Açık Hesap / Vadeli</option>
+                <option value="nakit">Nakit — Peşin / Kasa Tahsilatı</option>
+                <option value="kredi_karti">Kredi Kartı — POS / Banka</option>
+                <option value="eft_havale">EFT & Havale — Banka Transferi / IBAN</option>
+              </select>
+            </div>
+
+            {/* Sağ Sütun: Vade Günleri Listbox */}
+            <div className="space-y-1">
+              {(() => {
+                const presetDays = [0, 7, 10, 15, 30, 45, 60, 90, 120];
+                let dayDiff: number | null = null;
+                if (issueDate && dueDate) {
+                  const p1 = issueDate.split("-").map(Number);
+                  const p2 = dueDate.split("-").map(Number);
+                  if (p1.length === 3 && p2.length === 3) {
+                    const u1 = Date.UTC(p1[0], (p1[1] || 1) - 1, p1[2] || 1);
+                    const u2 = Date.UTC(p2[0], (p2[1] || 1) - 1, p2[2] || 1);
+                    if (!isNaN(u1) && !isNaN(u2)) {
+                      dayDiff = Math.round((u2 - u1) / (24 * 60 * 60 * 1000));
+                    }
+                  }
+                }
+                const selectVal =
+                  dayDiff !== null && presetDays.includes(dayDiff)
+                    ? String(dayDiff)
+                    : "custom";
+                return (
+                  <>
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Vade Seçimi:</span>
+                      </label>
+                      <span className="text-[9px] font-mono font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200">
+                        {dueDate ? formatDate(dueDate) : "—"}
+                      </span>
+                    </div>
+                    <select
+                      value={selectVal}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "custom") return;
+                        const days = parseInt(val, 10);
+                        if (isNaN(days)) return;
+                        const baseStr = issueDate || new Date().toISOString().split("T")[0];
+                        const p = baseStr.split("-").map(Number);
+                        if (p.length === 3) {
+                          const baseUtc = Date.UTC(p[0], (p[1] || 1) - 1, p[2] || 1);
+                          const targetUtc = new Date(baseUtc + days * 24 * 60 * 60 * 1000);
+                          if (!isNaN(targetUtc.getTime())) {
+                            setDueDate(targetUtc.toISOString().split("T")[0]);
+                          }
+                        }
+                      }}
+                      className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                    >
+                      <option value="0">Aynı Gün (0 Gün / Peşin)</option>
+                      <option value="7">+7 Gün Vadeli</option>
+                      <option value="10">+10 Gün Vadeli</option>
+                      <option value="15">+15 Gün Vadeli</option>
+                      <option value="30">+30 Gün Vadeli</option>
+                      <option value="45">+45 Gün Vadeli</option>
+                      <option value="60">+60 Gün Vadeli</option>
+                      <option value="90">+90 Gün Vadeli</option>
+                      <option value="120">+120 Gün Vadeli</option>
+                      {selectVal === "custom" && (
+                        <option value="custom">
+                          Özel Vade ({dayDiff !== null ? (dayDiff >= 0 ? `+${dayDiff}` : `${dayDiff}`) : ""} Gün)
+                        </option>
+                      )}
+                    </select>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Seçilen Ödeme Yöntemine Göre Kasa / Banka / EFT-Havale / Vade Detay Alanı */}
+          {paymentMethod === "nakit" || paymentMethod === "kredi_karti" ? (
+            <div
+              className={`p-2.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                paymentMethod === "nakit"
+                  ? "bg-emerald-50/60 border-emerald-200"
+                  : "bg-indigo-50/60 border-indigo-200"
+              }`}
+            >
+              <div className="flex-1 min-w-[180px]">
+                <label
+                  className={`block text-[10px] font-bold mb-1 ${
+                    paymentMethod === "nakit" ? "text-emerald-950" : "text-indigo-950"
+                  }`}
+                >
+                  {paymentMethod === "nakit"
+                    ? "Nakit Kasa / Hesap *"
+                    : "POS / Banka Hesabı *"}
+                </label>
+                {accounts.length > 0 ? (
+                  <select
+                    value={paymentAccountId}
+                    onChange={(e) => setPaymentAccountId(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs"
+                  >
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.type === "cash" ? "Kasa" : acc.type === "bank" ? "Banka" : "POS / Kart"} • ₺
+                        {acc.balance.toLocaleString("tr-TR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-xs font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                    Varsayılan Kasa / POS Hesabı
+                  </div>
+                )}
+              </div>
+              <div
+                className={`text-[10px] font-semibold sm:max-w-[200px] leading-snug ${
+                  paymentMethod === "nakit" ? "text-emerald-800" : "text-indigo-800"
+                }`}
+              >
+                ✓ Fatura kesildiğinde{" "}
+                <strong>
+                  {paymentMethod === "nakit" ? "Nakit" : "Kredi Kartı"}
+                </strong>{" "}
+                olarak tahsil edilmiş sayılır ve <strong>Ödendi</strong> kaydedilir.
+              </div>
+            </div>
+          ) : paymentMethod === "eft_havale" ? (
+            <div className="p-2.5 rounded-lg border bg-sky-50/70 border-sky-200 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-1 border-b border-sky-200/70 pb-1.5">
+                <div className="flex items-center gap-1 text-[11px] font-extrabold text-sky-950">
+                  <Landmark className="w-3.5 h-3.5 text-sky-600" />
+                  <span>EFT & Havale (Banka Transferi & IBAN)</span>
+                </div>
+                <label className="flex items-center gap-1 text-[10px] font-bold text-sky-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeIbanInNotes}
+                    onChange={(e) => setIncludeIbanInNotes(e.target.checked)}
+                    className="rounded border-sky-300 text-sky-600 focus:ring-sky-500"
+                  />
+                  <span>IBAN'ı nota ekle</span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-sky-950 mb-0.5">
+                    Banka Hesabı *
+                  </label>
+                  {accounts.length > 0 ? (
+                    <select
+                      value={paymentAccountId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setPaymentAccountId(nextId);
+                        const selectedAcc = accounts.find((a) => a.id === nextId);
+                        if (selectedAcc?.iban) {
+                          setPaymentIban(selectedAcc.iban);
+                        }
+                        if (selectedAcc?.accountHolderName || selectedAcc?.name) {
+                          setPaymentAccountHolderName(
+                            selectedAcc.accountHolderName ||
+                              companySettings.defaultBankAccountName ||
+                              companySettings.companyTitle ||
+                              companySettings.companyName ||
+                              selectedAcc.name
+                          );
+                        }
+                      }}
+                      className="w-full bg-white border border-sky-200 rounded-lg p-1.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
+                    >
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} ({acc.type === "bank" ? "Banka" : acc.type === "cash" ? "Kasa" : "POS"}
+                          {acc.iban ? ` • ${acc.iban}` : ""} • ₺
+                          {acc.balance.toLocaleString("tr-TR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          )
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="text-xs font-semibold text-slate-600 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                      Varsayılan Banka Hesabı
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-sky-950 mb-0.5">
+                    Hesap Sahibi Ünvanı
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentAccountHolderName}
+                    onChange={(e) => setPaymentAccountHolderName(e.target.value)}
+                    placeholder={
+                      companySettings.defaultBankAccountName ||
+                      companySettings.companyTitle ||
+                      companySettings.companyName ||
+                      "Ticari Ünvan / Ad Soyad"
+                    }
+                    className="w-full bg-white border border-sky-200 rounded-lg p-1.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-sky-950 mb-0.5">
+                    Faturada Görünecek IBAN
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentIban}
+                    onChange={(e) => setPaymentIban(e.target.value)}
+                    placeholder="TR00 0000 0000 0000 0000 0000 00"
+                    className="w-full bg-white border border-sky-200 rounded-lg p-1.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              <div className="text-[10px] font-semibold text-sky-900 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>
+                  Fatura kesildiğinde <strong>EFT & Havale</strong> olarak tahsil edilmiş sayılır ve <strong>Ödendi</strong> olarak kaydedilir.
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-2 rounded-lg bg-amber-50/60 border border-amber-200/80 flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-amber-900">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>
+                  Fatura tutarı cari hesaba <strong>Açık Bakiye (Vadeli)</strong> olarak kaydedilir.
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-amber-800">
+                Son Ödeme Tarihi: <strong>{dueDate ? formatDate(dueDate) : "—"}</strong>
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
       <div className="animate-fadeIn">
         <DetailPageLayout
@@ -6832,6 +7150,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       );
                     })()}
                   </div>
+
+                  {/* Ödeme / Tahsilat Yöntemi ve Vade Günleri */}
+                  {renderPaymentMethodAndDueSettings()}
                 </div>
 
                 <div className="space-y-3">
@@ -6909,325 +7230,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               </div>
 
-              <div className="pt-3 flex flex-col gap-3 border-t border-slate-200">
-                {/* Ödeme / Tahsilat Yöntemi ve Vade Günleri (Listbox) */}
-                <div className="w-full lg:w-1/2 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {/* Sol Sütun: Ödeme / Tahsilat Yöntemi Listbox */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                          <Wallet className="w-4 h-4 text-purple-600" />
-                          <span>Ödeme / Tahsilat Yöntemi:</span>
-                        </label>
-                        <span
-                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
-                            paymentMethod === "nakit"
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                              : paymentMethod === "kredi_karti"
-                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                              : paymentMethod === "eft_havale"
-                              ? "bg-sky-50 text-sky-800 border-sky-200"
-                              : "bg-amber-50 text-amber-800 border-amber-200"
-                          }`}
-                        >
-                          {paymentMethod === "nakit"
-                            ? "Nakit (Peşin)"
-                            : paymentMethod === "kredi_karti"
-                            ? "Kredi Kartı (POS)"
-                            : paymentMethod === "eft_havale"
-                            ? "EFT & Havale"
-                            : "Cari (Vadeli)"}
-                        </span>
-                      </div>
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => {
-                          const nextMethod = e.target.value as InvoicePaymentMethod;
-                          if (nextMethod === "nakit") {
-                            setPaymentMethod("nakit");
-                            setDueDate(issueDate);
-                            const cashAcc = accounts.find((a) => a.type === "cash") || accounts[0];
-                            if (cashAcc) setPaymentAccountId(cashAcc.id);
-                          } else if (nextMethod === "cari") {
-                            setPaymentMethod("cari");
-                          } else if (nextMethod === "kredi_karti") {
-                            setPaymentMethod("kredi_karti");
-                            setDueDate(issueDate);
-                            const posOrBankAcc =
-                              accounts.find(
-                                (a) => a.type === "credit_card" || a.type === "pos" || a.type === "bank"
-                              ) || accounts[0];
-                            if (posOrBankAcc) setPaymentAccountId(posOrBankAcc.id);
-                          } else if (nextMethod === "eft_havale") {
-                            setPaymentMethod("eft_havale");
-                            setDueDate(issueDate);
-                            const bankAcc = accounts.find((a) => a.type === "bank") || accounts[0];
-                            if (bankAcc) {
-                              setPaymentAccountId(bankAcc.id);
-                              if (bankAcc.iban) {
-                                setPaymentIban(bankAcc.iban);
-                              } else if (!paymentIban) {
-                                setPaymentIban(companySettings.defaultBankIban || companySettings.iban || "");
-                              }
-                            }
-                          }
-                        }}
-                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
-                      >
-                        <option value="cari">Cari — Açık Hesap / Vadeli (Müşteri Cari Bakiyesine İşlenir)</option>
-                        <option value="nakit">Nakit — Peşin / Kasa Tahsilatı (Anında Ödendi Kapatılır)</option>
-                        <option value="kredi_karti">Kredi Kartı — POS / Banka Tahsilatı (Anında Ödendi Kapatılır)</option>
-                        <option value="eft_havale">EFT & Havale — Banka Transferi / IBAN (Anında Ödendi Kapatılır)</option>
-                      </select>
-                    </div>
-
-                    {/* Sağ Sütun: Vade Günleri Listbox */}
-                    <div className="space-y-1.5">
-                      {(() => {
-                        const presetDays = [0, 7, 10, 15, 30, 45, 60, 90, 120];
-                        let dayDiff: number | null = null;
-                        if (issueDate && dueDate) {
-                          const p1 = issueDate.split("-").map(Number);
-                          const p2 = dueDate.split("-").map(Number);
-                          if (p1.length === 3 && p2.length === 3) {
-                            const u1 = Date.UTC(p1[0], (p1[1] || 1) - 1, p1[2] || 1);
-                            const u2 = Date.UTC(p2[0], (p2[1] || 1) - 1, p2[2] || 1);
-                            if (!isNaN(u1) && !isNaN(u2)) {
-                              dayDiff = Math.round((u2 - u1) / (24 * 60 * 60 * 1000));
-                            }
-                          }
-                        }
-                        const selectVal =
-                          dayDiff !== null && presetDays.includes(dayDiff)
-                            ? String(dayDiff)
-                            : "custom";
-                        return (
-                          <>
-                            <div className="flex items-center justify-between gap-2">
-                              <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                                <Clock className="w-4 h-4 text-amber-600" />
-                                <span>Vade Günü (Hızlı Vade Seçimi):</span>
-                              </label>
-                              <span className="text-[10px] font-mono font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md border border-amber-200">
-                                Vade: {dueDate ? formatDate(dueDate) : "—"}
-                              </span>
-                            </div>
-                            <select
-                              value={selectVal}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val === "custom") return;
-                                const days = parseInt(val, 10);
-                                if (isNaN(days)) return;
-                                const baseStr = issueDate || new Date().toISOString().split("T")[0];
-                                const p = baseStr.split("-").map(Number);
-                                if (p.length === 3) {
-                                  const baseUtc = Date.UTC(p[0], (p[1] || 1) - 1, p[2] || 1);
-                                  const targetUtc = new Date(baseUtc + days * 24 * 60 * 60 * 1000);
-                                  if (!isNaN(targetUtc.getTime())) {
-                                    setDueDate(targetUtc.toISOString().split("T")[0]);
-                                  }
-                                }
-                              }}
-                              className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
-                            >
-                              <option value="0">Aynı Gün (0 Gün / Peşin)</option>
-                              <option value="7">+7 Gün Vadeli</option>
-                              <option value="10">+10 Gün Vadeli</option>
-                              <option value="15">+15 Gün Vadeli</option>
-                              <option value="30">+30 Gün Vadeli</option>
-                              <option value="45">+45 Gün Vadeli</option>
-                              <option value="60">+60 Gün Vadeli</option>
-                              <option value="90">+90 Gün Vadeli</option>
-                              <option value="120">+120 Gün Vadeli</option>
-                              {selectVal === "custom" && (
-                                <option value="custom">
-                                  Özel Vade Tarihi{dayDiff !== null ? ` (${dayDiff >= 0 ? `+${dayDiff}` : dayDiff} Gün)` : ""}
-                                </option>
-                              )}
-                            </select>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Seçilen Ödeme Yöntemine Göre Kasa / Banka / EFT-Havale / Vade Detay Alanı */}
-                  {paymentMethod === "nakit" || paymentMethod === "kredi_karti" ? (
-                    <div
-                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        paymentMethod === "nakit"
-                          ? "bg-emerald-50/60 border-emerald-200"
-                          : "bg-indigo-50/60 border-indigo-200"
-                      }`}
-                    >
-                      <div className="flex-1 min-w-[220px]">
-                        <label
-                          className={`block text-[11px] font-bold mb-1 ${
-                            paymentMethod === "nakit" ? "text-emerald-950" : "text-indigo-950"
-                          }`}
-                        >
-                          {paymentMethod === "nakit"
-                            ? "Nakit Tahsilatın İşleneceği Kasa / Hesap *"
-                            : "Kredi Kartı (POS) Tahsilatının İşleneceği Banka / Hesap *"}
-                        </label>
-                        {accounts.length > 0 ? (
-                          <select
-                            value={paymentAccountId}
-                            onChange={(e) => setPaymentAccountId(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 shadow-2xs"
-                          >
-                            {accounts.map((acc) => (
-                              <option key={acc.id} value={acc.id}>
-                                {acc.name} ({acc.type === "cash" ? "Kasa" : acc.type === "bank" ? "Banka" : "POS / Kart"} • Bakiye: ₺
-                                {acc.balance.toLocaleString("tr-TR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                                )
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-2 rounded-xl border border-slate-200">
-                            Varsayılan Kasa / POS Hesabı (Otomatik Ödendi Olarak İşlenir)
-                          </div>
-                        )}
-                      </div>
-                      <div
-                        className={`text-[11px] font-semibold sm:max-w-xs leading-relaxed ${
-                          paymentMethod === "nakit" ? "text-emerald-800" : "text-indigo-800"
-                        }`}
-                      >
-                        ✓ Fatura kesildiğinde{" "}
-                        <strong>
-                          {paymentMethod === "nakit" ? "Nakit" : "Kredi Kartı"}
-                        </strong>{" "}
-                        olarak tahsil edilmiş sayılır ve fatura durumu{" "}
-                        <strong>Ödendi</strong> olarak kaydedilir.
-                      </div>
-                    </div>
-                  ) : paymentMethod === "eft_havale" ? (
-                    <div className="p-3.5 rounded-xl border bg-sky-50/70 border-sky-200 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-200/70 pb-2">
-                        <div className="flex items-center gap-1.5 text-xs font-extrabold text-sky-950">
-                          <Landmark className="w-4 h-4 text-sky-600" />
-                          <span>EFT & Havale Yönetimi (Banka Transferi & IBAN)</span>
-                        </div>
-                        <label className="flex items-center gap-1.5 text-[11px] font-bold text-sky-900 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={includeIbanInNotes}
-                            onChange={(e) => setIncludeIbanInNotes(e.target.checked)}
-                            className="rounded border-sky-300 text-sky-600 focus:ring-sky-500"
-                          />
-                          <span>IBAN bilgisini fatura açıklamasına otomatik ekle</span>
-                        </label>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[11px] font-bold text-sky-950 mb-1">
-                            EFT / Havale Tahsilatının İşleneceği Banka Hesabı *
-                          </label>
-                          {accounts.length > 0 ? (
-                            <select
-                              value={paymentAccountId}
-                              onChange={(e) => {
-                                const nextId = e.target.value;
-                                setPaymentAccountId(nextId);
-                                const selectedAcc = accounts.find((a) => a.id === nextId);
-                                if (selectedAcc?.iban) {
-                                  setPaymentIban(selectedAcc.iban);
-                                }
-                                if (selectedAcc?.accountHolderName || selectedAcc?.name) {
-                                  setPaymentAccountHolderName(
-                                    selectedAcc.accountHolderName ||
-                                      companySettings.defaultBankAccountName ||
-                                      companySettings.companyTitle ||
-                                      companySettings.companyName ||
-                                      selectedAcc.name
-                                  );
-                                }
-                              }}
-                              className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
-                            >
-                              {accounts.map((acc) => (
-                                <option key={acc.id} value={acc.id}>
-                                  {acc.name} ({acc.type === "bank" ? "Banka" : acc.type === "cash" ? "Kasa" : "POS / Kart"}
-                                  {acc.iban ? ` • ${acc.iban}` : ""} • Bakiye: ₺
-                                  {acc.balance.toLocaleString("tr-TR", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                  )
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="text-xs font-semibold text-slate-600 bg-white px-3 py-2 rounded-xl border border-slate-200">
-                              Varsayılan Banka Hesabı (Otomatik Ödendi Olarak İşlenir)
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-sky-950 mb-1">
-                            Banka Hesap Adı (Alıcı / Hesap Sahibi Ünvanı)
-                          </label>
-                          <input
-                            type="text"
-                            value={paymentAccountHolderName}
-                            onChange={(e) => setPaymentAccountHolderName(e.target.value)}
-                            placeholder={
-                              companySettings.defaultBankAccountName ||
-                              companySettings.companyTitle ||
-                              companySettings.companyName ||
-                              "Örn: Şirket Ticari Ünvanı / Hesap Adı"
-                            }
-                            className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-sky-950 mb-1">
-                            Faturada Görünecek Banka / IBAN Numarası
-                          </label>
-                          <input
-                            type="text"
-                            value={paymentIban}
-                            onChange={(e) => setPaymentIban(e.target.value)}
-                            placeholder="TR00 0000 0000 0000 0000 0000 00"
-                            className="w-full bg-white border border-sky-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 shadow-2xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="text-[11px] font-semibold text-sky-900 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                        <span>
-                          Fatura kesildiğinde <strong>EFT & Havale</strong> olarak seçilen banka hesabına tahsil edilmiş sayılır ve fatura durumu <strong>Ödendi</strong> olarak kaydedilir.
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-amber-900">
-                      <div className="flex items-center gap-1.5 font-semibold">
-                        <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>
-                          Fatura tutarı cari hesaba <strong>Açık Bakiye (Vadeli)</strong> olarak kaydedilir.
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-bold text-amber-800">
-                        Son Ödeme (Vade) Tarihi: <strong>{dueDate ? formatDate(dueDate) : "—"}</strong>
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
-                  <button
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
                     type="button"
                     onClick={() => {
                       setEditingInvoiceId(null);
@@ -7297,7 +7301,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             : "Gider Faturasını Kaydet"
                           : "Faturayı Kaydet ve Oluştur"}
                   </button>
-                </div>
               </div>
             </form>
           </div>
