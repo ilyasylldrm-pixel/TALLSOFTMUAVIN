@@ -69,31 +69,30 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   );
 }
 
-// Lazy-loaded heavy tab modules for fast initial page load and automatic code splitting
-const Contacts = lazyWithRetry(() => import("./components/Contacts").then((m) => ({ default: m.Contacts })));
-const Invoices = lazyWithRetry(() => import("./components/Invoices").then((m) => ({ default: m.Invoices })));
-const Quotes = lazyWithRetry(() => import("./components/Quotes").then((m) => ({ default: m.Quotes })));
-const Orders = lazyWithRetry(() => import("./components/Orders").then((m) => ({ default: m.Orders })));
-const Waybills = lazyWithRetry(() => import("./components/Waybills").then((m) => ({ default: m.Waybills })));
-const Accounts = lazyWithRetry(() => import("./components/Accounts").then((m) => ({ default: m.Accounts })));
-const Transactions = lazyWithRetry(() => import("./components/Transactions").then((m) => ({ default: m.Transactions })));
-const Products = lazyWithRetry(() => import("./components/Products").then((m) => ({ default: m.Products || m.default })));
-const Reports = lazyWithRetry(() => import("./components/Reports").then((m) => ({ default: m.Reports })));
-const Settings = lazyWithRetry(() => import("./components/Settings").then((m) => ({ default: m.Settings })));
-const CompanyManagement = lazyWithRetry(() => import("./components/CompanyManagement").then((m) => ({ default: m.CompanyManagement })));
-const EServices = lazyWithRetry(() => import("./components/EServices").then((m) => ({ default: m.EServices })));
-const EDocuments = lazyWithRetry(() => import("./components/EDocuments"));
-const HRManagement = lazyWithRetry(() => import("./components/HRManagement").then((m) => ({ default: m.default || m.HRManagement })));
-const FileManager = lazyWithRetry(() => import("./components/FileManager").then((m) => ({ default: m.FileManager })));
-const AdminDashboard = lazyWithRetry(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
-const WhatsAppCenter = lazyWithRetry(() => import("./components/WhatsAppCenter").then((m) => ({ default: m.WhatsAppCenter })));
-const AutoServiceModule = lazyWithRetry(() => import("./components/AutoService/AutoServiceModule").then((m) => ({ default: m.AutoServiceModule })));
-const ITServiceModule = lazyWithRetry(() => import("./components/ITService/ITServiceModule").then((m) => ({ default: m.ITServiceModule })));
-const ApplianceServiceModule = lazyWithRetry(() => import("./components/ApplianceService/ApplianceServiceModule").then((m) => ({ default: m.ApplianceServiceModule })));
-const ConstructionCostingModule = lazyWithRetry(() => import("./components/ConstructionCosting/ConstructionCostingModule").then((m) => ({ default: m.default || m.ConstructionCostingModule })));
-const FixedAssetsModule = lazyWithRetry(() => import("./components/FixedAssets/FixedAssetsModule").then((m) => ({ default: m.FixedAssetsModule })));
-const ProductionModule = lazyWithRetry(() => import("./components/Production/ProductionModule").then((m) => ({ default: m.ProductionModule || (m as any).default })));
-const SectorsModule = lazyWithRetry(() => import("./components/Sectors/SectorsModule").then((m) => ({ default: m.SectorsModule })));
+import { Contacts } from "./components/Contacts";
+import { Invoices } from "./components/Invoices";
+import { Quotes } from "./components/Quotes";
+import { Orders } from "./components/Orders";
+import { Waybills } from "./components/Waybills";
+import { Accounts } from "./components/Accounts";
+import { Transactions } from "./components/Transactions";
+import { Products } from "./components/Products";
+import { Reports } from "./components/Reports";
+import { Settings } from "./components/Settings";
+import { CompanyManagement } from "./components/CompanyManagement";
+import { EServices } from "./components/EServices";
+import EDocuments from "./components/EDocuments";
+import HRManagement from "./components/HRManagement";
+import { FileManager } from "./components/FileManager";
+import { AdminDashboard } from "./components/AdminDashboard";
+import { WhatsAppCenter } from "./components/WhatsAppCenter";
+import { AutoServiceModule } from "./components/AutoService/AutoServiceModule";
+import { ITServiceModule } from "./components/ITService/ITServiceModule";
+import { ApplianceServiceModule } from "./components/ApplianceService/ApplianceServiceModule";
+import ConstructionCostingModule from "./components/ConstructionCosting/ConstructionCostingModule";
+import { FixedAssetsModule } from "./components/FixedAssets/FixedAssetsModule";
+import { ProductionModule } from "./components/Production/ProductionModule";
+import { SectorsModule } from "./components/Sectors/SectorsModule";
 
 import {
   getStoredData,
