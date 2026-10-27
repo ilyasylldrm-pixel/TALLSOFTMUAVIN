@@ -1732,7 +1732,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [items, setItems] = useState<InvoiceItem[]>([
     {
       id: "item_1",
-      description: "Yazılım Danışmanlık ve Sistem Destek Hizmeti",
+      description: "",
       quantity: 1,
       unit: "Adet",
       unitPrice: 5000,
@@ -2065,7 +2065,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         description:
           targetType === "purchase"
             ? "Ofis & Kırtasiye / Mal & Hizmet Alımı"
-            : "Yazılım Danışmanlık ve Sistem Destek Hizmeti",
+            : "",
         quantity: 1,
         unit: "Adet",
         unitPrice: targetType === "purchase" ? 1500 : 5000,
