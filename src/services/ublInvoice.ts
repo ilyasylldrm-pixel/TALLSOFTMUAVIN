@@ -142,6 +142,7 @@ export function buildUblInvoiceXml(options: UblInvoiceBuildOptions): string {
   const grandTotal = numberValue(invoice.grandTotal, subtotal + vatTotal);
   const cleanedInvoiceNotes = String(invoice.notes || "")
     .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
+    .replace(/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:.*$/gim, "")
     .trim();
   const note = cleanedInvoiceNotes ? `<cbc:Note>${text(cleanedInvoiceNotes)}</cbc:Note>` : "";
   const delivery = invoice.dueDate && invoice.dueDate !== issueDate

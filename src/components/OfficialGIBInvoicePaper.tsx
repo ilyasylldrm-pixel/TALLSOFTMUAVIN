@@ -2130,9 +2130,74 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
             ))}
 
             {(() => {
-              const cleanedNotes = (invoice.notes || "")
+              const rawLines = (invoice.notes || "")
                 .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
-                .trim();
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(
+                  (l) =>
+                    Boolean(l) &&
+                    !/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:/i.test(l)
+                );
+
+              let finalLines = rawLines;
+              if (invType === "sales") {
+                const branchOrHqLineRegex =
+                  /^(?:Merkez Adresi|Firma Merkez Adresi|Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi)/i;
+                const cleanHq = String(sellerHqAddress || "")
+                  .replace(/\s*—\s*Şube:\s*.*$/i, "")
+                  .replace(/\s*-\s*Şube:\s*.*$/i, "")
+                  .replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "")
+                  .trim();
+
+                let counterpartLine = "";
+                if (isSellerSubBranchSelected) {
+                  // Şube adresi seçilmişse merkez adresini not bölümüne yazdır
+                  if (cleanHq && cleanHq !== "Merkez Adres") {
+                    counterpartLine = `Merkez Adresi: ${cleanHq}`;
+                  }
+                } else {
+                  // Merkez adresi seçildiyse şube adresini not bölümüne yazdır
+                  const companyData = getStoredData(activeCompanyId);
+                  const branchesList = Array.isArray(companyData?.branches) ? companyData.branches : [];
+                  const subBranches = branchesList.filter((b) => {
+                    if (b.status === "passive") return false;
+                    const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
+                    const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
+                    return (
+                      !b.isMain &&
+                      lName !== "merkez" &&
+                      !lName.includes("merkez şube") &&
+                      lCode !== "mrk" &&
+                      lCode !== "merkez"
+                    );
+                  });
+                  if (subBranches.length > 0) {
+                    const subLines = subBranches
+                      .map((sb) => {
+                        const resolvedSb = resolveBranchAddressFromBranches({
+                          branchId: sb.id,
+                          branches: branchesList,
+                          companyId: activeCompanyId,
+                        });
+                        const sbAddr = String(resolvedSb.branchAddress || "").trim();
+                        if (!sbAddr) return "";
+                        return subBranches.length === 1
+                          ? `Şube Adresi: ${sbAddr}`
+                          : `Şube Adresi (${sb.name}): ${sbAddr}`;
+                      })
+                      .filter(Boolean);
+                    counterpartLine = subLines.join("\n");
+                  }
+                }
+
+                const strippedLines = rawLines.filter((l) => !branchOrHqLineRegex.test(l));
+                finalLines = counterpartLine
+                  ? [counterpartLine, ...strippedLines]
+                  : strippedLines;
+              }
+
+              const cleanedNotes = finalLines.join("\n").trim();
               if (!cleanedNotes) return null;
               return (
                 <p

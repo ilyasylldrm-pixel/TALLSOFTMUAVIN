@@ -537,6 +537,7 @@ export function buildMysoftInvoiceOutboxPayload(
       const noteList: { note: string }[] = [];
       const rawNoteText = String(invoice.notes || "")
         .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
+        .replace(/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:.*$/gim, "")
         .trim();
       if (invoice.paymentMethod) {
         const pmLabel =
@@ -561,29 +562,69 @@ export function buildMysoftInvoiceOutboxPayload(
       });
       const effHqAddr = getCompanyHeadquartersAddress(company);
       const effBranchName = (invoice.branchName || resolvedBranch.branchName || "Merkez").trim();
-      const effBranchCode = (invoice.branchCode || resolvedBranch.branchCode || "").trim();
       const effBranchAddr = (invoice.branchAddress || resolvedBranch.branchAddress || "").trim();
-      const isSubBranch =
+      const lowerBranchName = effBranchName.toLocaleLowerCase("tr-TR");
+      const isSubBranch = Boolean(
         (resolvedBranch.branch && !resolvedBranch.branch.isMain) ||
-        (effBranchName && effBranchName.toLocaleLowerCase("tr-TR") !== "merkez") ||
-        (effBranchAddr && effBranchAddr !== effHqAddr);
-      if (isSubBranch && effBranchAddr && !rawNoteText.includes("Şube Adresi")) {
-        noteList.push({
-          note: `Şube Adresi (${effBranchName}${effBranchCode ? ` - ${effBranchCode}` : ""}): ${effBranchAddr}`,
+          (effBranchName && lowerBranchName !== "merkez" && !lowerBranchName.includes("merkez şube")) ||
+          (effBranchAddr && effHqAddr && effBranchAddr !== effHqAddr)
+      );
+      if (isSubBranch) {
+        if (effHqAddr && !rawNoteText.includes("Merkez Adresi")) {
+          noteList.push({
+            note: `Merkez Adresi: ${effHqAddr}`,
+          });
+        }
+      } else if (!rawNoteText.includes("Şube Adresi")) {
+        // Merkez seçildiyse varsa alt şube adresini not bölümüne yazdır
+        let storedBranches: Branch[] = [];
+        if (typeof window !== "undefined") {
+          try {
+            const activeCompId = window.localStorage.getItem("muavin_active_company_id") || "comp_default";
+            const isDefault = !activeCompId || activeCompId === "comp_default";
+            const key = isDefault ? "muavin_branches" : `muavin_branches_${activeCompId}`;
+            const raw = window.localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) storedBranches = parsed;
+            }
+          } catch {
+            storedBranches = [];
+          }
+        }
+        const subBranches = storedBranches.filter((b) => {
+          if (b.status === "passive") return false;
+          const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
+          const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
+          return !b.isMain && lName !== "merkez" && !lName.includes("merkez şube") && lCode !== "mrk" && lCode !== "merkez";
         });
-      } else if (effHqAddr && !rawNoteText.includes("Firma Merkez Adresi:") && !rawNoteText.includes("Şube Adresi")) {
-        noteList.push({
-          note: `Adres: ${effBranchAddr || effHqAddr}`,
-        });
+        for (const sb of subBranches) {
+          const sbAddrObj = sb.address;
+          const sbAddr = sbAddrObj
+            ? String(sbAddrObj.fullAddress || "").trim() ||
+              compileStructuredAddressLocal(
+                sbAddrObj.neighborhood,
+                sbAddrObj.street,
+                sbAddrObj.district,
+                sbAddrObj.city,
+                sbAddrObj.buildingNo,
+                sbAddrObj.doorNo,
+                sbAddrObj.postalCode
+              )
+            : "";
+          if (sbAddr) {
+            noteList.push({
+              note:
+                subBranches.length === 1
+                  ? `Şube Adresi: ${sbAddr}`
+                  : `Şube Adresi (${sb.name}): ${sbAddr}`,
+            });
+          }
+        }
       }
       if (company.tradeRegisterNo && !rawNoteText.includes("Ticaret Sicil No:")) {
         noteList.push({
           note: `Ticaret Sicil No: ${company.tradeRegisterNo}`,
-        });
-      }
-      if (company.esnafSicilNo && !rawNoteText.includes("Esnaf Sicil No:")) {
-        noteList.push({
-          note: `Esnaf Sicil No: ${company.esnafSicilNo}`,
         });
       }
       const effBankName = (invoice.paymentAccountName || company.defaultBankName || company.bankName || "").trim();
