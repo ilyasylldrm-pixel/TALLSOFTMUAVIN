@@ -610,17 +610,151 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setIsQuickBranchFormOpen(true);
   };
 
+  const [branchAddressUpdateToast, setBranchAddressUpdateToast] = useState<string | null>(null);
+
+  const handleSyncAllBranchAndHeadquartersAddresses = useCallback(() => {
+    // 1. Standart Merkez Adresi (İstanbul Şişli)
+    const standardHqAddress = {
+      country: "Türkiye",
+      city: "İstanbul",
+      district: "Şişli",
+      neighborhood: "Mecidiyeköy",
+      street: "Büyükdere Cad.",
+      buildingNo: "195",
+      doorNo: "Kat:8",
+      postalCode: "34394",
+      fullAddress: "Büyükdere Cad. No:195 Maya Plaza Kat:8, Mecidiyeköy, Şişli / İstanbul",
+    };
+
+    if (onSaveCompanySettings) {
+      onSaveCompanySettings({
+        ...companySettings,
+        city: "İstanbul",
+        district: "Şişli",
+        neighborhood: "Mecidiyeköy",
+        street: "Büyükdere Cad.",
+        buildingNo: "195",
+        doorNo: "Kat:8",
+        postalCode: "34394",
+        address: standardHqAddress.fullAddress,
+        addressDetails: standardHqAddress,
+      });
+    }
+
+    // 2. Standart Şube Adresleri
+    const standardBranchesMap: Record<
+      string,
+      {
+        code: string;
+        name: string;
+        city: string;
+        district: string;
+        neighborhood: string;
+        street: string;
+        buildingNo: string;
+        doorNo: string;
+        postalCode: string;
+        fullAddress: string;
+        phone: string;
+        email: string;
+      }
+    > = {
+      br_1: {
+        code: "MRK-001",
+        name: "Merkez",
+        city: "İstanbul",
+        district: "Şişli",
+        neighborhood: "Mecidiyeköy",
+        street: "Büyükdere Cad.",
+        buildingNo: "195",
+        doorNo: "Kat:8",
+        postalCode: "34394",
+        fullAddress: "Büyükdere Cad. No:195 Maya Plaza Kat:8, Mecidiyeköy, Şişli / İstanbul",
+        phone: companySettings.phone || "+90 (212) 212 00 00",
+        email: companySettings.email || "info@muavin.com.tr",
+      },
+      br_2: {
+        code: "ANK-001",
+        name: "Ankara Bölge Şubesi",
+        city: "Ankara",
+        district: "Çankaya",
+        neighborhood: "Kavaklıdere",
+        street: "Tunalı Hilmi Caddesi",
+        buildingNo: "88",
+        doorNo: "Kat:4 D:8",
+        postalCode: "06690",
+        fullAddress: "Tunalı Hilmi Cad. No:88 Kat:4 D:8, Kavaklıdere, Çankaya / Ankara",
+        phone: "+90 (312) 428 10 20",
+        email: "ankara@muavin.com.tr",
+      },
+      br_3: {
+        code: "IZM-001",
+        name: "İzmir Şubesi",
+        city: "İzmir",
+        district: "Konak",
+        neighborhood: "Alsancak",
+        street: "Atatürk Caddesi",
+        buildingNo: "142",
+        doorNo: "Kat:3 D:6",
+        postalCode: "35220",
+        fullAddress: "Atatürk Cad. No:142 Kat:3 D:6, Alsancak, Konak / İzmir",
+        phone: "+90 (232) 464 12 34",
+        email: "izmir@muavin.com.tr",
+      },
+    };
+
+    if (onUpdateBranch) {
+      effectiveBranchesList.forEach((b) => {
+        const std = standardBranchesMap[b.id] || (b.isMain ? standardBranchesMap.br_1 : null);
+        if (std) {
+          onUpdateBranch({
+            ...b,
+            code: b.code || std.code,
+            name: b.name || std.name,
+            address: {
+              country: "Türkiye",
+              city: std.city,
+              district: std.district,
+              neighborhood: std.neighborhood,
+              street: std.street,
+              buildingNo: std.buildingNo,
+              doorNo: std.doorNo,
+              postalCode: std.postalCode,
+              fullAddress: std.fullAddress,
+            },
+          });
+        }
+      });
+    }
+
+    setCustomBranchAddressOverride("");
+    setBranchAddressUpdateToast("Merkez ve tüm şube adresleri başarıyla güncellendi!");
+    setTimeout(() => setBranchAddressUpdateToast(null), 3500);
+  }, [companySettings, effectiveBranchesList, onSaveCompanySettings, onUpdateBranch]);
+
   const handleOpenQuickBranchEdit = () => {
     if (!selectedCompanyBranch) return;
     setQuickBranchMode("edit");
-    setQuickBranchCode(selectedCompanyBranch.code || "SUB-001");
-    setQuickBranchName(selectedCompanyBranch.name || "");
-    setQuickBranchNeighborhood(selectedCompanyBranch.address?.neighborhood || "");
-    setQuickBranchStreet(selectedCompanyBranch.address?.street || "");
-    setQuickBranchCity(selectedCompanyBranch.address?.city || "");
-    setQuickBranchDistrict(selectedCompanyBranch.address?.district || "");
+    const isMain = selectedCompanyBranch.isMain;
+    setQuickBranchCode(selectedCompanyBranch.code || (isMain ? "MRK-001" : "SUB-001"));
+    setQuickBranchName(selectedCompanyBranch.name || (isMain ? "Merkez" : ""));
+    setQuickBranchNeighborhood(
+      selectedCompanyBranch.address?.neighborhood || (isMain ? companySettings.neighborhood : "") || ""
+    );
+    setQuickBranchStreet(
+      selectedCompanyBranch.address?.street || (isMain ? companySettings.street : "") || ""
+    );
+    setQuickBranchCity(
+      selectedCompanyBranch.address?.city || (isMain ? companySettings.city : "") || ""
+    );
+    setQuickBranchDistrict(
+      selectedCompanyBranch.address?.district || (isMain ? companySettings.district : "") || ""
+    );
     setQuickBranchAddress(
-      selectedCompanyBranch.address?.fullAddress || selectedBranchCleanAddress || ""
+      selectedCompanyBranch.address?.fullAddress ||
+        (isMain ? companySettings.address || companyHeadquartersAddress : "") ||
+        selectedBranchCleanAddress ||
+        ""
     );
     setIsQuickBranchFormOpen(true);
   };
@@ -677,6 +811,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
       }
       setCustomBranchAddressOverride("");
       setIsQuickBranchFormOpen(false);
+      setBranchAddressUpdateToast(
+        selectedCompanyBranch.isMain
+          ? "Merkez adresi başarıyla güncellendi!"
+          : `${cleanName} adresi başarıyla güncellendi!`
+      );
+      setTimeout(() => setBranchAddressUpdateToast(null), 3000);
     } else {
       const newBr: Branch = {
         id: `br_${Date.now()}`,
@@ -703,6 +843,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setSelectedBranchId(newBr.id);
       setCustomBranchAddressOverride("");
       setIsQuickBranchFormOpen(false);
+      setBranchAddressUpdateToast(`${cleanName} şubesi ve adresi oluşturuldu ve seçildi!`);
+      setTimeout(() => setBranchAddressUpdateToast(null), 3000);
     }
   };
 
@@ -736,6 +878,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
       });
     }
     setCustomBranchAddressOverride("");
+    setBranchAddressUpdateToast(
+      selectedCompanyBranch.isMain
+        ? "Merkez adresi güncellendi!"
+        : `${selectedCompanyBranch.name} adresi güncellendi!`
+    );
+    setTimeout(() => setBranchAddressUpdateToast(null), 3000);
   };
 
   const applyQueriedTaxpayerToManualForm = useCallback(
@@ -5614,19 +5762,34 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               {selectedCompanyBranch.code ? ` (${selectedCompanyBranch.code})` : ""}
                             </span>
                           )}
+                          {branchAddressUpdateToast && (
+                            <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 animate-fadeIn">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>{branchAddressUpdateToast}</span>
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          Merkez veya şube seçildiğinde seçilen merkez veya şubenin adresi gösterilir ve fatura bu adres ile gönderilir.
+                          Merkez veya şube seçildiğinde seçilen birimin güncel adresi faturaya yansır ve işlemler bu adres üzerinden yürütülür.
                         </p>
                       </div>
                     </div>
 
-                    <div className="w-full lg:w-96 shrink-0 space-y-1.5">
+                    <div className="w-full lg:w-[420px] shrink-0 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <label className="block text-[10px] font-bold text-purple-800 uppercase tracking-wider">
                           {invType === "sales" ? "Faturanın Kesildiği Şube Seçimi" : "Merkez / Şube Seçimi"}
                         </label>
                         <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={handleSyncAllBranchAndHeadquartersAddresses}
+                            className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                            title="Şube ve merkez adreslerini en güncel resmi adreslerle güncelle ve eşitle"
+                          >
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            <span>Adresleri Güncelle</span>
+                          </button>
                           <button
                             type="button"
                             onClick={handleOpenQuickBranchEdit}
@@ -5643,7 +5806,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             title="Yeni şube ve şube adresi tanımla"
                           >
                             <Plus className="w-2.5 h-2.5" />
-                            <span>Yeni Şube Ekle</span>
+                            <span>Yeni Şube</span>
                           </button>
                         </div>
                       </div>
@@ -5668,6 +5831,46 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             );
                           })}
                       </select>
+                      {/* Hızlı Şube & Merkez Değiştirme Butonları */}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        {effectiveBranchesList
+                          .filter((b) => b.status !== "passive")
+                          .map((b) => {
+                            const isSelected = (selectedCompanyBranch?.id || selectedBranchId) === b.id;
+                            const bCity = b.address?.city || "";
+                            const bDist = b.address?.district || "";
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedBranchId(b.id);
+                                  setCustomBranchAddressOverride("");
+                                }}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                                  isSelected
+                                    ? "bg-purple-600 text-white border-purple-700 shadow-2xs"
+                                    : "bg-white hover:bg-purple-50 text-slate-700 border-slate-200 hover:border-purple-300"
+                                }`}
+                                title={`${b.name} adresi: ${getBranchAddressFromBranchItem(b) || "Tanımlı"}`}
+                              >
+                                <span>{b.isMain ? "🏢" : "🏬"}</span>
+                                <span>{b.name}</span>
+                                {bCity && (
+                                  <span
+                                    className={`text-[9px] px-1 py-0.1 rounded ${
+                                      isSelected
+                                        ? "bg-purple-700 text-purple-100"
+                                        : "bg-slate-100 text-slate-500"
+                                    }`}
+                                  >
+                                    {bDist ? `${bDist}/` : ""}{bCity}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                      </div>
                     </div>
                   </div>
 

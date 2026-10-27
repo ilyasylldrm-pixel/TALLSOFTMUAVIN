@@ -1298,8 +1298,25 @@ export function getStoredData(targetCompanyId?: string) {
               const existingIdx = merged.findIndex((b) => b.id === initB.id || b.code === initB.code);
               if (existingIdx === -1) {
                 merged.push(initB);
-              } else if (!merged[existingIdx].address?.fullAddress) {
-                merged[existingIdx] = { ...merged[existingIdx], address: initB.address };
+              } else {
+                const cur = merged[existingIdx];
+                const curAddr: Partial<NonNullable<Branch["address"]>> = cur.address || {};
+                const initAddr: Partial<NonNullable<Branch["address"]>> = initB.address || {};
+                merged[existingIdx] = {
+                  ...cur,
+                  address: {
+                    country: initAddr.country || curAddr.country || "Türkiye",
+                    ...initAddr,
+                    ...curAddr,
+                    fullAddress: curAddr.fullAddress || initAddr.fullAddress || "",
+                    street: curAddr.street || initAddr.street,
+                    neighborhood: curAddr.neighborhood || initAddr.neighborhood,
+                    buildingNo: curAddr.buildingNo || initAddr.buildingNo,
+                    doorNo: curAddr.doorNo || initAddr.doorNo,
+                    city: curAddr.city || initAddr.city || "İstanbul",
+                    district: curAddr.district || initAddr.district || "",
+                  },
+                };
               }
             }
             return merged;
