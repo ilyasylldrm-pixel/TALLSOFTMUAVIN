@@ -6895,56 +6895,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
                   )}
-
-                  {/* Faturaya Basılacak Varsayılan Banka Bilgileri Gösterimi (Banka Adı, Hesap Sahibi, IBAN) */}
-                  <div className="mt-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2.5">
-                    <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-200 pb-2">
-                      <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800">
-                        <Landmark className="w-4 h-4 text-purple-600" />
-                        <span>Faturaya Basılacak Varsayılan Banka Bilgileri</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
-                        Banka Adı • Hesap Sahibi • IBAN
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
-                          Banka Adı
-                        </span>
-                        <p className="font-bold text-slate-900 mt-0.5">
-                          {(paymentMethod === "eft_havale" &&
-                            accounts.find((a) => a.id === paymentAccountId)?.name) ||
-                            companySettings.defaultBankName ||
-                            companySettings.bankName ||
-                            "Belirtilmemiş"}
-                        </p>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
-                          Hesap Sahibi
-                        </span>
-                        <p className="font-bold text-slate-900 mt-0.5">
-                          {paymentAccountHolderName.trim() ||
-                            companySettings.defaultBankAccountName ||
-                            companySettings.companyTitle ||
-                            companySettings.companyName ||
-                            "Belirtilmemiş"}
-                        </p>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
-                          IBAN Numarası
-                        </span>
-                        <p className="font-mono font-bold text-purple-900 mt-0.5">
-                          {paymentIban.trim() ||
-                            companySettings.defaultBankIban ||
-                            companySettings.iban ||
-                            "Belirtilmemiş"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                 {invType === "sales" && formDocKind === "invoice" && (!editingInvoiceId || isEditingDraft) && (
