@@ -2129,16 +2129,22 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
               </p>
             ))}
 
-            {invoice.notes && invoice.notes.trim() && (
-              <p
-                style={{
-                  borderColor: palette.isDark ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.2)",
-                }}
-                className="whitespace-pre-line pt-1 border-t mt-1 font-medium"
-              >
-                {invoice.notes}
-              </p>
-            )}
+            {(() => {
+              const cleanedNotes = (invoice.notes || "")
+                .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
+                .trim();
+              if (!cleanedNotes) return null;
+              return (
+                <p
+                  style={{
+                    borderColor: palette.isDark ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.2)",
+                  }}
+                  className="whitespace-pre-line pt-1 border-t mt-1 font-medium"
+                >
+                  {cleanedNotes}
+                </p>
+              );
+            })()}
           </div>
 
           {/* Eğer imza bölgesi "Notlar Altı - Alt Sol" (bottom_left) seçildiyse */}

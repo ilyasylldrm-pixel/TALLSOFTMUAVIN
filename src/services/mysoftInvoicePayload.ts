@@ -535,7 +535,9 @@ export function buildMysoftInvoiceOutboxPayload(
     gbAlias: options.gbAlias?.trim() && !isFabricatedDefaultAlias(options.gbAlias) ? options.gbAlias.trim() : undefined,
     notes: (() => {
       const noteList: { note: string }[] = [];
-      const rawNoteText = String(invoice.notes || "");
+      const rawNoteText = String(invoice.notes || "")
+        .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
+        .trim();
       if (invoice.paymentMethod) {
         const pmLabel =
           invoice.paymentMethod === "nakit"

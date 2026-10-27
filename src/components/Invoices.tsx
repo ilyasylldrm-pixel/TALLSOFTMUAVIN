@@ -1663,7 +1663,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [dueDate, setDueDate] = useState<string>(
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
-  const [notes, setNotes] = useState<string>("Ödemenin süresinde yapılması rica olunur.");
+  const [notes, setNotes] = useState<string>("");
 
   const [items, setItems] = useState<InvoiceItem[]>([
     {
@@ -1992,7 +1992,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
         .toISOString()
         .split("T")[0]
     );
-    setNotes("Ödemenin süresinde yapılması rica olunur.");
+    setNotes("");
     setHasDifferentDeliveryAddress(false);
     setDeliveryAddress("");
     setItems([
@@ -2120,7 +2120,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setIssueDate(inv.issueDate || new Date().toISOString().split("T")[0]);
     setDueDate(inv.dueDate || new Date().toISOString().split("T")[0]);
 
-    let noteText = inv.notes || "";
+    let noteText = (inv.notes || "")
+      .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
+      .trim();
     if (noteText.includes("Teslimat Adresi: ")) {
       const match = noteText.match(/Teslimat Adresi:\s*(.*)/);
       if (match && match[1]) {

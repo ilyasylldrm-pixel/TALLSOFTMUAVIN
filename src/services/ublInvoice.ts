@@ -140,7 +140,10 @@ export function buildUblInvoiceXml(options: UblInvoiceBuildOptions): string {
   const subtotal = numberValue(invoice.subtotal, items.reduce((sum, item) => sum + numberValue(item.totalWithoutVat, numberValue(item.quantity, 1) * numberValue(item.unitPrice)), 0));
   const vatTotal = numberValue(invoice.totalVat, items.reduce((sum, item) => sum + numberValue(item.vatAmount, 0), 0));
   const grandTotal = numberValue(invoice.grandTotal, subtotal + vatTotal);
-  const note = invoice.notes ? `<cbc:Note>${text(invoice.notes)}</cbc:Note>` : "";
+  const cleanedInvoiceNotes = String(invoice.notes || "")
+    .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
+    .trim();
+  const note = cleanedInvoiceNotes ? `<cbc:Note>${text(cleanedInvoiceNotes)}</cbc:Note>` : "";
   const delivery = invoice.dueDate && invoice.dueDate !== issueDate
     ? `<cac:PaymentTerms><cbc:Note>Vade tarihi: ${text(invoice.dueDate)}</cbc:Note><cbc:PaymentDueDate>${text(invoice.dueDate)}</cbc:PaymentDueDate></cac:PaymentTerms>`
     : "";
