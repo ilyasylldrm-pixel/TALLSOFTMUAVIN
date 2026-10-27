@@ -5832,16 +5832,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 )}
 
                 {/* Fatura Senaryosu ve Fatura Türü (Aynı Satırda - Teslimat / Sevkiyat Adresi Bölümünün Üstünde) */}
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="w-full lg:w-3/4 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     {/* Sol Sütun: Fatura Senaryosu (GİB e-Belge) */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5 text-purple-600" />
+                        <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                          <FileText className="w-3 h-3 text-purple-600" />
                           <span>Fatura Senaryosu:</span>
                         </label>
-                        <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
+                        <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
                           {invoiceScenario}
                         </span>
                       </div>
@@ -5856,7 +5856,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             setMysoftEDocType("e_fatura");
                           }
                         }}
-                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
                       >
                         <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
                         <option value="TEMELFATURA">TEMELFATURA - Temel Fatura (Doğrudan Kabul Edilen)</option>
@@ -5865,7 +5865,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <option value="KAMU">KAMU - Kamu Kurumu Faturası</option>
                         <option value="HAL">HAL - Hal Kayıt Sistemi (HKS) Faturası</option>
                       </select>
-                      <p className="text-[10px] text-slate-500 font-medium">
+                      <p className="text-[9px] leading-tight text-slate-500 font-medium">
                         {invoiceScenario === "TICARIFATURA" && "Alıcı firma 7 gün içerisinde sistem üzerinden kabul veya ticari ret verebilir."}
                         {invoiceScenario === "TEMELFATURA" && "Sistemden doğrudan kabul edilir; itirazlar harici yollarla yapılır."}
                         {invoiceScenario === "EARSIVFATURA" && "e-Fatura mükellefi olmayanlara ve nihai tüketicilere iletilen arşiv faturası."}
@@ -5876,20 +5876,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     </div>
 
                     {/* Sağ Sütun: Fatura Türü (GİB Standardı) ve Ek Vergi Butonu */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Tag className="w-3.5 h-3.5 text-purple-600" />
+                        <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                          <Tag className="w-3 h-3 text-purple-600" />
                           <span>Fatura Türü (GİB Standardı):</span>
                         </label>
-                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                        <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
                           {invoiceProfileType}
                         </span>
                       </div>
                       <select
                         value={invoiceProfileType}
                         onChange={(e) => handleSelectInvoiceProfile(e.target.value as InvoiceProfileType)}
-                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-xl p-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
                       >
                         <option value="SATIS">SATIŞ - Standart Satış Faturası</option>
                         <option value="TEVKIFAT">TEVKİFAT - KDV Tevkifatlı Fatura (2/10, 5/10, 7/10, 9/10 vb.)</option>
@@ -5900,7 +5900,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <option value="SGK">SGK - Sosyal Güvenlik Kurumu Faturası</option>
                         <option value="KOMISYONCU">KOMİSYONCU - Komisyoncu / Aracı Faturası</option>
                       </select>
-                      <p className="text-[10px] text-slate-500 font-medium">
+                      <p className="text-[9px] leading-tight text-slate-500 font-medium">
                         {invoiceProfileType === "SATIS" && "Standart mal ve hizmet teslimi satış faturası profili."}
                         {invoiceProfileType === "TEVKIFAT" && "KDV'nin bir kısmının alıcı tarafından sorumlu sıfatıyla ödendiği fatura türü."}
                         {invoiceProfileType === "OZELMATRAH" && "KDV yalnızca kâr marjı veya işçilik farkı üzerinden hesaplanır."}
