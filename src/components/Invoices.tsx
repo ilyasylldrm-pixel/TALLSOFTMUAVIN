@@ -5592,61 +5592,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* Üçüncü Satır: Adres Alanları (Mahalle, Cadde-Sokak, İlçe, İl) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Mahalle
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Örn: Barbaros Mah."
-                          value={manualNeighborhood}
-                          onChange={(e) => handleManualNeighborhoodChange(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Cadde - Sokak
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Örn: Çiğdem Sk. No: 14 D: 6"
-                          value={manualStreet}
-                          onChange={(e) => handleManualStreetChange(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          İlçe
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Örn: Kadıköy"
-                          value={manualDistrict}
-                          onChange={(e) => handleManualDistrictSelect(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          İl
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Örn: İstanbul"
-                          value={manualCity}
-                          onChange={(e) => handleManualCitySelect(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
-                    </div>
-
                     {/* Açık Adres ve Teslimat Adresi Satırı */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                       <div className="md:col-span-7">
