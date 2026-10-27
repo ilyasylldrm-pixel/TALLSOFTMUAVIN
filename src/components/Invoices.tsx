@@ -5421,10 +5421,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 ) : (
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
-                    {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi, Fatura No, Fatura Tarihi */}
+                    {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                       {/* Müşteri / Firma Adı / Ünvanı */}
-                      <div className="md:col-span-4">
+                      <div className="md:col-span-5">
                         <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
                           <User className="w-3.5 h-3.5 text-purple-600" />
                           <span>Müşteri Adı / Ticari Ünvanı *</span>
@@ -5440,7 +5440,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* VKN / TCKN No */}
-                      <div className="md:col-span-3">
+                      <div className="md:col-span-4">
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-purple-600" />
@@ -5530,7 +5530,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* Vergi Dairesi */}
-                      <div className="md:col-span-2">
+                      <div className="md:col-span-3">
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Vergi Dairesi
                         </label>
@@ -5541,82 +5541,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           onChange={(e) => setManualTaxOffice(e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
-                      </div>
-
-                      {/* Fatura Numarası */}
-                      <div className="md:col-span-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <Hash className="w-3.5 h-3.5 text-purple-600" />
-                            <span>Fatura Numarası</span>
-                          </label>
-                          {invType === "sales" && formDocKind === "invoice" && !editingInvoiceId ? (
-                            <div className="flex items-center gap-1">
-                              <span
-                                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                                  !sendToMysoft
-                                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                                    : isCurrentSalesEArsiv
-                                      ? "bg-sky-50 text-sky-800 border-sky-200"
-                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                }`}
-                              >
-                                {!sendToMysoft
-                                  ? "GYR Ön Eki"
-                                  : isCurrentSalesEArsiv
-                                    ? `e-Arşiv (${activeMysoftPrefix})`
-                                    : `e-Fatura (${activeMysoftPrefix})`}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsManualInvoiceNumber(false);
-                                  if (sendToMysoft) {
-                                    setInvoiceNumberInput(activeMysoftSerialNumber);
-                                    void fetchAndApplyNextInvoiceNumber();
-                                  } else {
-                                    setInvoiceNumberInput(activeGyrNextNo);
-                                  }
-                                }}
-                                disabled={isFetchingNextDocNo}
-                                className="text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 cursor-pointer flex items-center gap-0.5 disabled:opacity-50"
-                                title="Sıradaki ardışık fatura numarasını ata"
-                              >
-                                <RefreshCw className={`w-2.5 h-2.5 ${isFetchingNextDocNo ? "animate-spin" : ""}`} />
-                                <span>Sıradaki No</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                              İsteğe Bağlı (Otomatik)
-                            </span>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Boş bırakılırsa otomatik üretilir"
-                          value={invoiceNumberInput}
-                          onChange={(e) => {
-                            const val = e.target.value.toUpperCase();
-                            setInvoiceNumberInput(val);
-                            setIsManualInvoiceNumber(
-                              val.trim().length > 0 && val.trim() !== activeSalesSerialNumber,
-                            );
-                          }}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                        {invType === "sales" && !editingInvoiceId && (
-                          <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>
-                              {!sendToMysoft
-                                ? `GYR Serisi → Sıradaki: ${invoiceNumberInput || activeGyrNextNo}`
-                                : mysoftNumberInfo?.lastInvoiceNumber
-                                  ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
-                                  : `Ardışık No: ${invoiceNumberInput || activeMysoftSerialNumber}`}
-                            </span>
-                          </p>
-                        )}
                       </div>
                     </div>
 
