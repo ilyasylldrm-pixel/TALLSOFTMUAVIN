@@ -6473,10 +6473,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret"
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
-                          style={{
-                            width: `${Math.min(Math.max((manualCustomerName || "Örn: Ahmet Yılmaz veya ABC Ticaret").length + 3, 28), 64)}ch`,
-                          }}
-                          className="max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
+                          style={{ width: "400px" }}
+                          className="w-[400px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
                         />
                       </div>
 
