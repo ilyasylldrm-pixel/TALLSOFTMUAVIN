@@ -6280,8 +6280,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* VKN / TCKN No */}
-                      <div className="relative w-fit shrink-0">
-                        <div className="flex items-center justify-between gap-1.5 h-5 mb-1">
+                      <div className="relative w-fit max-w-full shrink-0">
+                        <div className="flex items-center gap-2 h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>VKN / TCKN</span>
@@ -6297,7 +6297,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             11111111111 (Nihai)
                           </button>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center flex-wrap gap-1.5">
                           <input
                             type="text"
                             maxLength={11}
@@ -6339,6 +6339,68 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             )}
                             <span className="hidden sm:inline">Sorgula</span>
                           </button>
+
+                          {/* Mevcut Cariden Dolduruldu Bildirimi (Sorgula Butonunun Sağında) */}
+                          {matchedManualContactId && (
+                            <div className="h-[38px] px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1.5 shrink-0">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Kayıtlı cariden dolduruldu</span>
+                            </div>
+                          )}
+
+                          {/* Cari Çıkmazsa Kullanıcıya Sorarak Sorgulama Onayı (Sorgula Butonunun Sağında) */}
+                          {(manualTaxNumber.length === 10 || manualTaxNumber.length === 11) &&
+                            manualTaxNumber !== "11111111111" &&
+                            filteredContactsByManualVkn.length === 0 &&
+                            dismissedVknQueryPrompt !== manualTaxNumber &&
+                            lastQueriedManualVknRef.current !== manualTaxNumber && (
+                              <div className="min-h-[38px] px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 shadow-2xs flex items-center gap-2 shrink-0">
+                                <span className="font-semibold">
+                                  Kayıtlı cari bulunamadı. GİB / Mysoft&apos;tan sorgulansın mı?
+                                </span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={isCheckingRecipient}
+                                    onClick={() => executeConfirmedVknQuery(manualTaxNumber)}
+                                    className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                    <span>{isCheckingRecipient ? "Sorgulanıyor..." : "Evet, Sorgula"}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDismissedVknQueryPrompt(manualTaxNumber)}
+                                    className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold cursor-pointer"
+                                  >
+                                    Hayır
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Mükellefiyet Durumu (Sorgula Butonunun Sağında) */}
+                          {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
+                            <div
+                              className={`h-[38px] px-2.5 rounded-xl border text-[11px] flex items-center gap-1.5 shrink-0 animate-fadeIn ${
+                                recipientStatus.isEFaturaUser
+                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                                  : "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                              }`}
+                            >
+                              <span className="font-semibold whitespace-nowrap">
+                                {recipientStatus.isEFaturaUser
+                                  ? "🟢 GİB e-Fatura Mükellefi"
+                                  : "🔵 e-Arşiv Alıcısı"}
+                                {recipientStatus.activityStatus === "terminated" ? " (⚠️ Terk/Kapalı)" : ""}
+                              </span>
+                              {recipientStatus.pkAlias && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/60 border border-emerald-500/30 truncate max-w-[140px]" title={recipientStatus.pkAlias}>
+                                  PK: {recipientStatus.pkAlias.split("@")[0]}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* VKN Yazıldıkça Filtrelenen Mevcut Cariler Açılır Listesi */}
@@ -6383,67 +6445,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               })}
                             </div>
                           )}
-
-                        {/* Mevcut Cariden Dolduruldu Bildirimi */}
-                        {matchedManualContactId && (
-                          <div className="mt-1.5 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>Kayıtlı cariden ünvan, e-posta ve adres dolduruldu</span>
-                          </div>
-                        )}
-
-                        {/* Cari Çıkmazsa Kullanıcıya Sorarak Sorgulama Onayı */}
-                        {(manualTaxNumber.length === 10 || manualTaxNumber.length === 11) &&
-                          manualTaxNumber !== "11111111111" &&
-                          filteredContactsByManualVkn.length === 0 &&
-                          dismissedVknQueryPrompt !== manualTaxNumber &&
-                          lastQueriedManualVknRef.current !== manualTaxNumber && (
-                            <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 shadow-2xs space-y-1.5 max-w-[260px]">
-                              <p className="font-semibold leading-tight">
-                                Bu VKN/TCKN ile kayıtlı cari bulunamadı. GİB / Mysoft üzerinden sorgulama yapılsın mı?
-                              </p>
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  disabled={isCheckingRecipient}
-                                  onClick={() => executeConfirmedVknQuery(manualTaxNumber)}
-                                  className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                  <span>{isCheckingRecipient ? "Sorgulanıyor..." : "Evet, Sorgula"}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDismissedVknQueryPrompt(manualTaxNumber)}
-                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold cursor-pointer"
-                                >
-                                  Hayır
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                        {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
-                          <div
-                            className={`mt-1.5 p-1.5 rounded-lg border text-[11px] flex items-center justify-between gap-1.5 animate-fadeIn ${
-                              recipientStatus.isEFaturaUser
-                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
-                                : "bg-sky-500/10 border-sky-500/20 text-sky-700"
-                            }`}
-                          >
-                            <span className="font-semibold truncate">
-                              {recipientStatus.isEFaturaUser
-                                ? "🟢 GİB e-Fatura Mükellefi"
-                                : "🔵 e-Arşiv Alıcısı"}
-                              {recipientStatus.activityStatus === "terminated" ? " (⚠️ Terk/Kapalı)" : ""}
-                            </span>
-                            {recipientStatus.pkAlias && (
-                              <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-white/60 border border-emerald-500/30 truncate max-w-[140px]" title={recipientStatus.pkAlias}>
-                                PK: {recipientStatus.pkAlias.split("@")[0]}
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
 
                       {/* Vergi Dairesi */}
