@@ -7,6 +7,7 @@ import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalcul
 import {
   formatAddressWithBranch,
   getCompanyHeadquartersAddress,
+  getCompanySubBranchAddressLines,
   resolveBranchAddressFromBranches,
 } from "../utils/storage";
 import { Logo } from "./Logo";
@@ -95,14 +96,7 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
     getCompanyHeadquartersAddress(companySettings) ||
     companySettings?.address ||
     "-";
-  const resolvedSellerBranch = resolveBranchAddressFromBranches({
-    branchId: invoice.branchId,
-    branchCode: invoice.branchCode,
-    branchName: invoice.branchName,
-    fallbackBranchAddress: invoice.branchAddress,
-  });
-  const sellerBranchName = (invoice.branchName || resolvedSellerBranch.branchName || "").trim();
-  const sellerBranchAddress = (resolvedSellerBranch.branchAddress || "").trim();
+  const sellerSubBranchAddressLines = getCompanySubBranchAddressLines();
   const sellerTaxNo =
     companySettings?.vkn ||
     companySettings?.tckn ||
@@ -166,14 +160,12 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
             <p className="text-slate-600 line-clamp-2 text-[8.5px]">
               <strong className="text-slate-800">Merkez:</strong> {sellerHqAddress}
             </p>
-            {(sellerBranchName || sellerBranchAddress) && (
-              <p className="text-purple-800 font-semibold line-clamp-2 text-[8.5px]">
-                <strong className="font-bold">
-                  Şube{sellerBranchName ? ` (${sellerBranchName})` : ""}:
-                </strong>{" "}
-                {sellerBranchAddress || "-"}
+            {sellerSubBranchAddressLines.map((sbLine, idx) => (
+              <p key={idx} className="text-purple-800 font-semibold line-clamp-2 text-[8px]">
+                <strong className="font-bold">{sbLine.split(":")[0]}:</strong>{" "}
+                {sbLine.split(":").slice(1).join(":").trim()}
               </p>
-            )}
+            ))}
             <p className="text-slate-700 font-semibold text-[8.5px]">
               VD: {companySettings?.taxOffice || "-"} • VKN:{" "}
               <span className="font-mono font-bold">{sellerTaxNo}</span>
@@ -370,6 +362,15 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
                 ? "e-Arşiv izni kapsamında elektronik ortamda iletilmiştir."
                 : "5070 sayılı Kanun gereği elektronik imzalıdır."}
             </p>
+            {sellerSubBranchAddressLines.length > 0 && (
+              <div className="pt-1 border-t border-slate-300/60 mt-1 space-y-0.5 text-[7.5px] font-medium">
+                {sellerSubBranchAddressLines.map((sbLine, idx) => (
+                  <p key={idx} className="leading-tight">
+                    • {sbLine}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
           {cssConfig.signatureZone === "bottom_left" && signatureNode}
         </div>

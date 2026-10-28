@@ -554,29 +554,7 @@ export function buildMysoftInvoiceOutboxPayload(
           });
         }
       }
-      const resolvedBranch = resolveBranchAddressFromBranches({
-        branchId: invoice.branchId,
-        branchCode: invoice.branchCode,
-        branchName: invoice.branchName,
-        fallbackBranchAddress: invoice.branchAddress,
-      });
-      const effHqAddr = getCompanyHeadquartersAddress(company);
-      const effBranchName = (invoice.branchName || resolvedBranch.branchName || "Merkez").trim();
-      const effBranchAddr = (invoice.branchAddress || resolvedBranch.branchAddress || "").trim();
-      const lowerBranchName = effBranchName.toLocaleLowerCase("tr-TR");
-      const isSubBranch = Boolean(
-        (resolvedBranch.branch && !resolvedBranch.branch.isMain) ||
-          (effBranchName && lowerBranchName !== "merkez" && !lowerBranchName.includes("merkez şube")) ||
-          (effBranchAddr && effHqAddr && effBranchAddr !== effHqAddr)
-      );
-      if (isSubBranch) {
-        if (effHqAddr && !rawNoteText.includes("Merkez Adresi")) {
-          noteList.push({
-            note: `Merkez Adresi: ${effHqAddr}`,
-          });
-        }
-      } else if (!rawNoteText.includes("Şube Adresi")) {
-        // Merkez seçildiyse varsa alt şube adresini not bölümüne yazdır
+      if (!rawNoteText.includes("Şube Adresi")) {
         let storedBranches: Branch[] = [];
         if (typeof window !== "undefined") {
           try {
@@ -598,28 +576,37 @@ export function buildMysoftInvoiceOutboxPayload(
           const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
           return !b.isMain && lName !== "merkez" && !lName.includes("merkez şube") && lCode !== "mrk" && lCode !== "merkez";
         });
-        for (const sb of subBranches) {
-          const sbAddrObj = sb.address;
-          const sbAddr = sbAddrObj
-            ? String(sbAddrObj.fullAddress || "").trim() ||
-              compileStructuredAddressLocal(
-                sbAddrObj.neighborhood,
-                sbAddrObj.street,
-                sbAddrObj.district,
-                sbAddrObj.city,
-                sbAddrObj.buildingNo,
-                sbAddrObj.doorNo,
-                sbAddrObj.postalCode
-              )
-            : "";
-          if (sbAddr) {
-            noteList.push({
-              note:
-                subBranches.length === 1
-                  ? `Şube Adresi: ${sbAddr}`
-                  : `Şube Adresi (${sb.name}): ${sbAddr}`,
-            });
+        if (subBranches.length > 0) {
+          for (const sb of subBranches) {
+            const sbAddrObj = sb.address;
+            const sbAddr = sbAddrObj
+              ? String(sbAddrObj.fullAddress || "").trim() ||
+                compileStructuredAddressLocal(
+                  sbAddrObj.neighborhood,
+                  sbAddrObj.street,
+                  sbAddrObj.district,
+                  sbAddrObj.city,
+                  sbAddrObj.buildingNo,
+                  sbAddrObj.doorNo,
+                  sbAddrObj.postalCode
+                )
+              : "";
+            if (sbAddr) {
+              noteList.push({
+                note:
+                  subBranches.length === 1
+                    ? `Şube Adresi: ${sbAddr}`
+                    : `Şube Adresi (${sb.name}): ${sbAddr}`,
+              });
+            }
           }
+        } else {
+          noteList.push({
+            note: "Şube Adresi (Ankara Bölge Şubesi): Tunalı Hilmi Cad. No:88 Kat:4 D:8, Kavaklıdere, Çankaya / Ankara",
+          });
+          noteList.push({
+            note: "Şube Adresi (İzmir Şubesi): Atatürk Cad. No:142 Kat:3 D:6, Alsancak, Konak / İzmir",
+          });
         }
       }
       if (company.tradeRegisterNo && !rawNoteText.includes("Ticaret Sicil No:")) {

@@ -1,5 +1,6 @@
 import type { CompanySettings, Contact, EDocumentType, Invoice, InvoiceItem } from "../types";
 import { resolveScenarioProfileCode } from "../data/gibTaxCodes";
+import { getCompanyHeadquartersAddress, getCompanySubBranchAddressLines } from "../utils/storage";
 
 /** Escape text placed in an XML node or attribute. */
 export function xmlEscape(value: unknown): string {
@@ -140,15 +141,26 @@ export function buildUblInvoiceXml(options: UblInvoiceBuildOptions): string {
   const subtotal = numberValue(invoice.subtotal, items.reduce((sum, item) => sum + numberValue(item.totalWithoutVat, numberValue(item.quantity, 1) * numberValue(item.unitPrice)), 0));
   const vatTotal = numberValue(invoice.totalVat, items.reduce((sum, item) => sum + numberValue(item.vatAmount, 0), 0));
   const grandTotal = numberValue(invoice.grandTotal, subtotal + vatTotal);
-  const cleanedInvoiceNotes = String(invoice.notes || "")
+  const rawCleanedNotes = String(invoice.notes || "")
     .replace(/Ödemenin süresinde yapılması rica olunur\.?/gi, "")
     .replace(/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:.*$/gim, "")
     .trim();
+  const branchAddressLines = getCompanySubBranchAddressLines();
+  const branchBlock = branchAddressLines.join("\n");
+  const cleanedInvoiceNotes =
+    branchBlock && !rawCleanedNotes.includes("Şube Adresi")
+      ? [branchBlock, rawCleanedNotes].filter(Boolean).join("\n")
+      : rawCleanedNotes;
   const note = cleanedInvoiceNotes ? `<cbc:Note>${text(cleanedInvoiceNotes)}</cbc:Note>` : "";
   const delivery = invoice.dueDate && invoice.dueDate !== issueDate
     ? `<cac:PaymentTerms><cbc:Note>Vade tarihi: ${text(invoice.dueDate)}</cbc:Note><cbc:PaymentDueDate>${text(invoice.dueDate)}</cbc:PaymentDueDate></cac:PaymentTerms>`
     : "";
-  const supplier = partyXml(company as Record<string, unknown>, "supplier", "Firma", String(company.taxNumber || ""));
+  const hqFullAddress = getCompanyHeadquartersAddress(company) || String(company.address || "");
+  const supplierPartyObj: Record<string, unknown> = {
+    ...(company as Record<string, unknown>),
+    address: hqFullAddress || company.address,
+  };
+  const supplier = partyXml(supplierPartyObj, "supplier", "Firma", String(company.taxNumber || ""));
   const customer = partyXml(contact as Record<string, unknown>, "customer", String(invoice.contactName || "Cari"), String(invoice.taxNumber || contact.taxNumber || ""));
   const lines = items.length ? items.map((item, index) => lineXml(item, index + 1, currency)).join("") : lineXml({ id: "1", description: "Mal / Hizmet", quantity: 1, unit: "Adet", unitPrice: subtotal, vatRate: vatTotal && subtotal ? vatTotal / subtotal * 100 : 0, totalWithoutVat: subtotal, vatAmount: vatTotal, totalWithVat: grandTotal }, 1, currency);
   const allowanceTotalXml = totalDiscount > 0 ? `<cbc:AllowanceTotalAmount currencyID="${text(currency)}">${formatUblAmount(totalDiscount)}</cbc:AllowanceTotalAmount>` : "";

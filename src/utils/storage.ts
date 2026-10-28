@@ -1275,11 +1275,119 @@ export function getStoredData(targetCompanyId?: string) {
     };
   }
 
+  const syncedBranchesForCompany = (() => {
+    const scopedKey = isDefault ? STORAGE_KEYS.BRANCHES : `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
+    const rawBranches: Branch[] = (() => {
+      if (isDefault) {
+        const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
+        if (Array.isArray(stored) && stored.length > 0) {
+          const merged = [...stored];
+          for (const initB of initialBranches) {
+            const existingIdx = merged.findIndex((b) => b.id === initB.id || b.code === initB.code);
+            if (existingIdx === -1) {
+              merged.push(initB);
+            } else {
+              const cur = merged[existingIdx];
+              const curAddr: Partial<NonNullable<Branch["address"]>> = cur.address || {};
+              const initAddr: Partial<NonNullable<Branch["address"]>> = initB.address || {};
+              merged[existingIdx] = {
+                ...cur,
+                address: {
+                  country: initAddr.country || curAddr.country || "Türkiye",
+                  ...initAddr,
+                  ...curAddr,
+                  fullAddress: curAddr.fullAddress || initAddr.fullAddress || "",
+                  street: curAddr.street || initAddr.street,
+                  neighborhood: curAddr.neighborhood || initAddr.neighborhood,
+                  buildingNo: curAddr.buildingNo || initAddr.buildingNo,
+                  doorNo: curAddr.doorNo || initAddr.doorNo,
+                  city: curAddr.city || initAddr.city || "İstanbul",
+                  district: curAddr.district || initAddr.district || "",
+                },
+              };
+            }
+          }
+          return merged;
+        }
+        return initialBranches;
+      }
+      const existingRaw = safeGetStorageItem(scopedKey);
+      if (existingRaw) {
+        try {
+          const parsed = JSON.parse(existingRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (_) {}
+      }
+      return [];
+    })();
+
+    const filteredBranches = rawBranches;
+
+    const hqFullAddress =
+      getCompanyHeadquartersAddress(loadedSettings) ||
+      loadedSettings.address ||
+      compMeta.address ||
+      `${loadedSettings.city || compMeta.city || "İstanbul"} / ${loadedSettings.district || compMeta.district || "Merkez"}`;
+
+    const hqAddress = {
+      country: loadedSettings.country || loadedSettings.addressDetails?.country || "Türkiye",
+      city: loadedSettings.city || loadedSettings.addressDetails?.city || compMeta.city || "İstanbul",
+      district: loadedSettings.district || loadedSettings.addressDetails?.district || compMeta.district || "Merkez",
+      neighborhood: loadedSettings.neighborhood || loadedSettings.addressDetails?.neighborhood || compMeta.neighborhood || "",
+      street: loadedSettings.street || loadedSettings.addressDetails?.street || compMeta.street || "",
+      buildingNo: loadedSettings.buildingNo || loadedSettings.addressDetails?.buildingNo || compMeta.buildingNo || "",
+      doorNo: loadedSettings.doorNo || loadedSettings.addressDetails?.doorNo || compMeta.doorNo || "",
+      postalCode: loadedSettings.postalCode || loadedSettings.addressDetails?.postalCode || compMeta.postalCode || "",
+      fullAddress: hqFullAddress,
+    };
+
+    const existingMain = filteredBranches.find((b) => b.isMain) || filteredBranches[0];
+    const mainBranch: Branch = existingMain
+      ? {
+          ...existingMain,
+          code: existingMain.code || "MRK-001",
+          name: "Merkez",
+          isMain: true,
+          phone: loadedSettings.phone || existingMain.phone || compMeta.phone || "",
+          email: loadedSettings.email || existingMain.email || compMeta.email || "",
+          address: hqAddress,
+        }
+      : {
+          id: isDefault ? "br_1" : `br_main_${activeCompId}`,
+          code: "MRK-001",
+          name: "Merkez",
+          isMain: true,
+          managerName:
+            compMeta.companyType === "sahis"
+              ? compMeta.companyName?.split("-")[0]?.trim() || "İşletme Sahibi"
+              : "Merkez Yönetimi",
+          phone: loadedSettings.phone || compMeta.phone || "",
+          email: loadedSettings.email || compMeta.email || "",
+          status: "active",
+          address: hqAddress,
+          createdAt: new Date().toISOString().split("T")[0],
+        };
+
+    const otherBranches = filteredBranches
+      .filter((b) => b.id !== mainBranch.id && !b.isMain)
+      .map((b) => ({ ...b, isMain: false }));
+
+    const syncedBranches: Branch[] = [mainBranch, ...otherBranches];
+    safeSet(scopedKey, syncedBranches);
+    return syncedBranches;
+  })();
+
+  const normalizedInvoices = Array.isArray(storedInvoices)
+    ? storedInvoices.map((inv) =>
+        normalizeInvoiceHeadquartersAndBranchAddresses(inv, loadedSettings, syncedBranchesForCompany)
+      )
+    : [];
+
   return {
     settings: loadedSettings,
     contacts: normalizedContacts,
     accounts: loadedAccounts,
-    invoices: storedInvoices,
+    invoices: normalizedInvoices,
     transactions: loadedTransactions,
     products: storedProducts,
     quotes: getCompanyScoped<Quote[]>(STORAGE_KEYS.QUOTES, initialQuotes, []),
@@ -1287,107 +1395,7 @@ export function getStoredData(targetCompanyId?: string) {
     waybills: getCompanyScoped<Waybill[]>(STORAGE_KEYS.WAYBILLS, initialWaybills, []),
     cheques: storedCheques,
     promissoryNotes: storedNotes,
-    branches: (() => {
-      const scopedKey = isDefault ? STORAGE_KEYS.BRANCHES : `${STORAGE_KEYS.BRANCHES}_${activeCompId}`;
-      const rawBranches: Branch[] = (() => {
-        if (isDefault) {
-          const stored = get<Branch[]>(STORAGE_KEYS.BRANCHES, initialBranches);
-          if (Array.isArray(stored) && stored.length > 0) {
-            const merged = [...stored];
-            for (const initB of initialBranches) {
-              const existingIdx = merged.findIndex((b) => b.id === initB.id || b.code === initB.code);
-              if (existingIdx === -1) {
-                merged.push(initB);
-              } else {
-                const cur = merged[existingIdx];
-                const curAddr: Partial<NonNullable<Branch["address"]>> = cur.address || {};
-                const initAddr: Partial<NonNullable<Branch["address"]>> = initB.address || {};
-                merged[existingIdx] = {
-                  ...cur,
-                  address: {
-                    country: initAddr.country || curAddr.country || "Türkiye",
-                    ...initAddr,
-                    ...curAddr,
-                    fullAddress: curAddr.fullAddress || initAddr.fullAddress || "",
-                    street: curAddr.street || initAddr.street,
-                    neighborhood: curAddr.neighborhood || initAddr.neighborhood,
-                    buildingNo: curAddr.buildingNo || initAddr.buildingNo,
-                    doorNo: curAddr.doorNo || initAddr.doorNo,
-                    city: curAddr.city || initAddr.city || "İstanbul",
-                    district: curAddr.district || initAddr.district || "",
-                  },
-                };
-              }
-            }
-            return merged;
-          }
-          return initialBranches;
-        }
-        const existingRaw = safeGetStorageItem(scopedKey);
-        if (existingRaw) {
-          try {
-            const parsed = JSON.parse(existingRaw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-          } catch (_) {}
-        }
-        return [];
-      })();
-
-      const filteredBranches = rawBranches;
-
-      const hqFullAddress =
-        getCompanyHeadquartersAddress(loadedSettings) ||
-        loadedSettings.address ||
-        compMeta.address ||
-        `${loadedSettings.city || compMeta.city || "İstanbul"} / ${loadedSettings.district || compMeta.district || "Merkez"}`;
-
-      const hqAddress = {
-        country: loadedSettings.country || loadedSettings.addressDetails?.country || "Türkiye",
-        city: loadedSettings.city || loadedSettings.addressDetails?.city || compMeta.city || "İstanbul",
-        district: loadedSettings.district || loadedSettings.addressDetails?.district || compMeta.district || "Merkez",
-        neighborhood: loadedSettings.neighborhood || loadedSettings.addressDetails?.neighborhood || compMeta.neighborhood || "",
-        street: loadedSettings.street || loadedSettings.addressDetails?.street || compMeta.street || "",
-        buildingNo: loadedSettings.buildingNo || loadedSettings.addressDetails?.buildingNo || compMeta.buildingNo || "",
-        doorNo: loadedSettings.doorNo || loadedSettings.addressDetails?.doorNo || compMeta.doorNo || "",
-        postalCode: loadedSettings.postalCode || loadedSettings.addressDetails?.postalCode || compMeta.postalCode || "",
-        fullAddress: hqFullAddress,
-      };
-
-      const existingMain = filteredBranches.find((b) => b.isMain) || filteredBranches[0];
-      const mainBranch: Branch = existingMain
-        ? {
-            ...existingMain,
-            code: existingMain.code || "MRK-001",
-            name: "Merkez",
-            isMain: true,
-            phone: loadedSettings.phone || existingMain.phone || compMeta.phone || "",
-            email: loadedSettings.email || existingMain.email || compMeta.email || "",
-            address: hqAddress,
-          }
-        : {
-            id: isDefault ? "br_1" : `br_main_${activeCompId}`,
-            code: "MRK-001",
-            name: "Merkez",
-            isMain: true,
-            managerName:
-              compMeta.companyType === "sahis"
-                ? compMeta.companyName?.split("-")[0]?.trim() || "İşletme Sahibi"
-                : "Merkez Yönetimi",
-            phone: loadedSettings.phone || compMeta.phone || "",
-            email: loadedSettings.email || compMeta.email || "",
-            status: "active",
-            address: hqAddress,
-            createdAt: new Date().toISOString().split("T")[0],
-          };
-
-      const otherBranches = filteredBranches
-        .filter((b) => b.id !== mainBranch.id && !b.isMain)
-        .map((b) => ({ ...b, isMain: false }));
-
-      const syncedBranches: Branch[] = [mainBranch, ...otherBranches];
-      safeSet(scopedKey, syncedBranches);
-      return syncedBranches;
-    })(),
+    branches: syncedBranchesForCompany,
     warehouses: (() => {
       if (isDefault) {
         const stored = get<Warehouse[]>(STORAGE_KEYS.WAREHOUSES, initialWarehouses);
@@ -2296,6 +2304,134 @@ export function resolveBranchAddressFromBranches(options: {
 }
 
 /**
+ * Returns formatted branch address note lines ("Şube Adresi (Şube Adı): ...")
+ * for all active non-main branches of a company.
+ */
+export function getCompanySubBranchAddressLines(
+  branches?: Branch[],
+  companyId?: string
+): string[] {
+  let list = branches;
+  if (!Array.isArray(list) || list.length === 0) {
+    try {
+      const targetCompId = companyId || getActiveCompanyId();
+      const isDefault = !targetCompId || targetCompId === DEFAULT_COMPANY.id;
+      const key = isDefault ? STORAGE_KEYS.BRANCHES : `${STORAGE_KEYS.BRANCHES}_${targetCompId}`;
+      const raw = safeGetStorageItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = parsed;
+      }
+      if ((!list || list.length === 0) && isDefault) {
+        list = initialBranches;
+      }
+    } catch {
+      list = [];
+    }
+  }
+
+  let safeList = Array.isArray(list) && list.length > 0 ? list : initialBranches;
+  let subBranches = safeList.filter((b) => {
+    if (!b || b.status === "passive") return false;
+    const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
+    const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
+    return (
+      !b.isMain &&
+      lName !== "merkez" &&
+      !lName.includes("merkez şube") &&
+      lCode !== "mrk" &&
+      lCode !== "merkez"
+    );
+  });
+
+  if (subBranches.length === 0) {
+    subBranches = initialBranches.filter((b) => !b.isMain && b.status !== "passive");
+  }
+
+  return subBranches
+    .map((sb) => {
+      const sbAddr = String(getBranchAddressFromBranchItem(sb) || "")
+        .replace(/\s*—\s*Şube:\s*.*$/i, "")
+        .replace(/\s*-\s*Şube:\s*.*$/i, "")
+        .replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "")
+        .trim();
+      if (!sbAddr) return "";
+      const sbName = String(sb.name || "").trim();
+      const sbLabel = sbName && sbName.toLocaleLowerCase("tr-TR") !== "şube" ? ` (${sbName})` : "";
+      return subBranches.length === 1
+        ? `Şube Adresi: ${sbAddr}`
+        : `Şube Adresi${sbLabel}: ${sbAddr}`;
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Ensures:
+ * 1. Every sales (gelir) invoice exits from the company's headquarters address (Merkez Adres).
+ * 2. Every invoice (both sales and purchase) includes all active branch addresses in its notes.
+ */
+export function normalizeInvoiceHeadquartersAndBranchAddresses(
+  inv: Invoice,
+  settings?: Partial<CompanySettings> | null,
+  branches?: Branch[]
+): Invoice {
+  if (!inv) return inv;
+
+  const safeBranches = Array.isArray(branches) && branches.length > 0 ? branches : initialBranches;
+  const mainBranch =
+    safeBranches.find((b) => {
+      const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
+      const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
+      return (
+        b.isMain ||
+        lName === "merkez" ||
+        lName.includes("merkez şube") ||
+        lCode === "mrk" ||
+        lCode === "merkez"
+      );
+    }) || safeBranches[0];
+
+  const hqAddress =
+    getCompanyHeadquartersAddress(settings) ||
+    getBranchAddressFromBranchItem(mainBranch) ||
+    String(settings?.address || "").trim() ||
+    "Büyükdere Cad. No:195 Maya Plaza Kat:8, Mecidiyeköy, Şişli / İstanbul";
+
+  const branchLines = getCompanySubBranchAddressLines(safeBranches);
+  const branchBlock = branchLines.join("\n");
+
+  const branchLineRegex =
+    /^(?:Merkez Adresi|Firma Merkez Adresi|Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi)/i;
+  const forbiddenNoteLineRegex =
+    /^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:/i;
+
+  const existingLines = String(inv.notes || "")
+    .split("\n")
+    .map((l) => l.trimEnd())
+    .filter((l) => Boolean(l.trim()) && !forbiddenNoteLineRegex.test(l.trim()) && !branchLineRegex.test(l.trim()));
+
+  const updatedNotes = [branchBlock, ...existingLines].filter(Boolean).join("\n").trim();
+
+  if (inv.type === "sales") {
+    return {
+      ...inv,
+      branchId: mainBranch?.id || "br_1",
+      branchName: "Merkez",
+      branchCode: mainBranch?.code || "MRK-001",
+      branchAddress: hqAddress,
+      branchCity: settings?.city || mainBranch?.address?.city || "İstanbul",
+      branchDistrict: settings?.district || mainBranch?.address?.district || "Şişli",
+      notes: updatedNotes,
+    };
+  }
+
+  return {
+    ...inv,
+    notes: updatedNotes,
+  };
+}
+
+/**
  * Searches all companies' Cari Hesaplar (CONTACTS) and registered companies (COMPANIES_LIST)
  * for a matching VKN or TCKN, returning its saved taxOffice, city, district, neighborhood, and open address.
  */
@@ -2594,18 +2730,33 @@ export function syncAllCompaniesAndUsersData(): {
         if (Array.isArray(companyData.invoices) && companyData.invoices.length > 0) {
           let invoicesChanged = false;
           const updatedInvoices = companyData.invoices.map((inv) => {
-            if (inv.customerCity || inv.customerDistrict) {
+            let nextInv = inv;
+            if (nextInv.customerCity || nextInv.customerDistrict) {
               const nextAddr = appendCityDistrictToAddress(
-                inv.customerAddress,
-                inv.customerCity,
-                inv.customerDistrict
+                nextInv.customerAddress,
+                nextInv.customerCity,
+                nextInv.customerDistrict
               );
-              if (nextAddr && nextAddr !== inv.customerAddress) {
+              if (nextAddr && nextAddr !== nextInv.customerAddress) {
                 invoicesChanged = true;
-                return { ...inv, customerAddress: nextAddr };
+                nextInv = { ...nextInv, customerAddress: nextAddr };
               }
             }
-            return inv;
+            const normalizedInv = normalizeInvoiceHeadquartersAndBranchAddresses(
+              nextInv,
+              mergedSettings,
+              companyData.branches
+            );
+            if (
+              normalizedInv.branchId !== nextInv.branchId ||
+              normalizedInv.branchName !== nextInv.branchName ||
+              normalizedInv.branchCode !== nextInv.branchCode ||
+              normalizedInv.branchAddress !== nextInv.branchAddress ||
+              normalizedInv.notes !== nextInv.notes
+            ) {
+              invoicesChanged = true;
+            }
+            return normalizedInv;
           });
           if (invoicesChanged) {
             saveStoredData("INVOICES", updatedInvoices, normalizedComp.id);

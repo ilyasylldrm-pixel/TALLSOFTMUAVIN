@@ -358,6 +358,16 @@ export function generateMonthlyIntegratedData() {
       const isReceipt = invIdx % 3 === 0;
       const docKind: Invoice["docKind"] = isReceipt ? "receipt" : "invoice";
 
+      const demoBranchAddressesNote =
+        "Şube Adresi (Ankara Bölge Şubesi): Tunalı Hilmi Cad. No:88 Kat:4 D:8, Kavaklıdere, Çankaya / Ankara\nŞube Adresi (İzmir Şubesi): Atatürk Cad. No:142 Kat:3 D:6, Alsancak, Konak / İzmir";
+      const baseNoteText = isSales
+        ? isReceipt
+          ? `Sayın ${contact.name}, ${m.name} 2026 dönemi perakende satış ve gelir fişidir (${items.length} kalem).`
+          : `Sayın ${contact.name}, ${m.name} 2026 dönemi e-Fatura / e-Arşiv satış faturasıdır (${items.length} kalem).`
+        : isReceipt
+          ? `${m.name} 2026 dönemi ${purchaseExpenseCategory || "masraf"} fişidir (${items.length} kalem).`
+          : `${m.name} 2026 dönemi ${purchaseExpenseCategory || "tedarikçi"} alım faturası (${items.length} kalem).`;
+
       const inv: Invoice = {
         id: `inv_${invCounter}`,
         invoiceNumber: isSales
@@ -370,6 +380,14 @@ export function generateMonthlyIntegratedData() {
         type: isSales ? "sales" : "purchase",
         docKind,
         expenseCategory: purchaseExpenseCategory,
+        branchId: isSales ? "br_1" : undefined,
+        branchName: isSales ? "Merkez" : undefined,
+        branchCode: isSales ? "MRK-001" : undefined,
+        branchAddress: isSales
+          ? "Büyükdere Cad. No:195 Maya Plaza Kat:8, Mecidiyeköy, Şişli / İstanbul"
+          : undefined,
+        branchCity: isSales ? "İstanbul" : undefined,
+        branchDistrict: isSales ? "Şişli" : undefined,
         contactId: contact.id,
         contactName: contact.name,
         taxNumber: contact.taxNumber || "1234567890",
@@ -383,13 +401,7 @@ export function generateMonthlyIntegratedData() {
         remainingAmount,
         status,
         currency: "TRY",
-        notes: isSales
-          ? isReceipt
-            ? `Sayın ${contact.name}, ${m.name} 2026 dönemi perakende satış ve gelir fişidir (${items.length} kalem).`
-            : `Sayın ${contact.name}, ${m.name} 2026 dönemi e-Fatura / e-Arşiv satış faturasıdır (${items.length} kalem).`
-          : isReceipt
-            ? `${m.name} 2026 dönemi ${purchaseExpenseCategory || "masraf"} fişidir (${items.length} kalem).`
-            : `${m.name} 2026 dönemi ${purchaseExpenseCategory || "tedarikçi"} alım faturası (${items.length} kalem).`,
+        notes: `${demoBranchAddressesNote}\n${baseNoteText}`,
         createdAt: issueDate,
       };
 

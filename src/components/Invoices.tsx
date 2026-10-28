@@ -81,6 +81,7 @@ import {
   compileStructuredAddress,
   getCompanyHeadquartersAddress,
   getBranchAddressFromBranchItem,
+  getCompanySubBranchAddressLines,
 } from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile } from "../utils/logoUpload";
@@ -424,10 +425,31 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return [];
   }, [branches]);
 
+  const mainCompanyBranch = React.useMemo(
+    () =>
+      effectiveBranchesList.find((b) => {
+        const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
+        const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
+        return (
+          b.isMain ||
+          lName === "merkez" ||
+          lName.includes("merkez şube") ||
+          lCode === "mrk" ||
+          lCode === "merkez"
+        );
+      }) ||
+      effectiveBranchesList.find((b) => b.status !== "passive") ||
+      effectiveBranchesList[0] ||
+      null,
+    [effectiveBranchesList]
+  );
+
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
-    const firstActive =
-      branches.find((b) => b.status !== "passive") || branches[0];
-    return firstActive?.id || "";
+    const mainActive =
+      branches.find((b) => b.isMain && b.status !== "passive") ||
+      branches.find((b) => b.status !== "passive") ||
+      branches[0];
+    return mainActive?.id || "";
   });
   const [customBranchAddressOverride, setCustomBranchAddressOverride] = useState<string>("");
 
@@ -444,27 +466,37 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return initContact?.branchCode || "";
   });
 
-  const selectedCompanyBranch = React.useMemo(
-    () =>
+  // Bütün gelir faturaları (sales) her zaman Merkez adresten çıkış yapar
+  const selectedCompanyBranch = React.useMemo(() => {
+    if (invType === "sales") {
+      return mainCompanyBranch;
+    }
+    return (
       effectiveBranchesList.find((b) => b.id === selectedBranchId) ||
-      effectiveBranchesList.find((b) => b.status !== "passive") ||
-      effectiveBranchesList[0] ||
-      null,
-    [effectiveBranchesList, selectedBranchId]
-  );
+      mainCompanyBranch
+    );
+  }, [invType, effectiveBranchesList, selectedBranchId, mainCompanyBranch]);
 
-  // Şube Adresi: Yalnızca Şubeler (branches) bölümündeki seçili şubenin adresinden alınır
   const computedCompanyBranchAddress = React.useMemo(() => {
-    if (!selectedCompanyBranch) return "";
-    return getBranchAddressFromBranchItem(selectedCompanyBranch);
-  }, [selectedCompanyBranch]);
+    if (invType === "sales") {
+      return (
+        companyHeadquartersAddress ||
+        (mainCompanyBranch ? getBranchAddressFromBranchItem(mainCompanyBranch) : "")
+      );
+    }
+    if (!selectedCompanyBranch) return companyHeadquartersAddress || "";
+    return getBranchAddressFromBranchItem(selectedCompanyBranch) || companyHeadquartersAddress || "";
+  }, [invType, companyHeadquartersAddress, mainCompanyBranch, selectedCompanyBranch]);
 
-  const resolvedCompanyBranchAddress = React.useMemo(
-    () => (customBranchAddressOverride.trim() ? customBranchAddressOverride.trim() : computedCompanyBranchAddress),
-    [customBranchAddressOverride, computedCompanyBranchAddress]
-  );
+  const resolvedCompanyBranchAddress = React.useMemo(() => {
+    if (invType === "sales") {
+      return companyHeadquartersAddress || computedCompanyBranchAddress;
+    }
+    return customBranchAddressOverride.trim()
+      ? customBranchAddressOverride.trim()
+      : computedCompanyBranchAddress;
+  }, [invType, companyHeadquartersAddress, customBranchAddressOverride, computedCompanyBranchAddress]);
 
-  // Clean address helper & automatic counterpart (Merkez <-> Şube) note line builder for Gelir (Sales) Invoices
   const cleanBranchAddressText = useCallback((rawAddr: string) => {
     return String(rawAddr || "")
       .replace(/\s*—\s*Şube:\s*.*$/i, "")
@@ -479,6 +511,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   );
 
   const isMainBranchSelected = React.useMemo(() => {
+    if (invType === "sales") return true;
     if (!selectedCompanyBranch) return true;
     const lowerName = String(selectedCompanyBranch.name || "").trim().toLocaleLowerCase("tr-TR");
     const lowerCode = String(selectedCompanyBranch.code || "").trim().toLocaleLowerCase("tr-TR");
@@ -489,51 +522,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
         lowerCode === "mrk" ||
         lowerCode === "merkez"
     );
-  }, [selectedCompanyBranch]);
+  }, [invType, selectedCompanyBranch]);
 
+  // Bütün faturalara şube adresleri otomatik eklenir
   const selectedBranchNoteLine = React.useMemo(() => {
-    if (!isMainBranchSelected) {
-      // Şube adresi seçilmişse -> Merkez adresini not bölümüne yazdır
-      const mainBr = effectiveBranchesList.find((b) => {
-        const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
-        const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
-        return b.isMain || lName === "merkez" || lName.includes("merkez şube") || lCode === "mrk" || lCode === "merkez";
-      });
-      const mainBrAddr = mainBr ? cleanBranchAddressText(getBranchAddressFromBranchItem(mainBr)) : "";
-      const hqAddr = cleanBranchAddressText(companyHeadquartersAddress) || mainBrAddr;
-      if (!hqAddr) return "";
-      return `Merkez Adresi: ${hqAddr}`;
-    } else {
-      // Merkez adresi seçildiyse -> Şube adresini not bölümüne yazdır
-      const subBranches = effectiveBranchesList.filter((b) => {
-        if (b.status === "passive") return false;
-        if (selectedCompanyBranch && b.id === selectedCompanyBranch.id) return false;
-        const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
-        const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
-        const isMain = b.isMain || lName === "merkez" || lName.includes("merkez şube") || lCode === "mrk" || lCode === "merkez";
-        return !isMain;
-      });
-      if (subBranches.length === 0) return "";
-      const subLines = subBranches
-        .map((sb) => {
-          const sbAddr = cleanBranchAddressText(getBranchAddressFromBranchItem(sb));
-          if (!sbAddr) return "";
-          const sbName = String(sb.name || "").trim();
-          const sbLabel = sbName && sbName.toLocaleLowerCase("tr-TR") !== "şube" ? ` (${sbName})` : "";
-          return subBranches.length === 1
-            ? `Şube Adresi: ${sbAddr}`
-            : `Şube Adresi${sbLabel}: ${sbAddr}`;
-        })
-        .filter(Boolean);
-      return subLines.join("\n");
-    }
-  }, [
-    isMainBranchSelected,
-    effectiveBranchesList,
-    companyHeadquartersAddress,
-    selectedCompanyBranch,
-    cleanBranchAddressText,
-  ]);
+    const lines = getCompanySubBranchAddressLines(effectiveBranchesList);
+    return lines.join("\n");
+  }, [effectiveBranchesList]);
 
   const syncBranchAddressIntoNotes = useCallback((prevNotes: string, branchLine: string) => {
     const branchLineRegex =
@@ -552,46 +547,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
         .trim();
     }
 
-    const hasExisting = lines.some((l) => branchLineRegex.test(l.trim()));
-    if (hasExisting) {
-      let replaced = false;
-      const nextLines: string[] = [];
-      for (const l of lines) {
-        if (branchLineRegex.test(l.trim())) {
-          if (!replaced) {
-            nextLines.push(branchLine);
-            replaced = true;
-          }
-        } else {
-          nextLines.push(l);
-        }
-      }
-      return nextLines.join("\n").trim();
-    }
-    const trimmedPrev = lines.join("\n").trim();
+    const filteredLines = lines.filter((l) => !branchLineRegex.test(l.trim()));
+    const trimmedPrev = filteredLines.join("\n").trim();
     return trimmedPrev ? `${branchLine}\n${trimmedPrev}` : branchLine;
   }, []);
 
-  // Automatically sync counterpart address (Merkez <-> Şube) into notes whenever Gelir Faturası (sales) is active
+  // Bütün faturalara (hem gelir hem gider) şube adreslerini otomatik olarak ekle
   useEffect(() => {
     if (!detailNav.isDetailView) return;
-    if (invType === "sales") {
-      setNotes((prev) => {
-        const next = syncBranchAddressIntoNotes(prev, selectedBranchNoteLine);
-        return next === prev ? prev : next;
-      });
-    } else if (invType === "purchase") {
-      setNotes((prev) => {
-        const branchLineRegex =
-          /^(?:Merkez Adresi|Firma Merkez Adresi|Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi|Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)/i;
-        const filtered = (prev || "")
-          .split("\n")
-          .filter((l) => !branchLineRegex.test(l.trim()))
-          .join("\n")
-          .trim();
-        return filtered === prev ? prev : filtered;
-      });
-    }
+    setNotes((prev) => {
+      const next = syncBranchAddressIntoNotes(prev, selectedBranchNoteLine);
+      return next === prev ? prev : next;
+    });
   }, [detailNav.isDetailView, invType, selectedBranchNoteLine, syncBranchAddressIntoNotes]);
 
   // Quick inline branch creation / editing inside the invoice form
@@ -2602,12 +2569,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setFormDocKind(inv.docKind || "invoice");
 
     const defaultCompanyBranch =
-      effectiveBranchesList.find((b) => b.id === inv.branchId) ||
-      effectiveBranchesList.find((b) => b.isMain && b.status !== "passive") ||
-      effectiveBranchesList.find((b) => b.status !== "passive") ||
-      effectiveBranchesList[0];
+      inv.type === "sales"
+        ? mainCompanyBranch
+        : effectiveBranchesList.find((b) => b.id === inv.branchId) ||
+          mainCompanyBranch;
     setSelectedBranchId(defaultCompanyBranch?.id || "__MERKEZ__");
-    setCustomBranchAddressOverride(inv.branchAddress || "");
+    setCustomBranchAddressOverride(
+      inv.type === "sales" ? "" : inv.branchAddress || ""
+    );
 
     const matchedContact = contacts.find((c) => c.id === inv.contactId);
     const isManual = Boolean(
@@ -2867,9 +2836,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     let finalNotes = String(notes || "")
       .replace(/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:.*$/gim, "")
       .trim();
-    if (invType === "sales") {
-      finalNotes = syncBranchAddressIntoNotes(finalNotes, selectedBranchNoteLine);
-    }
+    finalNotes = syncBranchAddressIntoNotes(finalNotes, selectedBranchNoteLine);
     const safeDelivery = String(deliveryAddress || "").trim();
     if (hasDifferentDeliveryAddress && safeDelivery) {
       const deliveryTag = `Teslimat Adresi: ${safeDelivery}`;
@@ -2934,12 +2901,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
         companySettings.iban ||
         undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
-      branchId: selectedCompanyBranch?.id,
-      branchName: selectedCompanyBranch?.name,
-      branchCode: selectedCompanyBranch?.code,
-      branchAddress: resolvedCompanyBranchAddress || undefined,
-      branchCity: selectedCompanyBranch?.address?.city || undefined,
-      branchDistrict: selectedCompanyBranch?.address?.district || undefined,
+      branchId: invType === "sales" ? (mainCompanyBranch?.id || "br_1") : selectedCompanyBranch?.id,
+      branchName: invType === "sales" ? "Merkez" : selectedCompanyBranch?.name,
+      branchCode: invType === "sales" ? (mainCompanyBranch?.code || "MRK-001") : selectedCompanyBranch?.code,
+      branchAddress:
+        invType === "sales"
+          ? companyHeadquartersAddress || resolvedCompanyBranchAddress || undefined
+          : resolvedCompanyBranchAddress || undefined,
+      branchCity:
+        invType === "sales"
+          ? companySettings.city || mainCompanyBranch?.address?.city || undefined
+          : selectedCompanyBranch?.address?.city || undefined,
+      branchDistrict:
+        invType === "sales"
+          ? companySettings.district || mainCompanyBranch?.address?.district || undefined
+          : selectedCompanyBranch?.address?.district || undefined,
       contactId: customerMode === "manual" ? "manual_draft" : contactId,
       contactName: customerMode === "manual"
         ? (manualCustomerName.trim() || "Münferit Müşteri")
@@ -3458,9 +3434,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     let finalNotes = String(notes || "")
       .replace(/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:.*$/gim, "")
       .trim();
-    if (invType === "sales") {
-      finalNotes = syncBranchAddressIntoNotes(finalNotes, selectedBranchNoteLine);
-    }
+    finalNotes = syncBranchAddressIntoNotes(finalNotes, selectedBranchNoteLine);
     const safeDelivery = String(deliveryAddress || "").trim();
     if (hasDifferentDeliveryAddress && safeDelivery) {
       const deliveryTag = `Teslimat Adresi: ${safeDelivery}`;
@@ -3544,12 +3518,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
         companySettings.iban ||
         undefined,
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
-      branchId: selectedCompanyBranch?.id,
-      branchName: selectedCompanyBranch?.name,
-      branchCode: selectedCompanyBranch?.code,
-      branchAddress: resolvedCompanyBranchAddress || undefined,
-      branchCity: selectedCompanyBranch?.address?.city || undefined,
-      branchDistrict: selectedCompanyBranch?.address?.district || undefined,
+      branchId: invType === "sales" ? (mainCompanyBranch?.id || "br_1") : selectedCompanyBranch?.id,
+      branchName: invType === "sales" ? "Merkez" : selectedCompanyBranch?.name,
+      branchCode: invType === "sales" ? (mainCompanyBranch?.code || "MRK-001") : selectedCompanyBranch?.code,
+      branchAddress:
+        invType === "sales"
+          ? companyHeadquartersAddress || resolvedCompanyBranchAddress || undefined
+          : resolvedCompanyBranchAddress || undefined,
+      branchCity:
+        invType === "sales"
+          ? companySettings.city || mainCompanyBranch?.address?.city || undefined
+          : selectedCompanyBranch?.address?.city || undefined,
+      branchDistrict:
+        invType === "sales"
+          ? companySettings.district || mainCompanyBranch?.address?.district || undefined
+          : selectedCompanyBranch?.address?.district || undefined,
       contactId: finalContactId,
       contactName: effectiveContactName,
       taxNumber: effectiveTaxNumber || undefined,
@@ -6450,83 +6433,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 ) : (
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
-                    {/* Üst Satır: Mysoft Şube Sorgulama, Fatura Tarihi, Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
+                    {/* Üst Satır: VKN/TCKN, Müşteri Adı, Fatura Tarihi */}
                     <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
-                      {/* Mysoft Şube Bilgileri Sorgulama Alanı */}
-                      <div className="w-fit max-w-full shrink-0">
-                        <div className="flex items-center justify-between gap-2 h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Mysoft Şube Bilgileri</span>
-                          </label>
-                          {branchAddressUpdateToast && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded truncate max-w-[180px]">
-                              ✓ Güncellendi
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {effectiveBranchesList.length > 0 && (
-                            <select
-                              value={selectedCompanyBranch?.id || selectedBranchId}
-                              onChange={(e) => {
-                                setSelectedBranchId(e.target.value);
-                                setCustomBranchAddressOverride("");
-                              }}
-                              title={
-                                selectedBranchCleanAddress
-                                  ? `Seçili Şube Adresi: ${selectedBranchCleanAddress}`
-                                  : "Faturanın düzenleneceği merkez / şube seçimi"
-                              }
-                              className="h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs cursor-pointer max-w-[170px] truncate"
-                            >
-                              {effectiveBranchesList.map((b) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.name}
-                                  {b.code ? ` (${b.code})` : ""}
-                                  {b.address?.city ? ` - ${b.address.city}` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void handleQueryBranchInfoFromMysoft()}
-                            disabled={isQueryingMysoftBranches}
-                            title={
-                              selectedBranchCleanAddress
-                                ? `Mysoft'tan Şube Bilgilerini Sorgula • Mevcut: ${selectedBranchCleanAddress}`
-                                : "Mysoft'tan merkez ve şube bilgilerini sorgula ve getir"
-                            }
-                            className="h-[38px] px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                          >
-                            {isQueryingMysoftBranches ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
-                            )}
-                            <span>Şube Sorgula</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Fatura Tarihi */}
-                      <div className="w-fit shrink-0">
-                        <div className="flex items-center h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Fatura Tarihi *</span>
-                          </label>
-                        </div>
-                        <input
-                          type="date"
-                          required
-                          value={issueDate}
-                          onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
-
                       {/* VKN / TCKN No */}
                       <div className="relative w-fit max-w-full shrink-0">
                         <div className="flex items-center gap-2 h-5 mb-1">
@@ -6680,6 +6588,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           onChange={(e) => setManualCustomerName(e.target.value)}
                           style={{ width: "410px" }}
                           className="w-[410px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
+                        />
+                      </div>
+
+                      {/* Fatura Tarihi */}
+                      <div className="w-fit shrink-0">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Fatura Tarihi *</span>
+                          </label>
+                        </div>
+                        <input
+                          type="date"
+                          required
+                          value={issueDate}
+                          onChange={(e) => setIssueDate(e.target.value)}
+                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
                     </div>
@@ -7367,25 +7292,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         Fatura Alt Notu / Şartlar & Yasal Şerhler
                       </label>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {invType === "sales" && selectedBranchNoteLine && (
+                        {selectedBranchNoteLine && (
                           <button
                             type="button"
                             onClick={() =>
                               setNotes((prev) => syncBranchAddressIntoNotes(prev, selectedBranchNoteLine))
                             }
                             className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all"
-                            title={
-                              !isMainBranchSelected
-                                ? "Merkez adresini not alanına yansıt / güncelle"
-                                : "Şube adresini not alanına yansıt / güncelle"
-                            }
+                            title="Şube adreslerini not alanına yansıt / güncelle"
                           >
                             <MapPin className="w-3 h-3" />
-                            <span>
-                              {!isMainBranchSelected
-                                ? "Merkez Adresini Nota Yansıt"
-                                : "Şube Adresini Nota Yansıt"}
-                            </span>
+                            <span>Şube Adreslerini Nota Yansıt</span>
                           </button>
                         )}
                         {(() => {
@@ -7414,62 +7331,50 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* Gelir Faturası Kesilirken Not Kısmı Üzerinden Hızlı Şube Seçimi & Otomatik Merkez/Şube Adresi */}
-                    {invType === "sales" && (
-                      <div className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-200 space-y-1.5">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Faturanın Kesildiği Şube:</span>
+                    {/* Merkez Çıkış Adresi & Otomatik Şube Adresleri Özeti */}
+                    <div className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-200 space-y-1.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="text-[11px] font-extrabold text-purple-950 flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <span>
+                            {invType === "sales"
+                              ? "Çıkış Adresi: Merkez (Tüm Gelir Faturaları Merkez Adresten Çıkış Yapar)"
+                              : "Firma Merkez & Şube Adres Bilgileri"}
                           </span>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <select
-                              value={selectedCompanyBranch?.id || selectedBranchId}
-                              onChange={(e) => {
-                                setSelectedBranchId(e.target.value);
-                                setCustomBranchAddressOverride("");
-                              }}
-                              className="bg-white border border-purple-300 focus:border-purple-600 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-900 cursor-pointer shadow-2xs"
-                            >
-                              {effectiveBranchesList
-                                .filter((b) => b.status !== "passive" || b.id === selectedBranchId)
-                                .map((b) => {
-                                  const brCity = b.address?.city || "";
-                                  const brDist = b.address?.district || "";
-                                  const locStr = [brDist, brCity].filter(Boolean).join("/");
-                                  return (
-                                    <option key={b.id} value={b.id}>
-                                      {b.isMain ? "🏢 [MERKEZ]" : "🏬 [ŞUBE]"} {b.name} ({b.code}){locStr ? ` - ${locStr}` : ""}
-                                    </option>
-                                  );
-                                })}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={handleOpenQuickBranchEdit}
-                              className="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                              title="Seçili şube veya merkez adresini düzenle / güncelle"
-                            >
-                              <Edit2 className="w-2.5 h-2.5" />
-                              <span>Adres Güncelle</span>
-                            </button>
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="bg-white border border-purple-300 rounded-lg px-2.5 py-0.5 text-[10px] font-bold text-purple-900 shadow-2xs">
+                            🏢 [MERKEZ] {mainCompanyBranch?.name || "Merkez"} ({mainCompanyBranch?.code || "MRK-001"})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleOpenQuickBranchEdit}
+                            className="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            title="Merkez veya şube adresini düzenle / güncelle"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" />
+                            <span>Adres Güncelle</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-slate-700 flex items-start gap-1.5">
+                        <Building2 className="w-3 h-3 text-purple-600 shrink-0 mt-0.5" />
+                        <span>
+                          <strong className="text-slate-900">Merkez Çıkış Adresi:</strong>{" "}
+                          {companyHeadquartersAddress || resolvedCompanyBranchAddress || "-"}
+                        </span>
+                      </div>
+                      {selectedBranchNoteLine && (
+                        <div className="text-[10px] text-purple-900 flex items-start gap-1.5 pt-1 border-t border-purple-200/70">
+                          <MapPin className="w-3 h-3 text-purple-600 shrink-0 mt-0.5" />
+                          <div className="whitespace-pre-line">
+                            <strong>Faturaya Eklenen Şube Adresleri:</strong>
+                            {"\n"}
+                            {selectedBranchNoteLine}
                           </div>
                         </div>
-                        {selectedBranchNoteLine && (
-                          <div className="text-[10px] text-purple-900 flex items-start gap-1.5">
-                            <MapPin className="w-3 h-3 text-purple-600 shrink-0 mt-0.5" />
-                            <span>
-                              <strong>
-                                {!isMainBranchSelected
-                                  ? "Not Kısmına Gelen Merkez Adresi:"
-                                  : "Not Kısmına Gelen Şube Adresi:"}
-                              </strong>{" "}
-                              {selectedBranchNoteLine}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     <textarea
                       rows={3}
@@ -9051,9 +8956,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                       )}
                                     </span>
                                   )}
-                                  {inv.branchName && (
+                                  {inv.type === "sales" && (
                                     <span className="text-[10px] text-purple-700 font-semibold block mt-0.5">
-                                      🏢 Düzenleyen Şube: {inv.branchName}{inv.branchCode ? ` (${inv.branchCode})` : ""}{inv.branchAddress ? ` — ${inv.branchAddress}` : ""}
+                                      🏢 Çıkış Adresi (Merkez): {inv.branchAddress || companyHeadquartersAddress}
+                                    </span>
+                                  )}
+                                  {selectedBranchNoteLine && (
+                                    <span className="text-[10px] text-indigo-700 font-medium block mt-0.5 whitespace-pre-line">
+                                      🏬 {selectedBranchNoteLine}
                                     </span>
                                   )}
                                 </div>
@@ -9164,8 +9074,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   <span className="text-slate-400 block text-[10px] font-bold uppercase tracking-wider">
                                     Fatura Notları & Bilgilendirme
                                   </span>
-                                  <p className="text-slate-700 font-medium leading-relaxed">
-                                    {inv.notes || "Fatura için ilave not eklenmemiş."}
+                                  <p className="text-slate-700 font-medium leading-relaxed whitespace-pre-line">
+                                    {inv.notes || selectedBranchNoteLine || "Fatura için ilave not eklenmemiş."}
                                   </p>
                                   {inv.paymentTerms && (
                                     <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">

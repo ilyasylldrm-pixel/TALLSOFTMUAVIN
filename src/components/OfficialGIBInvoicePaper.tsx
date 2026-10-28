@@ -62,6 +62,7 @@ import {
   getActiveCompanyId,
   getCompaniesList,
   getCompanyHeadquartersAddress,
+  getCompanySubBranchAddressLines,
   getStoredData,
   resolveBranchAddressFromBranches,
   saveStoredData,
@@ -1183,10 +1184,11 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
       (sellerBranchName && sellerBranchName.toLocaleLowerCase("tr-TR") !== "merkez") ||
       (sellerBranchAddress && sellerBranchAddress !== sellerHqAddress)
   );
-  const sellerDisplayAddress =
-    isSellerSubBranchSelected && sellerBranchAddress
-      ? sellerBranchAddress
-      : sellerBranchAddress || sellerHqAddress;
+  const sellerDisplayAddress = sellerHqAddress;
+  const sellerSubBranchAddressLines = useMemo(
+    () => getCompanySubBranchAddressLines(undefined, activeCompanyId),
+    [activeCompanyId]
+  );
   const sellerTaxOffice = companySettings?.taxOffice || "-";
   const sellerTaxNo =
     companySettings?.vkn ||
@@ -1545,15 +1547,21 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
               >
                 {sellerTitle}
               </p>
-              {isSellerSubBranchSelected && sellerBranchName && (
-                <p className="font-bold text-slate-800 text-[10px]">
-                  <strong className="text-slate-900">Şube:</strong> {sellerBranchName}
-                  {sellerBranchCode ? ` (${sellerBranchCode})` : ""}
-                </p>
-              )}
               <p className="text-slate-700 leading-snug">
-                <strong className="text-slate-900">Adres:</strong> {sellerDisplayAddress}
+                <strong className="text-slate-900">Merkez Adresi:</strong> {sellerDisplayAddress}
               </p>
+              {sellerSubBranchAddressLines.length > 0 && (
+                <div className="space-y-0.5 text-[10px] text-slate-700">
+                  {sellerSubBranchAddressLines.map((sbLine, sbIdx) => (
+                    <p key={sbIdx} className="leading-snug">
+                      <strong className="text-slate-900">
+                        {sbLine.split(":")[0]}:
+                      </strong>{" "}
+                      {sbLine.split(":").slice(1).join(":").trim()}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               <div className="pt-1 border-t border-slate-200 space-y-0.5 text-[10px]">
                 {(companySettings?.phone || companySettings?.email) && (
@@ -2140,62 +2148,13 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
                     !/^(?:Esnaf Sicil No|Esnaf Sicil Numarası|İşletme Merkezi)\s*:/i.test(l)
                 );
 
-              let finalLines = rawLines;
-              if (invType === "sales") {
-                const branchOrHqLineRegex =
-                  /^(?:Merkez Adresi|Firma Merkez Adresi|Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi)/i;
-                const cleanHq = String(sellerHqAddress || "")
-                  .replace(/\s*—\s*Şube:\s*.*$/i, "")
-                  .replace(/\s*-\s*Şube:\s*.*$/i, "")
-                  .replace(/\s*\((?:Şube|Merkez):[^)]+\)\s*$/i, "")
-                  .trim();
-
-                let counterpartLine = "";
-                if (isSellerSubBranchSelected) {
-                  // Şube adresi seçilmişse merkez adresini not bölümüne yazdır
-                  if (cleanHq && cleanHq !== "Merkez Adres") {
-                    counterpartLine = `Merkez Adresi: ${cleanHq}`;
-                  }
-                } else {
-                  // Merkez adresi seçildiyse şube adresini not bölümüne yazdır
-                  const companyData = getStoredData(activeCompanyId);
-                  const branchesList = Array.isArray(companyData?.branches) ? companyData.branches : [];
-                  const subBranches = branchesList.filter((b) => {
-                    if (b.status === "passive") return false;
-                    const lName = String(b.name || "").trim().toLocaleLowerCase("tr-TR");
-                    const lCode = String(b.code || "").trim().toLocaleLowerCase("tr-TR");
-                    return (
-                      !b.isMain &&
-                      lName !== "merkez" &&
-                      !lName.includes("merkez şube") &&
-                      lCode !== "mrk" &&
-                      lCode !== "merkez"
-                    );
-                  });
-                  if (subBranches.length > 0) {
-                    const subLines = subBranches
-                      .map((sb) => {
-                        const resolvedSb = resolveBranchAddressFromBranches({
-                          branchId: sb.id,
-                          branches: branchesList,
-                          companyId: activeCompanyId,
-                        });
-                        const sbAddr = String(resolvedSb.branchAddress || "").trim();
-                        if (!sbAddr) return "";
-                        return subBranches.length === 1
-                          ? `Şube Adresi: ${sbAddr}`
-                          : `Şube Adresi (${sb.name}): ${sbAddr}`;
-                      })
-                      .filter(Boolean);
-                    counterpartLine = subLines.join("\n");
-                  }
-                }
-
-                const strippedLines = rawLines.filter((l) => !branchOrHqLineRegex.test(l));
-                finalLines = counterpartLine
-                  ? [counterpartLine, ...strippedLines]
-                  : strippedLines;
-              }
+              const branchOrHqLineRegex =
+                /^(?:Merkez Adresi|Firma Merkez Adresi|Şube Adresi|Faturanın Kesildiği Şube|Kesilen Şube Adresi|Düzenleyen Merkez\s*\/\s*Şube|Merkez\s*\/\s*Şube Adresi)/i;
+              const counterpartLine = sellerSubBranchAddressLines.join("\n");
+              const strippedLines = rawLines.filter((l) => !branchOrHqLineRegex.test(l));
+              const finalLines = counterpartLine
+                ? [counterpartLine, ...strippedLines]
+                : strippedLines;
 
               const cleanedNotes = finalLines.join("\n").trim();
               if (!cleanedNotes) return null;
