@@ -68,6 +68,7 @@ import {
   getMysoftMappingDefaults,
   getNextMysoftInvoiceNumber,
   getLocalNextSequentialInvoiceNumber,
+  validateSequentialInvoiceNumber,
 } from "../services/mysoftEDocumentService";
 import {
   OfficialGIBInvoicePaper,
@@ -1440,128 +1441,338 @@ export const Settings: React.FC<SettingsProps> = ({
                 </div>
 
                 {availablePrefixes.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <select
-                      value={
-                        availablePrefixes.some(
-                          (p) =>
-                            String(p.prefix || "").toUpperCase() ===
-                            String(formData.eFaturaPrefix || "").toUpperCase(),
-                        )
-                          ? String(formData.eFaturaPrefix || "").toUpperCase()
-                          : String(availablePrefixes[0]?.prefix || "").toUpperCase()
-                      }
-                      onChange={(e) => {
-                        const pfx = e.target.value.toUpperCase().slice(0, 3);
-                        const chosen = availablePrefixes.find(
-                          (p) => String(p.prefix || "").toUpperCase() === pfx,
-                        );
-                        const yr = new Date().getFullYear();
-                        const rowCur =
-                          chosen?.currentNumber !== undefined ? Number(chosen.currentNumber) : 0;
-                        const nextDocNo =
-                          chosen?.nextNumber || `${pfx}${yr}${String(rowCur + 1).padStart(9, "0")}`;
-                        const lastDocNo =
-                          chosen?.lastNumber ||
-                          (rowCur > 0 ? `${pfx}${yr}${String(rowCur).padStart(9, "0")}` : "");
-                        const isEArs =
-                          Number(chosen?.edocumentType) === 2 ||
-                          String(chosen?.edocumentType || "").toUpperCase().includes("ARSIV");
+                  (() => {
+                    const currentYear = new Date().getFullYear();
+                    const activeDefaultPfx = String(
+                      formData.defaultInvoicePrefix || formData.eFaturaPrefix || "",
+                    )
+                      .trim()
+                      .toUpperCase()
+                      .slice(0, 3);
+                    const selectedPfx = availablePrefixes.some(
+                      (p) =>
+                        String(p.prefix || "").toUpperCase() ===
+                        String(formData.eFaturaPrefix || "").toUpperCase(),
+                    )
+                      ? String(formData.eFaturaPrefix || "").toUpperCase()
+                      : String(availablePrefixes[0]?.prefix || "").toUpperCase();
 
-                        if (isEArs) {
-                          setEArsivLastNumber(lastDocNo);
-                          const updated: CompanySettings = {
-                            ...formData,
-                            eArsivPrefix: pfx,
-                            eArsivNextNumber: nextDocNo,
-                          };
-                          persistFormatParamsToCompanyAndSettings(updated);
-                        } else {
-                          setEFaturaLastNumber(lastDocNo);
-                          const updated: CompanySettings = {
-                            ...formData,
-                            eFaturaPrefix: pfx,
-                            defaultInvoicePrefix: pfx,
-                            eFaturaNextNumber: nextDocNo,
-                          };
-                          persistFormatParamsToCompanyAndSettings(updated);
-                        }
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold cursor-pointer"
-                    >
-                      {availablePrefixes.map((p, idx) => {
-                        const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
-                        const yr = p.year || new Date().getFullYear();
-                        const curNum = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
-                        const nextNo =
-                          p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
-                        const lastNo =
-                          p.lastNumber ||
-                          (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
-                        const isEArs =
-                          Number(p.edocumentType) === 2 ||
-                          String(p.edocumentType || "").toUpperCase().includes("ARSIV");
-                        return (
-                          <option key={`${pfx}_${idx}`} value={pfx}>
-                            {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"}) — Sıradaki: {nextNo}
-                            {lastNo ? ` | Son: ${lastNo}` : ""}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <div className="flex flex-wrap gap-1.5 pt-0.5">
-                      {availablePrefixes.map((p, idx) => {
-                        const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
-                        const yr = p.year || new Date().getFullYear();
-                        const curNum = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
-                        const nextNo =
-                          p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
-                        const lastNo =
-                          p.lastNumber ||
-                          (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
-                        const isEArs =
-                          Number(p.edocumentType) === 2 ||
-                          String(p.edocumentType || "").toUpperCase().includes("ARSIV");
-                        const isSelected = isEArs
-                          ? String(formData.eArsivPrefix || "").toUpperCase() === pfx
-                          : String(formData.eFaturaPrefix || "").toUpperCase() === pfx;
-                        return (
-                          <button
-                            key={`badge_${pfx}_${idx}`}
-                            type="button"
-                            onClick={() => {
-                              if (isEArs) {
-                                setEArsivLastNumber(lastNo);
-                                const updated: CompanySettings = {
-                                  ...formData,
-                                  eArsivPrefix: pfx,
-                                  eArsivNextNumber: nextNo,
-                                };
-                                persistFormatParamsToCompanyAndSettings(updated);
-                              } else {
-                                setEFaturaLastNumber(lastNo);
-                                const updated: CompanySettings = {
-                                  ...formData,
-                                  eFaturaPrefix: pfx,
-                                  defaultInvoicePrefix: pfx,
-                                  eFaturaNextNumber: nextNo,
-                                };
-                                persistFormatParamsToCompanyAndSettings(updated);
+                    const activeSeriesRow =
+                      availablePrefixes.find(
+                        (p) => String(p.prefix || "").toUpperCase() === selectedPfx,
+                      ) || availablePrefixes[0];
+
+                    const activeIsEArs =
+                      Number(activeSeriesRow?.edocumentType) === 2 ||
+                      String(activeSeriesRow?.edocumentType || "")
+                        .toUpperCase()
+                        .includes("ARSIV");
+                    const activeCurNum =
+                      activeSeriesRow?.currentNumber !== undefined
+                        ? Number(activeSeriesRow.currentNumber)
+                        : 0;
+                    const activeYr = activeSeriesRow?.year || currentYear;
+                    const activeLastNo =
+                      activeSeriesRow?.lastNumber ||
+                      (activeCurNum > 0
+                        ? `${selectedPfx}${activeYr}${String(activeCurNum).padStart(9, "0")}`
+                        : activeIsEArs
+                          ? eArsivLastNumber
+                          : eFaturaLastNumber);
+                    const activeExpectedNextNo =
+                      activeSeriesRow?.nextNumber ||
+                      `${selectedPfx}${activeYr}${String(activeCurNum + 1).padStart(9, "0")}`;
+                    const currentEnteredNextNo = activeIsEArs
+                      ? formData.eArsivNextNumber || activeExpectedNextNo
+                      : formData.eFaturaNextNumber || activeExpectedNextNo;
+
+                    const seqCheck = validateSequentialInvoiceNumber({
+                      enteredNumber: currentEnteredNextNo,
+                      expectedPrefix: selectedPfx,
+                      lastUsedNumber: activeLastNo,
+                      lastUsedSequence: activeCurNum,
+                      year: activeYr,
+                    });
+
+                    const isMarkedDefault =
+                      activeDefaultPfx === selectedPfx &&
+                      String(formData.eFaturaPrefix || "").toUpperCase() === selectedPfx;
+
+                    const applySeriesSelection = (
+                      p: (typeof availablePrefixes)[number],
+                      markAsDefault = true,
+                    ) => {
+                      const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                      const yr = p.year || currentYear;
+                      const rowCur = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
+                      const nextDocNo =
+                        p.nextNumber || `${pfx}${yr}${String(rowCur + 1).padStart(9, "0")}`;
+                      const lastDocNo =
+                        p.lastNumber ||
+                        (rowCur > 0 ? `${pfx}${yr}${String(rowCur).padStart(9, "0")}` : "");
+                      const isEArs =
+                        Number(p.edocumentType) === 2 ||
+                        String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+
+                      if (isEArs) {
+                        setEArsivLastNumber(lastDocNo);
+                        const updated: CompanySettings = {
+                          ...formData,
+                          eArsivPrefix: pfx,
+                          eArsivNextNumber: nextDocNo,
+                          ...(markAsDefault
+                            ? {
+                                eFaturaPrefix: pfx,
+                                defaultInvoicePrefix: pfx,
+                                eFaturaNextNumber: nextDocNo,
                               }
+                            : {}),
+                        };
+                        persistFormatParamsToCompanyAndSettings(updated);
+                      } else {
+                        setEFaturaLastNumber(lastDocNo);
+                        const updated: CompanySettings = {
+                          ...formData,
+                          eFaturaPrefix: pfx,
+                          ...(markAsDefault ? { defaultInvoicePrefix: pfx } : {}),
+                          eFaturaNextNumber: nextDocNo,
+                        };
+                        persistFormatParamsToCompanyAndSettings(updated);
+                      }
+                    };
+
+                    return (
+                      <div className="space-y-2.5">
+                        {/* Seri Seçim Kutusu + Aktif Seriyi Varsayılan Olarak İşaretle */}
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedPfx}
+                            onChange={(e) => {
+                              const pfx = e.target.value.toUpperCase().slice(0, 3);
+                              const chosen = availablePrefixes.find(
+                                (p) => String(p.prefix || "").toUpperCase() === pfx,
+                              );
+                              if (chosen) applySeriesSelection(chosen, true);
                             }}
-                            className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold border cursor-pointer transition-all flex items-center gap-1 ${
-                              isSelected
-                                ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
-                                : "bg-slate-50 hover:bg-purple-50 text-slate-800 border-slate-200"
+                            className="flex-1 bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold cursor-pointer"
+                          >
+                            {availablePrefixes.map((p, idx) => {
+                              const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                              const yr = p.year || currentYear;
+                              const curNum =
+                                p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
+                              const nextNo =
+                                p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
+                              const lastNo =
+                                p.lastNumber ||
+                                (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
+                              const isEArs =
+                                Number(p.edocumentType) === 2 ||
+                                String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                              const isDef = activeDefaultPfx === pfx;
+                              return (
+                                <option key={`${pfx}_${idx}`} value={pfx}>
+                                  {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"})
+                                  {isDef ? " [VARSAYILAN]" : ""} — Sıradaki: {nextNo}
+                                  {lastNo ? ` | Son: ${lastNo}` : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
+                        {/* Aktif Seriyi 'Varsayılan' Olarak İşaretleme Seçim Alanı */}
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-purple-50/70 border border-purple-200">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isMarkedDefault}
+                              onChange={() => {
+                                if (activeSeriesRow) {
+                                  applySeriesSelection(activeSeriesRow, true);
+                                }
+                              }}
+                              className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                            />
+                            <span className="text-[11px] font-bold text-purple-950">
+                              Aktif Seriyi ({selectedPfx}) &lsquo;Varsayılan&rsquo; Olarak İşaretle
+                            </span>
+                          </label>
+                          {isMarkedDefault ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold flex items-center gap-1 shrink-0">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Varsayılan Seri
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeSeriesRow) {
+                                  applySeriesSelection(activeSeriesRow, true);
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold cursor-pointer transition-all shrink-0"
+                            >
+                              Varsayılan Yap
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Mevcut Mysoft Serileri ve Numaraları Listesi + Varsayılan Seçimi */}
+                        <div className="space-y-1">
+                          {availablePrefixes.map((p, idx) => {
+                            const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                            const yr = p.year || currentYear;
+                            const curNum =
+                              p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
+                            const nextNo =
+                              p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
+                            const lastNo =
+                              p.lastNumber ||
+                              (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
+                            const isEArs =
+                              Number(p.edocumentType) === 2 ||
+                              String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                            const isDefaultRow = activeDefaultPfx === pfx;
+                            return (
+                              <div
+                                key={`row_${pfx}_${idx}`}
+                                onClick={() => applySeriesSelection(p, true)}
+                                className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-mono flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                                  isDefaultRow
+                                    ? "bg-purple-50 border-purple-400 text-purple-950 font-bold shadow-2xs"
+                                    : "bg-slate-50 hover:bg-purple-50/50 border-slate-200 text-slate-700"
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                  <input
+                                    type="radio"
+                                    name="default_mysoft_invoice_series"
+                                    checked={isDefaultRow}
+                                    onChange={() => applySeriesSelection(p, true)}
+                                    className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 cursor-pointer shrink-0"
+                                  />
+                                  <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-extrabold">
+                                    {pfx}
+                                  </span>
+                                  <span className="text-slate-500 font-sans font-semibold">
+                                    ({isEArs ? "e-Arşiv" : "e-Fatura"})
+                                  </span>
+                                  <span className="truncate">
+                                    Son: <strong>{lastNo || "Yok"}</strong> → Sıradaki:{" "}
+                                    <strong className="text-purple-700">{nextNo}</strong>
+                                  </span>
+                                </div>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold shrink-0 ${
+                                    isDefaultRow
+                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                      : "bg-white text-slate-600 border border-slate-200"
+                                  }`}
+                                >
+                                  {isDefaultRow ? "Varsayılan ✓" : "Varsayılan Seç"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* E-Fatura Seri Numarası Girişi & Sıralı Numara Kontrolü Uyarısı */}
+                        <div className="pt-1 space-y-1.5">
+                          <div className="flex items-center justify-between gap-1">
+                            <label className="text-[11px] font-bold text-slate-700">
+                              Sıradaki E-Fatura Seri Numarası ({selectedPfx})
+                            </label>
+                            <span className="text-[10px] font-mono text-slate-500">
+                              Mysoft Son No: <strong>{activeLastNo || "Henüz kesilmedi (0)"}</strong>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              maxLength={16}
+                              value={currentEnteredNextNo}
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase().trim();
+                                const updated: CompanySettings = activeIsEArs
+                                  ? {
+                                      ...formData,
+                                      eArsivNextNumber: val,
+                                      ...(isMarkedDefault ? { eFaturaNextNumber: val } : {}),
+                                    }
+                                  : {
+                                      ...formData,
+                                      eFaturaNextNumber: val,
+                                    };
+                                persistFormatParamsToCompanyAndSettings(updated);
+                              }}
+                              placeholder={activeExpectedNextNo}
+                              className={`flex-1 rounded-xl px-2.5 py-2 font-mono text-xs font-bold border transition-all ${
+                                seqCheck.status === "collision" ||
+                                seqCheck.status === "invalid_format" ||
+                                seqCheck.status === "prefix_mismatch"
+                                  ? "bg-red-50/70 border-red-400 text-red-950 focus:ring-red-500"
+                                  : seqCheck.status === "gap"
+                                    ? "bg-amber-50/70 border-amber-400 text-amber-950 focus:ring-amber-500"
+                                    : "bg-slate-50 border-slate-200 text-slate-900"
+                              }`}
+                            />
+                            {seqCheck.hasWarning && seqCheck.expectedNextNumber && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated: CompanySettings = activeIsEArs
+                                    ? {
+                                        ...formData,
+                                        eArsivNextNumber: seqCheck.expectedNextNumber,
+                                        ...(isMarkedDefault
+                                          ? { eFaturaNextNumber: seqCheck.expectedNextNumber }
+                                          : {}),
+                                      }
+                                    : {
+                                        ...formData,
+                                        eFaturaNextNumber: seqCheck.expectedNextNumber,
+                                      };
+                                  persistFormatParamsToCompanyAndSettings(updated);
+                                }}
+                                className="px-2.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold cursor-pointer shrink-0 transition-all"
+                                title="Mysoft en son kullanılan numaraya göre çakışmayan ardışık numarayı ata"
+                              >
+                                Sıradaki No Ata
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Sıralı Numara Kontrolü Uyarısı / Durumu */}
+                          <div
+                            className={`p-2.5 rounded-xl border text-[10px] flex items-start gap-2 ${
+                              seqCheck.status === "collision" ||
+                              seqCheck.status === "invalid_format" ||
+                              seqCheck.status === "prefix_mismatch"
+                                ? "bg-red-50 border-red-200 text-red-900"
+                                : seqCheck.status === "gap"
+                                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                                  : "bg-emerald-50/70 border-emerald-200 text-emerald-900"
                             }`}
                           >
-                            <span>{pfx}</span>
-                            <span className="opacity-85">→ {nextNo}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                            {seqCheck.hasWarning ? (
+                              <AlertTriangle
+                                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                  seqCheck.status === "gap" ? "text-amber-600" : "text-red-600"
+                                }`}
+                              />
+                            ) : (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            )}
+                            <div className="space-y-0.5 min-w-0 flex-1">
+                              <div className="font-extrabold">{seqCheck.title}</div>
+                              <p className="leading-relaxed">{seqCheck.message}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-xl p-2.5 text-[11px] font-medium">
                     {isLoadingSeries

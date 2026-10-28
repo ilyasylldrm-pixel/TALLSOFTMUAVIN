@@ -56,6 +56,7 @@ import {
   listMysoftTenants,
   normalizeMysoftTenantIdentifier,
   readPersistedEDocuments,
+  validateSequentialInvoiceNumber,
 } from "../services/mysoftEDocumentService";
 import {
   buildMysoftInvoiceOutboxPayload,
@@ -6200,16 +6201,83 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           )}
                         </div>
                         {invType === "sales" && !editingInvoiceId && (
-                          <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>
-                              {!sendToMysoft
-                                ? `GYR Serisi → Sıradaki: ${invoiceNumberInput || activeGyrNextNo}`
-                                : mysoftNumberInfo?.lastInvoiceNumber
-                                  ? `Son: ${mysoftNumberInfo.lastInvoiceNumber} → Sıradaki: ${invoiceNumberInput}`
-                                  : `Ardışık No: ${invoiceNumberInput || activeMysoftSerialNumber}`}
-                            </span>
-                          </p>
+                          (() => {
+                            if (!sendToMysoft) {
+                              return (
+                                <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <span>
+                                    {`GYR Serisi → Sıradaki: ${invoiceNumberInput || activeGyrNextNo}`}
+                                  </span>
+                                </p>
+                              );
+                            }
+
+                            const isEArsDoc = isCurrentSalesEArsiv;
+                            const expectedPfx = isEArsDoc
+                              ? selectedEArsivPrefix ||
+                                mysoftMappingDefaults?.eArsivPrefix ||
+                                companySettings?.eArsivPrefix ||
+                                ""
+                              : selectedEFaturaPrefix ||
+                                mysoftMappingDefaults?.eFaturaPrefix ||
+                                companySettings?.eFaturaPrefix ||
+                                "";
+                            const lastUsedNo =
+                              mysoftNumberInfo?.lastInvoiceNumber ||
+                              (isEArsDoc
+                                ? mysoftMappingDefaults?.eArsivLastNumber
+                                : mysoftMappingDefaults?.eFaturaLastNumber);
+
+                            const seqCheck = validateSequentialInvoiceNumber({
+                              enteredNumber: invoiceNumberInput || activeMysoftSerialNumber,
+                              expectedPrefix: expectedPfx,
+                              lastUsedNumber: lastUsedNo,
+                            });
+
+                            if (seqCheck.hasWarning) {
+                              return (
+                                <div
+                                  className={`mt-1.5 p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 max-w-[360px] ${
+                                    seqCheck.status === "gap"
+                                      ? "bg-amber-50 border-amber-300 text-amber-900"
+                                      : "bg-red-50 border-red-300 text-red-900"
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-1.5 min-w-0">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                                    <div className="min-w-0">
+                                      <div className="font-extrabold">{seqCheck.title}</div>
+                                      <p className="leading-snug">{seqCheck.message}</p>
+                                    </div>
+                                  </div>
+                                  {seqCheck.expectedNextNumber && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsManualInvoiceNumber(false);
+                                        setInvoiceNumberInput(seqCheck.expectedNextNumber);
+                                      }}
+                                      className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold shrink-0 cursor-pointer"
+                                    >
+                                      Düzelt
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span>
+                                  {lastUsedNo
+                                    ? `Sıralı Numara Kontrolü: Uygun (Son: ${lastUsedNo} → Sıradaki: ${invoiceNumberInput})`
+                                    : `Sıralı Numara Kontrolü: Uygun (${invoiceNumberInput || activeMysoftSerialNumber})`}
+                                </span>
+                              </p>
+                            );
+                          })()
                         )}
                       </div>
 

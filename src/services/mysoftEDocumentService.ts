@@ -1563,6 +1563,193 @@ export function getLocalNextSequentialInvoiceNumber(
   };
 }
 
+export interface SequentialNumberCheckResult {
+  status: "valid" | "collision" | "gap" | "invalid_format" | "prefix_mismatch";
+  hasWarning: boolean;
+  enteredNumber: string;
+  expectedPrefix: string;
+  lastUsedNumber?: string;
+  lastUsedSequence: number;
+  enteredSequence?: number;
+  expectedNextNumber: string;
+  expectedNextSequence: number;
+  title: string;
+  message: string;
+}
+
+/**
+ * Validates an entered e-Fatura / e-Arşiv serial invoice number against the
+ * last used number returned by the Mysoft API to prevent sequence collisions.
+ */
+export function validateSequentialInvoiceNumber(params: {
+  enteredNumber?: string;
+  expectedPrefix?: string;
+  lastUsedNumber?: string;
+  lastUsedSequence?: number;
+  year?: number;
+}): SequentialNumberCheckResult {
+  const yr = params.year || new Date().getFullYear();
+  const pfx = String(params.expectedPrefix || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 3);
+
+  let parsedLastSeq = 0;
+  let parsedLastPrefix = "";
+  const rawLast = String(params.lastUsedNumber || "")
+    .replace(/\s*\(TASLAK\)\s*$/i, "")
+    .trim()
+    .toUpperCase();
+  const lastMatch = /^([A-Z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawLast);
+  if (lastMatch) {
+    parsedLastPrefix = lastMatch[1].toUpperCase();
+    const lastYr = Number(lastMatch[2]);
+    const seqVal = parseInt(lastMatch[3], 10);
+    if (lastYr === yr && !isNaN(seqVal) && (!pfx || parsedLastPrefix === pfx)) {
+      parsedLastSeq = seqVal;
+    }
+  }
+
+  const activePrefix = pfx || parsedLastPrefix;
+  const resolvedLastSeq = Math.max(Number(params.lastUsedSequence || 0), parsedLastSeq);
+  const resolvedLastNo =
+    resolvedLastSeq > 0 && activePrefix
+      ? `${activePrefix}${yr}${String(resolvedLastSeq).padStart(9, "0")}`
+      : rawLast || undefined;
+
+  const expectedNextSeq = resolvedLastSeq + 1;
+  const expectedNextNumber = activePrefix
+    ? `${activePrefix}${yr}${String(expectedNextSeq).padStart(9, "0")}`
+    : "";
+
+  const entered = String(params.enteredNumber || "")
+    .replace(/\s*\(TASLAK\)\s*$/i, "")
+    .trim()
+    .toUpperCase();
+
+  if (!entered) {
+    return {
+      status: "invalid_format",
+      hasWarning: true,
+      enteredNumber: entered,
+      expectedPrefix: activePrefix,
+      lastUsedNumber: resolvedLastNo,
+      lastUsedSequence: resolvedLastSeq,
+      expectedNextNumber,
+      expectedNextSequence: expectedNextSeq,
+      title: "Sıralı Numara Kontrolü Uyarısı",
+      message: expectedNextNumber
+        ? `Fatura seri numarası boş bırakılamaz. Mysoft son kullanılan numaraya (${resolvedLastNo || "0"}) göre sıradaki numara ${expectedNextNumber} olmalıdır.`
+        : "Fatura seri numarası boş bırakılamaz.",
+    };
+  }
+
+  const enteredMatch = /^([A-Z0-9]{3})(20\d{2})(\d{1,9})$/.exec(entered);
+  if (!enteredMatch || entered.length !== 16) {
+    return {
+      status: "invalid_format",
+      hasWarning: true,
+      enteredNumber: entered,
+      expectedPrefix: activePrefix,
+      lastUsedNumber: resolvedLastNo,
+      lastUsedSequence: resolvedLastSeq,
+      expectedNextNumber,
+      expectedNextSequence: expectedNextSeq,
+      title: "Sıralı Numara Kontrolü: Format Uyarısı",
+      message: expectedNextNumber
+        ? `Girilen numara (${entered}) 16 haneli standart GİB/Mysoft formatında olmalıdır. Önerilen sıradaki numara: ${expectedNextNumber}`
+        : `Girilen numara (${entered}) 16 haneli standart GİB/Mysoft formatında (3 harf seri + 4 hane yıl + 9 hane sıra no) olmalıdır.`,
+    };
+  }
+
+  const enteredPfx = enteredMatch[1].toUpperCase();
+  const enteredYr = Number(enteredMatch[2]);
+  const enteredSeq = parseInt(enteredMatch[3], 10);
+
+  if (activePrefix && enteredPfx !== activePrefix) {
+    return {
+      status: "prefix_mismatch",
+      hasWarning: true,
+      enteredNumber: entered,
+      expectedPrefix: activePrefix,
+      lastUsedNumber: resolvedLastNo,
+      lastUsedSequence: resolvedLastSeq,
+      enteredSequence: enteredSeq,
+      expectedNextNumber,
+      expectedNextSequence: expectedNextSeq,
+      title: "Sıralı Numara Kontrolü: Seri Öneki Uyumsuzluğu",
+      message: `Girilen numaranın seri öneki (${enteredPfx}), aktif seri (${activePrefix}) ile eşleşmiyor. Olması gereken sıradaki numara: ${expectedNextNumber}`,
+    };
+  }
+
+  if (enteredYr !== yr) {
+    return {
+      status: "invalid_format",
+      hasWarning: true,
+      enteredNumber: entered,
+      expectedPrefix: activePrefix,
+      lastUsedNumber: resolvedLastNo,
+      lastUsedSequence: resolvedLastSeq,
+      enteredSequence: enteredSeq,
+      expectedNextNumber,
+      expectedNextSequence: expectedNextSeq,
+      title: "Sıralı Numara Kontrolü: Yıl Uyumsuzluğu",
+      message: `Girilen numaradaki yıl (${enteredYr}), cari dönem yılı (${yr}) ile uyuşmuyor. Beklenen sıradaki numara: ${expectedNextNumber}`,
+    };
+  }
+
+  if (enteredSeq <= 0 || (resolvedLastSeq > 0 && enteredSeq <= resolvedLastSeq)) {
+    return {
+      status: "collision",
+      hasWarning: true,
+      enteredNumber: entered,
+      expectedPrefix: activePrefix,
+      lastUsedNumber: resolvedLastNo,
+      lastUsedSequence: resolvedLastSeq,
+      enteredSequence: enteredSeq,
+      expectedNextNumber,
+      expectedNextSequence: expectedNextSeq,
+      title: "Sıralı Numara Kontrolü: Numara Çakışması Uyarısı!",
+      message: resolvedLastNo
+        ? `Girilen numara (${entered}), Mysoft API tarafından döndürülen en son kullanılan numara (${resolvedLastNo}) ile çakışıyor veya gerisinde kalıyor! Çakışmayı önlemek için sıradaki numara en az ${expectedNextNumber} olmalıdır.`
+        : `Girilen sıra numarası (${entered}) geçersizdir. Sıradaki numara ${expectedNextNumber} olmalıdır.`,
+    };
+  }
+
+  if (enteredSeq > expectedNextSeq) {
+    return {
+      status: "gap",
+      hasWarning: true,
+      enteredNumber: entered,
+      expectedPrefix: activePrefix,
+      lastUsedNumber: resolvedLastNo,
+      lastUsedSequence: resolvedLastSeq,
+      enteredSequence: enteredSeq,
+      expectedNextNumber,
+      expectedNextSequence: expectedNextSeq,
+      title: "Sıralı Numara Kontrolü: Sıra Atlaması Uyarısı",
+      message: `Girilen numara (${entered}), Mysoft API tarafından döndürülen en son kullanılan numaradan (${resolvedLastNo || "Henüz kesilmedi (0)"}) sonra ${enteredSeq - expectedNextSeq} adet sıra atlıyor. Beklenen ardışık numara: ${expectedNextNumber}`,
+    };
+  }
+
+  return {
+    status: "valid",
+    hasWarning: false,
+    enteredNumber: entered,
+    expectedPrefix: activePrefix,
+    lastUsedNumber: resolvedLastNo,
+    lastUsedSequence: resolvedLastSeq,
+    enteredSequence: enteredSeq,
+    expectedNextNumber,
+    expectedNextSequence: expectedNextSeq,
+    title: "Sıralı Numara Kontrolü: Uygun (Çakışma Yok)",
+    message: resolvedLastNo
+      ? `Mysoft API son kullanılan numara (${resolvedLastNo}) ile çakışma yok. Sıradaki ardışık numara (${entered}) doğrulandı.`
+      : `Seri başlangıç numarası (${entered}) doğrulandı, Mysoft API ile çakışma yok.`,
+  };
+}
+
+
 /**
  * Convert a local sales (income) invoice into a MysoftEDocument record for
  * immediate display in the "Giden e-Faturalar" (outgoing e-invoices) module.

@@ -44,6 +44,7 @@ import {
   getMysoftMappingDefaults,
   getNextMysoftInvoiceNumber,
   getLocalNextSequentialInvoiceNumber,
+  validateSequentialInvoiceNumber,
   type MysoftMappingDefaults,
 } from "../services/mysoftEDocumentService";
 import {
@@ -101,6 +102,7 @@ import {
   UserCheck,
   Upload,
   Terminal,
+  AlertTriangle,
 } from "lucide-react";
 
 export type CompanySubTab = "profile" | "companies" | "mysoft" | "branches" | "warehouses" | "settings" | "logs";
@@ -4032,100 +4034,188 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     {/* Editable Official Prefix & Next Sequential Inputs */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                       {/* e-Fatura Card */}
-                      <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                            <FileText className="w-3.5 h-3.5 text-blue-600" />
-                            e-Fatura Resmi Ön Eki ve Sıradaki Sayı
-                          </span>
-                          <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold">
-                            Mysoft Son No: {deskEFaturaLastNo || "Yok (Yeni Seri)"}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2.5">
-                          <div>
-                            <label className="block text-[10px] font-bold text-blue-800 mb-1">
-                              Ön Ek (3 Harf)
-                            </label>
-                            <input
-                              type="text"
-                              maxLength={3}
-                              value={deskEFaturaPrefix}
-                              onChange={(e) => {
-                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-                                setDeskEFaturaPrefix(val);
-                                if (val.length === 3) {
-                                  const seqInfo = getLocalNextSequentialInvoiceNumber("e_fatura", selectedComp.id, val);
-                                  setDeskEFaturaLastNo(seqInfo.lastInvoiceNumber || "");
-                                  setDeskEFaturaNextNo(seqInfo.nextInvoiceNumber);
-                                }
-                              }}
-                              className="w-full h-9 px-2.5 bg-white border border-blue-300 rounded-lg font-mono text-xs font-extrabold text-blue-950 uppercase text-center"
-                              placeholder="GIB"
-                            />
+                      {(() => {
+                        const efatSeqCheck = validateSequentialInvoiceNumber({
+                          enteredNumber: activeEFatNext,
+                          expectedPrefix: deskEFaturaPrefix || activeEFatPrefix,
+                          lastUsedNumber: deskEFaturaLastNo,
+                          year: currentYear,
+                        });
+                        return (
+                          <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                e-Fatura Resmi Ön Eki ve Sıradaki Sayı
+                              </span>
+                              <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold">
+                                Mysoft Son No: {deskEFaturaLastNo || "Yok (Yeni Seri)"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div>
+                                <label className="block text-[10px] font-bold text-blue-800 mb-1">
+                                  Ön Ek (3 Harf)
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={3}
+                                  value={deskEFaturaPrefix}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                    setDeskEFaturaPrefix(val);
+                                    if (val.length === 3) {
+                                      const seqInfo = getLocalNextSequentialInvoiceNumber("e_fatura", selectedComp.id, val);
+                                      setDeskEFaturaLastNo(seqInfo.lastInvoiceNumber || "");
+                                      setDeskEFaturaNextNo(seqInfo.nextInvoiceNumber);
+                                    }
+                                  }}
+                                  className="w-full h-9 px-2.5 bg-white border border-blue-300 rounded-lg font-mono text-xs font-extrabold text-blue-950 uppercase text-center"
+                                  placeholder="Örn: TLL"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="block text-[10px] font-bold text-blue-800 mb-1">
+                                  Programdan Kesilecek Sıradaki Fatura No
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={16}
+                                  value={activeEFatNext}
+                                  onChange={(e) => setDeskEFaturaNextNo(e.target.value.toUpperCase().trim())}
+                                  className={`w-full h-9 px-3 bg-white border rounded-lg font-mono text-xs font-bold ${
+                                    efatSeqCheck.hasWarning
+                                      ? "border-red-400 text-red-950"
+                                      : "border-blue-300 text-blue-950"
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                            <div
+                              className={`p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
+                                efatSeqCheck.hasWarning
+                                  ? efatSeqCheck.status === "gap"
+                                    ? "bg-amber-50 border-amber-200 text-amber-900"
+                                    : "bg-red-50 border-red-200 text-red-900"
+                                  : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                              }`}
+                            >
+                              <div className="flex items-start gap-1.5 min-w-0">
+                                {efatSeqCheck.hasWarning ? (
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                                ) : (
+                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                                )}
+                                <div className="min-w-0">
+                                  <div className="font-extrabold">{efatSeqCheck.title}</div>
+                                  <p>{efatSeqCheck.message}</p>
+                                </div>
+                              </div>
+                              {efatSeqCheck.hasWarning && efatSeqCheck.expectedNextNumber && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeskEFaturaNextNo(efatSeqCheck.expectedNextNumber)}
+                                  className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer"
+                                >
+                                  Düzelt
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="col-span-2">
-                            <label className="block text-[10px] font-bold text-blue-800 mb-1">
-                              Programdan Kesilecek Sıradaki Fatura No
-                            </label>
-                            <input
-                              type="text"
-                              maxLength={16}
-                              value={activeEFatNext}
-                              onChange={(e) => setDeskEFaturaNextNo(e.target.value.toUpperCase().trim())}
-                              className="w-full h-9 px-3 bg-white border border-blue-300 rounded-lg font-mono text-xs font-bold text-blue-950"
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* e-Arşiv Card */}
-                      <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                            <FileText className="w-3.5 h-3.5 text-purple-600" />
-                            e-Arşiv Resmi Ön Eki ve Sıradaki Sayı
-                          </span>
-                          <span className="text-[10px] font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-bold">
-                            Mysoft Son No: {deskEArsivLastNo || "Yok (Yeni Seri)"}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2.5">
-                          <div>
-                            <label className="block text-[10px] font-bold text-purple-800 mb-1">
-                              Ön Ek (3 Harf)
-                            </label>
-                            <input
-                              type="text"
-                              maxLength={3}
-                              value={deskEArsivPrefix}
-                              onChange={(e) => {
-                                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-                                setDeskEArsivPrefix(val);
-                                if (val.length === 3) {
-                                  const seqInfo = getLocalNextSequentialInvoiceNumber("e_arsiv", selectedComp.id, val);
-                                  setDeskEArsivLastNo(seqInfo.lastInvoiceNumber || "");
-                                  setDeskEArsivNextNo(seqInfo.nextInvoiceNumber);
-                                }
-                              }}
-                              className="w-full h-9 px-2.5 bg-white border border-purple-300 rounded-lg font-mono text-xs font-extrabold text-purple-950 uppercase text-center"
-                              placeholder="EAR"
-                            />
+                      {(() => {
+                        const earsSeqCheck = validateSequentialInvoiceNumber({
+                          enteredNumber: activeEArsNext,
+                          expectedPrefix: deskEArsivPrefix || activeEArsPrefix,
+                          lastUsedNumber: deskEArsivLastNo,
+                          year: currentYear,
+                        });
+                        return (
+                          <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-purple-600" />
+                                e-Arşiv Resmi Ön Eki ve Sıradaki Sayı
+                              </span>
+                              <span className="text-[10px] font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-bold">
+                                Mysoft Son No: {deskEArsivLastNo || "Yok (Yeni Seri)"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2.5">
+                              <div>
+                                <label className="block text-[10px] font-bold text-purple-800 mb-1">
+                                  Ön Ek (3 Harf)
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={3}
+                                  value={deskEArsivPrefix}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                    setDeskEArsivPrefix(val);
+                                    if (val.length === 3) {
+                                      const seqInfo = getLocalNextSequentialInvoiceNumber("e_arsiv", selectedComp.id, val);
+                                      setDeskEArsivLastNo(seqInfo.lastInvoiceNumber || "");
+                                      setDeskEArsivNextNo(seqInfo.nextInvoiceNumber);
+                                    }
+                                  }}
+                                  className="w-full h-9 px-2.5 bg-white border border-purple-300 rounded-lg font-mono text-xs font-extrabold text-purple-950 uppercase text-center"
+                                  placeholder="Örn: EAR"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="block text-[10px] font-bold text-purple-800 mb-1">
+                                  Programdan Kesilecek Sıradaki Fatura No
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={16}
+                                  value={activeEArsNext}
+                                  onChange={(e) => setDeskEArsivNextNo(e.target.value.toUpperCase().trim())}
+                                  className={`w-full h-9 px-3 bg-white border rounded-lg font-mono text-xs font-bold ${
+                                    earsSeqCheck.hasWarning
+                                      ? "border-red-400 text-red-950"
+                                      : "border-purple-300 text-purple-950"
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                            <div
+                              className={`p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
+                                earsSeqCheck.hasWarning
+                                  ? earsSeqCheck.status === "gap"
+                                    ? "bg-amber-50 border-amber-200 text-amber-900"
+                                    : "bg-red-50 border-red-200 text-red-900"
+                                  : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                              }`}
+                            >
+                              <div className="flex items-start gap-1.5 min-w-0">
+                                {earsSeqCheck.hasWarning ? (
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                                ) : (
+                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                                )}
+                                <div className="min-w-0">
+                                  <div className="font-extrabold">{earsSeqCheck.title}</div>
+                                  <p>{earsSeqCheck.message}</p>
+                                </div>
+                              </div>
+                              {earsSeqCheck.hasWarning && earsSeqCheck.expectedNextNumber && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeskEArsivNextNo(earsSeqCheck.expectedNextNumber)}
+                                  className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold shrink-0 cursor-pointer"
+                                >
+                                  Düzelt
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="col-span-2">
-                            <label className="block text-[10px] font-bold text-purple-800 mb-1">
-                              Programdan Kesilecek Sıradaki Fatura No
-                            </label>
-                            <input
-                              type="text"
-                              maxLength={16}
-                              value={activeEArsNext}
-                              onChange={(e) => setDeskEArsivNextNo(e.target.value.toUpperCase().trim())}
-                              className="w-full h-9 px-3 bg-white border border-purple-300 rounded-lg font-mono text-xs font-bold text-purple-950"
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
