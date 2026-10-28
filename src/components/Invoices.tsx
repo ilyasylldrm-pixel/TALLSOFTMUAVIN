@@ -5631,72 +5631,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
             <form id="invoice-create-form" onSubmit={handleSaveInvoice} className="space-y-5 min-w-0">
 
 
-              {/* Fatura & Firma Logosu (Sadece Gider Faturası Ekleme Bölümünde Gösterilir) */}
-              {forcedType !== "sales" && invType !== "sales" && (
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex items-center justify-center shrink-0">
-                      <Logo size="sm" src={companySettings?.logoUrl || "/logo.svg"} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-extrabold text-slate-900 truncate">
-                          {companySettings?.companyName || "Firma Logosu & Başlığı"}
-                        </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
-                          Fatura Logosu
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Bilgisayarınızdan yüklediğiniz logo fatura şablonunda, PDF çıktısında ve sistem genelinde kullanılır.
-                      </p>
-                      {logoUploadNotice && (
-                        <p className="text-[11px] font-bold text-emerald-700 mt-1 flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                          <span>{logoUploadNotice}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <input
-                      ref={invoiceLogoInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                      onChange={handleInvoiceLogoUpload}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => invoiceLogoInputRef.current?.click()}
-                      className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Bilgisayardan Logo Yükle</span>
-                    </button>
-                    {companySettings?.logoUrl && companySettings.logoUrl !== "/logo.svg" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onSaveCompanySettings) {
-                            onSaveCompanySettings({ ...companySettings, logoUrl: "/logo.svg" });
-                          }
-                          void saveCloudLogo("/logo.svg", {
-                            brandName: companySettings.companyName || "E-MUAVİN",
-                            description: "Varsayılan kurumsal logo",
-                          });
-                          setLogoUploadNotice("Varsayılan kurumsal logoya dönüldü.");
-                          setTimeout(() => setLogoUploadNotice(null), 3000);
-                        }}
-                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold border border-slate-200 transition-all cursor-pointer"
-                        title="Varsayılan logoya dön"
-                      >
-                        Varsayılan
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
+
 
               {/* Top Controls & Selected Cari / Müşteri Information */}
               <div className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
