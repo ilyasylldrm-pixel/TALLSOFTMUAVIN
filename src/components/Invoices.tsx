@@ -6226,7 +6226,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* Telefon No */}
-                      <div className="w-full md:w-52 shrink-0">
+                      <div className="w-fit shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <Phone className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6238,12 +6238,15 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="05XX XXX XX XX"
                           value={manualPhone}
                           onChange={(e) => setManualPhone(e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          style={{
+                            width: `${Math.min(Math.max((manualPhone || "05XX XXX XX XX").length + 2, 15), 24)}ch`,
+                          }}
+                          className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
 
                       {/* E-Posta */}
-                      <div className="flex-1 min-w-0">
+                      <div className="w-fit shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <Mail className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6255,7 +6258,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="musteri@ornek.com"
                           value={manualEmail}
                           onChange={(e) => setManualEmail(e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          style={{
+                            width: `${Math.min(Math.max((manualEmail || "musteri@ornek.com").length + 3, 19), 38)}ch`,
+                          }}
+                          className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
                     </div>
