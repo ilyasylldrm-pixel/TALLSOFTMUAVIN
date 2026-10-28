@@ -6080,9 +6080,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
                     {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
                       {/* Müşteri / Firma Adı / Ünvanı */}
-                      <div className="md:col-span-5">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6100,8 +6100,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* VKN / TCKN No */}
-                      <div className="md:col-span-4">
-                        <div className="flex items-center justify-between h-5 mb-1">
+                      <div className="w-fit shrink-0">
+                        <div className="flex items-center justify-between gap-1.5 h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>VKN / TCKN</span>
@@ -6123,7 +6123,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           <input
                             type="text"
                             maxLength={11}
-                            placeholder="10 VKN veya 11 TCKN..."
+                            placeholder="11111111111"
                             value={manualTaxNumber}
                             onChange={(e) => {
                               const val = e.target.value.replace(/\D/g, "").slice(0, 11);
@@ -6133,7 +6133,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 setMysoftEDocType("e_arsiv");
                               }
                             }}
-                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                            style={{ width: "13.5ch" }}
+                            className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs shrink-0"
                           />
                           <button
                             type="button"
@@ -6190,7 +6191,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* Vergi Dairesi */}
-                      <div className="md:col-span-3">
+                      <div className="w-full md:w-[220px] shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700">
                             Vergi Dairesi
