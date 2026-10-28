@@ -1781,8 +1781,19 @@ export class MysoftEdocumentClient {
       }
     };
 
-    for (const d of efatDocs) inspectDoc(d, "efatura");
-    for (const d of earsDocs) inspectDoc(d, "earsiv");
+    const outboxKindByPrefix: Record<string, "efatura" | "earsiv"> = {};
+    for (const d of efatDocs) {
+      const rawDocNo = String(d.docNo ?? d.documentNo ?? d.invoiceNumber ?? d.number ?? "").trim();
+      const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawDocNo);
+      if (m) outboxKindByPrefix[m[1].toUpperCase()] = "efatura";
+      inspectDoc(d, "efatura");
+    }
+    for (const d of earsDocs) {
+      const rawDocNo = String(d.docNo ?? d.documentNo ?? d.invoiceNumber ?? d.number ?? "").trim();
+      const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(rawDocNo);
+      if (m) outboxKindByPrefix[m[1].toUpperCase()] = "earsiv";
+      inspectDoc(d, "earsiv");
+    }
     for (const d of generalDocs) inspectDoc(d);
 
     const isEArsivRow = (p: Record<string, unknown>): boolean => {
@@ -1800,7 +1811,7 @@ export class MysoftEdocumentClient {
       );
     };
 
-    // 1. e-Fatura prefixes & sequential number
+    // 1. e-Fatura prefixes & sequential number from Mysoft only
     const eFaturaRows = prefixes.filter(isEFaturaRow);
     const defaultEFatura =
       eFaturaRows.find((r) => r.isDefault === true && r.isPassive !== true) ||
@@ -1816,7 +1827,7 @@ export class MysoftEdocumentClient {
     const eFaturaPrefix = (
       maxEFaturaOutboxPrefix ||
       portalEFaturaPrefix ||
-      "GIB"
+      ""
     )
       .toUpperCase()
       .slice(0, 3);
@@ -1828,20 +1839,25 @@ export class MysoftEdocumentClient {
           defaultEFatura?.sequenceNumber ??
           0,
       ) || 0;
-    const eFaturaCurNum = Math.max(
-      apiEFatCurNum,
-      maxOutboxSeqByPrefix[eFaturaPrefix] || 0,
-      eFaturaPrefix === maxEFaturaOutboxPrefix ? maxEFaturaOutboxSeq : 0,
-    );
+    const eFaturaCurNum = eFaturaPrefix
+      ? Math.max(
+          apiEFatCurNum,
+          maxOutboxSeqByPrefix[eFaturaPrefix] || 0,
+          eFaturaPrefix === maxEFaturaOutboxPrefix ? maxEFaturaOutboxSeq : 0,
+        )
+      : 0;
     const eFaturaSequence = eFaturaCurNum + 1;
-    const eFaturaNextNumber = `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`;
-    const eFaturaLastNumber =
-      lastDocNoByPrefix[eFaturaPrefix] ||
-      (eFaturaCurNum > 0
-        ? `${eFaturaPrefix}${currentYear}${String(eFaturaCurNum).padStart(9, "0")}`
-        : lastEFaturaDocNo || undefined);
+    const eFaturaNextNumber = eFaturaPrefix
+      ? `${eFaturaPrefix}${currentYear}${String(eFaturaSequence).padStart(9, "0")}`
+      : "";
+    const eFaturaLastNumber = eFaturaPrefix
+      ? lastDocNoByPrefix[eFaturaPrefix] ||
+        (eFaturaCurNum > 0
+          ? `${eFaturaPrefix}${currentYear}${String(eFaturaCurNum).padStart(9, "0")}`
+          : lastEFaturaDocNo || undefined)
+      : undefined;
 
-    // 2. e-Arşiv prefixes & sequential number
+    // 2. e-Arşiv prefixes & sequential number from Mysoft only
     const eArsivRows = prefixes.filter(isEArsivRow);
     const defaultEArsiv =
       eArsivRows.find((r) => r.isDefault === true && r.isPassive !== true) ||
@@ -1857,7 +1873,7 @@ export class MysoftEdocumentClient {
     const eArsivPrefix = (
       maxEArsivOutboxPrefix ||
       portalEArsivPrefix ||
-      "EAR"
+      ""
     )
       .toUpperCase()
       .slice(0, 3);
@@ -1869,69 +1885,55 @@ export class MysoftEdocumentClient {
           defaultEArsiv?.sequenceNumber ??
           0,
       ) || 0;
-    const eArsivCurNum = Math.max(
-      apiEArsCurNum,
-      maxOutboxSeqByPrefix[eArsivPrefix] || 0,
-      eArsivPrefix === maxEArsivOutboxPrefix ? maxEArsivOutboxSeq : 0,
-    );
+    const eArsivCurNum = eArsivPrefix
+      ? Math.max(
+          apiEArsCurNum,
+          maxOutboxSeqByPrefix[eArsivPrefix] || 0,
+          eArsivPrefix === maxEArsivOutboxPrefix ? maxEArsivOutboxSeq : 0,
+        )
+      : 0;
     const eArsivSequence = eArsivCurNum + 1;
-    const eArsivNextNumber = `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`;
-    const eArsivLastNumber =
-      lastDocNoByPrefix[eArsivPrefix] ||
-      (eArsivCurNum > 0
-        ? `${eArsivPrefix}${currentYear}${String(eArsivCurNum).padStart(9, "0")}`
-        : lastEArsivDocNo || undefined);
+    const eArsivNextNumber = eArsivPrefix
+      ? `${eArsivPrefix}${currentYear}${String(eArsivSequence).padStart(9, "0")}`
+      : "";
+    const eArsivLastNumber = eArsivPrefix
+      ? lastDocNoByPrefix[eArsivPrefix] ||
+        (eArsivCurNum > 0
+          ? `${eArsivPrefix}${currentYear}${String(eArsivCurNum).padStart(9, "0")}`
+          : lastEArsivDocNo || undefined)
+      : undefined;
 
-    const enrichedPrefixes: Array<Record<string, unknown>> = prefixes.map((p) => {
+    const enrichedPrefixes: Array<Record<string, unknown>> = [];
+    const seenPrefixes = new Set<string>();
+
+    for (const p of [...prefixes, ...numeratorSets]) {
       const pfx = typeof p.prefix === "string" ? p.prefix.trim().toUpperCase().slice(0, 3) : "";
+      if (!pfx || seenPrefixes.has(pfx)) continue;
+      seenPrefixes.add(pfx);
       const rowCur = Math.max(
         Number(p.currentNumber ?? p.lastNumber ?? p.sequenceNumber ?? 0) || 0,
-        pfx ? maxOutboxSeqByPrefix[pfx] || 0 : 0,
+        maxOutboxSeqByPrefix[pfx] || 0,
       );
-      return {
+      enrichedPrefixes.push({
         ...p,
-        prefix: pfx || p.prefix,
+        prefix: pfx,
         currentNumber: rowCur,
-        lastNumber: pfx && rowCur > 0 ? `${pfx}${currentYear}${String(rowCur).padStart(9, "0")}` : undefined,
-        nextNumber: pfx ? `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}` : undefined,
-      };
-    });
+        lastNumber:
+          lastDocNoByPrefix[pfx] ||
+          (rowCur > 0 ? `${pfx}${currentYear}${String(rowCur).padStart(9, "0")}` : undefined),
+        nextNumber: `${pfx}${currentYear}${String(rowCur + 1).padStart(9, "0")}`,
+      });
+    }
 
-    // Ensure prefixes discovered from outgoing e-Documents or resolved defaults are always present
-    const seenPrefixes = new Set(
-      enrichedPrefixes.map((p) => String(p.prefix || "").toUpperCase()),
-    );
-    if (eFaturaPrefix && !seenPrefixes.has(eFaturaPrefix)) {
-      seenPrefixes.add(eFaturaPrefix);
-      enrichedPrefixes.push({
-        prefix: eFaturaPrefix,
-        edocumentType: 1,
-        isDefault: true,
-        isPassive: false,
-        currentNumber: eFaturaCurNum,
-        lastNumber: eFaturaLastNumber,
-        nextNumber: eFaturaNextNumber,
-      });
-    }
-    if (eArsivPrefix && !seenPrefixes.has(eArsivPrefix)) {
-      seenPrefixes.add(eArsivPrefix);
-      enrichedPrefixes.push({
-        prefix: eArsivPrefix,
-        edocumentType: 2,
-        isDefault: true,
-        isPassive: false,
-        currentNumber: eArsivCurNum,
-        lastNumber: eArsivLastNumber,
-        nextNumber: eArsivNextNumber,
-      });
-    }
     for (const [pfx, seq] of Object.entries(maxOutboxSeqByPrefix)) {
       if (pfx && !seenPrefixes.has(pfx)) {
         seenPrefixes.add(pfx);
+        const isEArs =
+          outboxKindByPrefix[pfx] === "earsiv" || pfx === maxEArsivOutboxPrefix;
         enrichedPrefixes.push({
           prefix: pfx,
-          edocumentType: pfx === eArsivPrefix ? 2 : 1,
-          isDefault: false,
+          edocumentType: isEArs ? 2 : 1,
+          isDefault: pfx === eFaturaPrefix || pfx === eArsivPrefix,
           isPassive: false,
           currentNumber: seq,
           lastNumber: `${pfx}${currentYear}${String(seq).padStart(9, "0")}`,

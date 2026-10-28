@@ -214,7 +214,14 @@ export const Settings: React.FC<SettingsProps> = ({
 
   // Mysoft Portaldaki Seriler & Ardışık Fatura Numarası state (Eşleştirilen Kullanıcı İçin)
   const [availablePrefixes, setAvailablePrefixes] = useState<
-    Array<{ prefix: string; edocumentType?: string | number; year?: number; currentNumber?: number }>
+    Array<{
+      prefix: string;
+      edocumentType?: string | number;
+      year?: number;
+      currentNumber?: number;
+      lastNumber?: string;
+      nextNumber?: string;
+    }>
   >([]);
   const [isLoadingSeries, setIsLoadingSeries] = useState(false);
   const [eFaturaLastNumber, setEFaturaLastNumber] = useState<string>("");
@@ -237,188 +244,80 @@ export const Settings: React.FC<SettingsProps> = ({
       const cleanVkn = String(rawVkn).replace(/\D/g, "");
       const currentYear = new Date().getFullYear();
 
-      const localEFat = getLocalNextSequentialInvoiceNumber("e_fatura");
-      const localEArs = getLocalNextSequentialInvoiceNumber("e_arsiv");
-
-      const baseEFatPrefix = (
-        formData.eFaturaPrefix ||
-        activeCompany?.eFaturaPrefix ||
-        (formData.defaultInvoicePrefix &&
-        formData.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
-          ? formData.defaultInvoicePrefix
-          : "") ||
-        localEFat.prefix ||
-        "GIB"
-      )
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, "")
-        .slice(0, 3) || "GIB";
-
-      const baseEArsPrefix = (
-        formData.eArsivPrefix ||
-        activeCompany?.eArsivPrefix ||
-        localEArs.prefix ||
-        "EAR"
-      )
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, "")
-        .slice(0, 3) || "EAR";
-
       if (cleanVkn.length !== 10 && cleanVkn.length !== 11) {
-        const defaultEFatNext =
-          formData.eFaturaNextNumber ||
-          activeCompany?.eFaturaNextNumber ||
-          `${baseEFatPrefix}${currentYear}${String(localEFat.nextSequence || 1).padStart(9, "0")}`;
-        const defaultEArsNext =
-          formData.eArsivNextNumber ||
-          activeCompany?.eArsivNextNumber ||
-          `${baseEArsPrefix}${currentYear}${String(localEArs.nextSequence || 1).padStart(9, "0")}`;
-        setAvailablePrefixes([
-          { prefix: baseEFatPrefix, edocumentType: "EFATURA", year: currentYear },
-          { prefix: baseEArsPrefix, edocumentType: "EARSIVFATURA", year: currentYear },
-        ]);
-        setEFaturaLastNumber(localEFat.lastInvoiceNumber || "");
-        setEArsivLastNumber(localEArs.lastInvoiceNumber || "");
-        setFormData((prev) => ({
-          ...prev,
-          eFaturaPrefix: prev.eFaturaPrefix || baseEFatPrefix,
-          eFaturaNextNumber: prev.eFaturaNextNumber || defaultEFatNext,
-          eArsivPrefix: prev.eArsivPrefix || baseEArsPrefix,
-          eArsivNextNumber: prev.eArsivNextNumber || defaultEArsNext,
-          defaultInvoicePrefix: prev.eFaturaPrefix || baseEFatPrefix,
-        }));
+        setAvailablePrefixes([]);
+        setEFaturaLastNumber("");
+        setEArsivLastNumber("");
         return;
       }
 
       setIsLoadingSeries(true);
       try {
-        const [defaultsSettled, efatNextSettled, earsNextSettled] = await Promise.allSettled([
-          getMysoftMappingDefaults(cleanVkn),
-          getNextMysoftInvoiceNumber({
-            tenantIdentifierNumber: cleanVkn,
-            eDocumentType: "EFATURA",
-            year: currentYear,
-          }),
-          getNextMysoftInvoiceNumber({
-            tenantIdentifierNumber: cleanVkn,
-            eDocumentType: "EARSIVFATURA",
-            year: currentYear,
-          }),
-        ]);
-
-        const defaults = defaultsSettled.status === "fulfilled" ? defaultsSettled.value : null;
-        const efatNext = efatNextSettled.status === "fulfilled" ? efatNextSettled.value : null;
-        const earsNext = earsNextSettled.status === "fulfilled" ? earsNextSettled.value : null;
-
-        const resolvedEFatPrefix = (
-          (formData.eFaturaPrefix && formData.eFaturaPrefix !== "GIB" ? formData.eFaturaPrefix : "") ||
-          (activeCompany?.eFaturaPrefix && activeCompany.eFaturaPrefix !== "GIB"
-            ? activeCompany.eFaturaPrefix
-            : "") ||
-          (efatNext?.prefix && efatNext.prefix !== "GIB" ? efatNext.prefix : "") ||
-          (defaults?.eFaturaPrefix && defaults.eFaturaPrefix !== "GIB" ? defaults.eFaturaPrefix : "") ||
-          formData.eFaturaPrefix ||
-          activeCompany?.eFaturaPrefix ||
-          efatNext?.prefix ||
-          defaults?.eFaturaPrefix ||
-          baseEFatPrefix ||
-          "GIB"
-        )
-          .trim()
-          .toUpperCase()
-          .slice(0, 3);
-
-        const resolvedEArsPrefix = (
-          (formData.eArsivPrefix && formData.eArsivPrefix !== "EAR" ? formData.eArsivPrefix : "") ||
-          (activeCompany?.eArsivPrefix && activeCompany.eArsivPrefix !== "EAR"
-            ? activeCompany.eArsivPrefix
-            : "") ||
-          (earsNext?.prefix && earsNext.prefix !== "EAR" ? earsNext.prefix : "") ||
-          (defaults?.eArsivPrefix && defaults.eArsivPrefix !== "EAR" ? defaults.eArsivPrefix : "") ||
-          formData.eArsivPrefix ||
-          activeCompany?.eArsivPrefix ||
-          earsNext?.prefix ||
-          defaults?.eArsivPrefix ||
-          baseEArsPrefix ||
-          "EAR"
-        )
-          .trim()
-          .toUpperCase()
-          .slice(0, 3);
-
-        // Parse saved sequence if same prefix
-        const parseSavedSeq = (docNo?: string, pfx?: string) => {
-          if (!docNo || !pfx) return 0;
-          const m = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(docNo.trim());
-          if (m && m[1].toUpperCase() === pfx.toUpperCase() && Number(m[2]) === currentYear) {
-            return parseInt(m[3], 10) || 0;
-          }
-          return 0;
-        };
-
-        const efatSeq = Math.max(
-          1,
-          efatNext?.prefix?.toUpperCase() === resolvedEFatPrefix ? efatNext.nextSequence || 1 : 1,
-          defaults?.eFaturaPrefix?.toUpperCase() === resolvedEFatPrefix ? defaults.eFaturaSequence || 1 : 1,
-          localEFat.prefix?.toUpperCase() === resolvedEFatPrefix ? localEFat.nextSequence || 1 : 1,
-          parseSavedSeq(formData.eFaturaNextNumber || activeCompany?.eFaturaNextNumber, resolvedEFatPrefix),
-        );
-        const finalEFatNextNo = `${resolvedEFatPrefix}${currentYear}${String(efatSeq).padStart(9, "0")}`;
-        const finalEFatLastNo =
-          efatSeq > 1
-            ? `${resolvedEFatPrefix}${currentYear}${String(efatSeq - 1).padStart(9, "0")}`
-            : efatNext?.lastInvoiceNumber || defaults?.eFaturaLastNumber || localEFat.lastInvoiceNumber || "";
-
-        const earsSeq = Math.max(
-          1,
-          earsNext?.prefix?.toUpperCase() === resolvedEArsPrefix ? earsNext.nextSequence || 1 : 1,
-          defaults?.eArsivPrefix?.toUpperCase() === resolvedEArsPrefix ? defaults.eArsivSequence || 1 : 1,
-          localEArs.prefix?.toUpperCase() === resolvedEArsPrefix ? localEArs.nextSequence || 1 : 1,
-          parseSavedSeq(formData.eArsivNextNumber || activeCompany?.eArsivNextNumber, resolvedEArsPrefix),
-        );
-        const finalEArsNextNo = `${resolvedEArsPrefix}${currentYear}${String(earsSeq).padStart(9, "0")}`;
-        const finalEArsLastNo =
-          earsSeq > 1
-            ? `${resolvedEArsPrefix}${currentYear}${String(earsSeq - 1).padStart(9, "0")}`
-            : earsNext?.lastInvoiceNumber || defaults?.eArsivLastNumber || localEArs.lastInvoiceNumber || "";
-
-        const mergedBadges: Array<{
-          prefix: string;
-          edocumentType?: string | number;
-          year?: number;
-          currentNumber?: number;
-        }> = [...(defaults?.prefixes || [])];
-        if (!mergedBadges.some((b) => String(b.prefix || "").toUpperCase() === resolvedEFatPrefix)) {
-          mergedBadges.unshift({
-            prefix: resolvedEFatPrefix,
-            edocumentType: "EFATURA",
-            year: currentYear,
-            currentNumber: efatSeq > 1 ? efatSeq - 1 : 0,
+        const defaults = await getMysoftMappingDefaults(cleanVkn);
+        const mysoftPrefixes = (defaults?.prefixes || [])
+          .filter((b) => typeof b.prefix === "string" && b.prefix.trim().length > 0)
+          .map((b) => {
+            const pfx = String(b.prefix || "").trim().toUpperCase().slice(0, 3);
+            const curNum = Number(b.currentNumber ?? 0) || 0;
+            const lastNo =
+              (b as any).lastNumber ||
+              (curNum > 0 ? `${pfx}${currentYear}${String(curNum).padStart(9, "0")}` : undefined);
+            const nextNo =
+              (b as any).nextNumber ||
+              `${pfx}${currentYear}${String(curNum + 1).padStart(9, "0")}`;
+            return {
+              prefix: pfx,
+              edocumentType: b.edocumentType,
+              year: (b as any).year || currentYear,
+              currentNumber: curNum,
+              lastNumber: lastNo,
+              nextNumber: nextNo,
+            };
           });
-        }
-        if (!mergedBadges.some((b) => String(b.prefix || "").toUpperCase() === resolvedEArsPrefix)) {
-          mergedBadges.push({
-            prefix: resolvedEArsPrefix,
-            edocumentType: "EARSIVFATURA",
-            year: currentYear,
-            currentNumber: earsSeq > 1 ? earsSeq - 1 : 0,
-          });
-        }
 
-        setAvailablePrefixes(mergedBadges);
+        setAvailablePrefixes(mysoftPrefixes);
+
+        const efatRow =
+          mysoftPrefixes.find(
+            (p) =>
+              Number(p.edocumentType) !== 2 &&
+              !String(p.edocumentType || "").toUpperCase().includes("ARSIV"),
+          ) || mysoftPrefixes[0];
+        const earsRow = mysoftPrefixes.find(
+          (p) =>
+            Number(p.edocumentType) === 2 ||
+            String(p.edocumentType || "").toUpperCase().includes("ARSIV"),
+        );
+
+        const resolvedEFatPrefix = efatRow?.prefix || defaults?.eFaturaPrefix || "";
+        const finalEFatNextNo = efatRow?.nextNumber || defaults?.eFaturaNextNumber || "";
+        const finalEFatLastNo = efatRow?.lastNumber || defaults?.eFaturaLastNumber || "";
+
+        const resolvedEArsPrefix = earsRow?.prefix || defaults?.eArsivPrefix || "";
+        const finalEArsNextNo = earsRow?.nextNumber || defaults?.eArsivNextNumber || "";
+        const finalEArsLastNo = earsRow?.lastNumber || defaults?.eArsivLastNumber || "";
+
         setEFaturaLastNumber(finalEFatLastNo);
         setEArsivLastNumber(finalEArsLastNo);
 
-        setFormData((prev) => ({
-          ...prev,
-          eFaturaPrefix: resolvedEFatPrefix,
-          eFaturaNextNumber: finalEFatNextNo,
-          eArsivPrefix: resolvedEArsPrefix,
-          eArsivNextNumber: finalEArsNextNo,
-          defaultInvoicePrefix: resolvedEFatPrefix,
-        }));
+        if (resolvedEFatPrefix || resolvedEArsPrefix) {
+          setFormData((prev) => ({
+            ...prev,
+            ...(resolvedEFatPrefix
+              ? {
+                  eFaturaPrefix: resolvedEFatPrefix,
+                  eFaturaNextNumber: finalEFatNextNo,
+                  defaultInvoicePrefix: resolvedEFatPrefix,
+                }
+              : {}),
+            ...(resolvedEArsPrefix
+              ? {
+                  eArsivPrefix: resolvedEArsPrefix,
+                  eArsivNextNumber: finalEArsNextNo,
+                }
+              : {}),
+          }));
+        }
       } catch {
         // Fallback silently
       } finally {
@@ -431,20 +330,11 @@ export const Settings: React.FC<SettingsProps> = ({
       formData.tckn,
       formData.taxNumber,
       formData.vknTckn,
-      formData.eFaturaPrefix,
-      formData.eArsivPrefix,
-      formData.eFaturaNextNumber,
-      formData.eArsivNextNumber,
-      formData.defaultInvoicePrefix,
       activeCompany?.id,
       activeCompany?.tenantIdentifierNumber,
       activeCompany?.vkn,
       activeCompany?.tckn,
       activeCompany?.taxNumber,
-      activeCompany?.eFaturaPrefix,
-      activeCompany?.eArsivPrefix,
-      activeCompany?.eFaturaNextNumber,
-      activeCompany?.eArsivNextNumber,
     ]
   );
 
@@ -1533,45 +1423,152 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  E-Fatura Seri Öneki (Varsayılan)
-                </label>
-                <input
-                  type="text"
-                  maxLength={3}
-                  placeholder="ör: GIB"
-                  value={
-                    (
-                      formData.eFaturaPrefix ||
-                      (formData.defaultInvoicePrefix &&
-                      formData.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
-                        ? formData.defaultInvoicePrefix
-                        : "GIB")
-                    )
-                      .trim()
-                      .toUpperCase()
-                      .slice(0, 3)
-                  }
-                  onChange={(e) => {
-                    const p = e.target.value
-                      .toUpperCase()
-                      .replace(/[^A-Z0-9]/g, "")
-                      .slice(0, 3);
-                    const yr = new Date().getFullYear();
-                    const prevSeq =
-                      (formData.eFaturaNextNumber || "").length >= 7
-                        ? (formData.eFaturaNextNumber || "").slice(7)
-                        : "000000001";
-                    const nextNum = `${p.padEnd(3, "X")}${yr}${prevSeq}`;
-                    setFormData({
-                      ...formData,
-                      eFaturaPrefix: p,
-                      defaultInvoicePrefix: p,
-                      eFaturaNextNumber: nextNum,
-                    });
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold uppercase"
-                />
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block font-bold text-slate-700">
+                    E-Fatura Seri Öneki (Varsayılan)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void syncMatchedCompanyPrefixes()}
+                    disabled={isLoadingSeries}
+                    className="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
+                    title="Mysoft'tan Serileri ve Numaraları Yenile"
+                  >
+                    <RefreshCw className={`w-2.5 h-2.5 ${isLoadingSeries ? "animate-spin" : ""}`} />
+                    <span>{isLoadingSeries ? "Çekiliyor..." : "Mysoft'tan Çek"}</span>
+                  </button>
+                </div>
+
+                {availablePrefixes.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <select
+                      value={
+                        availablePrefixes.some(
+                          (p) =>
+                            String(p.prefix || "").toUpperCase() ===
+                            String(formData.eFaturaPrefix || "").toUpperCase(),
+                        )
+                          ? String(formData.eFaturaPrefix || "").toUpperCase()
+                          : String(availablePrefixes[0]?.prefix || "").toUpperCase()
+                      }
+                      onChange={(e) => {
+                        const pfx = e.target.value.toUpperCase().slice(0, 3);
+                        const chosen = availablePrefixes.find(
+                          (p) => String(p.prefix || "").toUpperCase() === pfx,
+                        );
+                        const yr = new Date().getFullYear();
+                        const rowCur =
+                          chosen?.currentNumber !== undefined ? Number(chosen.currentNumber) : 0;
+                        const nextDocNo =
+                          chosen?.nextNumber || `${pfx}${yr}${String(rowCur + 1).padStart(9, "0")}`;
+                        const lastDocNo =
+                          chosen?.lastNumber ||
+                          (rowCur > 0 ? `${pfx}${yr}${String(rowCur).padStart(9, "0")}` : "");
+                        const isEArs =
+                          Number(chosen?.edocumentType) === 2 ||
+                          String(chosen?.edocumentType || "").toUpperCase().includes("ARSIV");
+
+                        if (isEArs) {
+                          setEArsivLastNumber(lastDocNo);
+                          const updated: CompanySettings = {
+                            ...formData,
+                            eArsivPrefix: pfx,
+                            eArsivNextNumber: nextDocNo,
+                          };
+                          persistFormatParamsToCompanyAndSettings(updated);
+                        } else {
+                          setEFaturaLastNumber(lastDocNo);
+                          const updated: CompanySettings = {
+                            ...formData,
+                            eFaturaPrefix: pfx,
+                            defaultInvoicePrefix: pfx,
+                            eFaturaNextNumber: nextDocNo,
+                          };
+                          persistFormatParamsToCompanyAndSettings(updated);
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold cursor-pointer"
+                    >
+                      {availablePrefixes.map((p, idx) => {
+                        const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                        const yr = p.year || new Date().getFullYear();
+                        const curNum = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
+                        const nextNo =
+                          p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
+                        const lastNo =
+                          p.lastNumber ||
+                          (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
+                        const isEArs =
+                          Number(p.edocumentType) === 2 ||
+                          String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                        return (
+                          <option key={`${pfx}_${idx}`} value={pfx}>
+                            {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"}) — Sıradaki: {nextNo}
+                            {lastNo ? ` | Son: ${lastNo}` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {availablePrefixes.map((p, idx) => {
+                        const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                        const yr = p.year || new Date().getFullYear();
+                        const curNum = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
+                        const nextNo =
+                          p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
+                        const lastNo =
+                          p.lastNumber ||
+                          (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
+                        const isEArs =
+                          Number(p.edocumentType) === 2 ||
+                          String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                        const isSelected = isEArs
+                          ? String(formData.eArsivPrefix || "").toUpperCase() === pfx
+                          : String(formData.eFaturaPrefix || "").toUpperCase() === pfx;
+                        return (
+                          <button
+                            key={`badge_${pfx}_${idx}`}
+                            type="button"
+                            onClick={() => {
+                              if (isEArs) {
+                                setEArsivLastNumber(lastNo);
+                                const updated: CompanySettings = {
+                                  ...formData,
+                                  eArsivPrefix: pfx,
+                                  eArsivNextNumber: nextNo,
+                                };
+                                persistFormatParamsToCompanyAndSettings(updated);
+                              } else {
+                                setEFaturaLastNumber(lastNo);
+                                const updated: CompanySettings = {
+                                  ...formData,
+                                  eFaturaPrefix: pfx,
+                                  defaultInvoicePrefix: pfx,
+                                  eFaturaNextNumber: nextNo,
+                                };
+                                persistFormatParamsToCompanyAndSettings(updated);
+                              }
+                            }}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold border cursor-pointer transition-all flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                                : "bg-slate-50 hover:bg-purple-50 text-slate-800 border-slate-200"
+                            }`}
+                          >
+                            <span>{pfx}</span>
+                            <span className="opacity-85">→ {nextNo}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-xl p-2.5 text-[11px] font-medium">
+                    {isLoadingSeries
+                      ? "Mysoft'tan seriler ve numaralar çekiliyor..."
+                      : "Mysoft'tan tanımlı seri bulunamadı."}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1588,256 +1585,6 @@ export const Settings: React.FC<SettingsProps> = ({
                   <option value="1">%1 (Temel Gıda / Tarım)</option>
                   <option value="0">%0 (KDV İstisnası)</option>
                 </select>
-              </div>
-            </div>
-
-            {/* Mysoft VKN & TCKN Eşleştirme -> Portaldaki Seriler & Ardışık Fatura Numaraları */}
-            <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs font-extrabold text-purple-950 flex items-center gap-1.5">
-                    <Hash className="w-3.5 h-3.5 text-purple-600" />
-                    <span>
-                      Portaldaki Seriler — Mysoft e-Fatura &amp; e-Arşiv Ön Ekleri ve Ardışık Fatura Numarası
-                    </span>
-                  </h4>
-                  <p className="text-[11px] text-purple-800/80 mt-0.5">
-                    Mysoft VKN &amp; TCKN Eşleştirme masasından eşleştirilen kullanıcının resmi e-Fatura ve e-Arşiv ön ekleri. Fatura kesilirken &ldquo;Resmi e-fatura / e-arşiv olarak kes (Mysoft)&rdquo; seçildiğinde bu ön ekler ve ardışık sıra numarası otomatik kullanılır.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void syncMatchedCompanyPrefixes()}
-                  disabled={isLoadingSeries}
-                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-purple-100 text-purple-800 border border-purple-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isLoadingSeries ? "animate-spin" : ""}`} />
-                  <span>{isLoadingSeries ? "Sorgulanıyor..." : "Portaldaki Serileri Yenile"}</span>
-                </button>
-              </div>
-
-              {/* Portaldaki Seriler Rozetleri */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] font-bold text-purple-800">
-                  Portaldaki Seriler:
-                </span>
-                {(availablePrefixes.length > 0
-                  ? availablePrefixes
-                  : [
-                      {
-                        prefix: (formData.eFaturaPrefix || "GIB").trim().toUpperCase().slice(0, 3),
-                        edocumentType: "EFATURA",
-                      },
-                      {
-                        prefix: (formData.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3),
-                        edocumentType: "EARSIVFATURA",
-                      },
-                    ]
-                ).map((p, idx) => {
-                  const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
-                  const isEArs =
-                    Number(p.edocumentType) === 2 ||
-                    String(p.edocumentType || "").toUpperCase().includes("ARSIV") ||
-                    pfx === (formData.eArsivPrefix || "EAR").toUpperCase();
-                  const isSelected = isEArs
-                    ? (formData.eArsivPrefix || "EAR").toUpperCase() === pfx
-                    : (formData.eFaturaPrefix || "GIB").toUpperCase() === pfx;
-                  return (
-                    <button
-                      key={`${pfx}_${idx}`}
-                      type="button"
-                      onClick={() => {
-                        const yr = new Date().getFullYear();
-                        const rowSeq =
-                          p.currentNumber !== undefined ? Number(p.currentNumber) + 1 : 1;
-                        if (isEArs) {
-                          const localSeq = getLocalNextSequentialInvoiceNumber("e_arsiv");
-                          const nextSeq = Math.max(
-                            rowSeq,
-                            localSeq.prefix?.toUpperCase() === pfx ? localSeq.nextSequence : 1
-                          );
-                          const nextDocNo = `${pfx}${yr}${String(nextSeq).padStart(9, "0")}`;
-                          const updated: CompanySettings = {
-                            ...formData,
-                            eArsivPrefix: pfx,
-                            eArsivNextNumber: nextDocNo,
-                          };
-                          persistFormatParamsToCompanyAndSettings(updated);
-                        } else {
-                          const localSeq = getLocalNextSequentialInvoiceNumber("e_fatura");
-                          const nextSeq = Math.max(
-                            rowSeq,
-                            localSeq.prefix?.toUpperCase() === pfx ? localSeq.nextSequence : 1
-                          );
-                          const nextDocNo = `${pfx}${yr}${String(nextSeq).padStart(9, "0")}`;
-                          const updated: CompanySettings = {
-                            ...formData,
-                            eFaturaPrefix: pfx,
-                            defaultInvoicePrefix: pfx,
-                            eFaturaNextNumber: nextDocNo,
-                          };
-                          persistFormatParamsToCompanyAndSettings(updated);
-                        }
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border cursor-pointer transition-all flex items-center gap-1 ${
-                        isSelected
-                          ? isEArs
-                            ? "bg-sky-600 text-white border-sky-600 shadow-2xs"
-                            : "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
-                          : "bg-white hover:bg-purple-100 text-purple-900 border-purple-200"
-                      }`}
-                    >
-                      <span>{pfx}</span>
-                      <span className="opacity-85">({isEArs ? "e-Arşiv" : "e-Fatura"})</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                {/* e-Fatura Ön Eki & Sıradaki Ardışık No */}
-                <div className="p-3 rounded-xl bg-white border border-emerald-200 space-y-1.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>e-Fatura Ön Eki &amp; Sıradaki Ardışık No</span>
-                    </span>
-                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                      e-Fatura
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      maxLength={3}
-                      value={(formData.eFaturaPrefix || "GIB").toUpperCase()}
-                      onChange={(e) => {
-                        const p = e.target.value
-                          .toUpperCase()
-                          .replace(/[^A-Z0-9]/g, "")
-                          .slice(0, 3);
-                        const yr = new Date().getFullYear();
-                        const prevSeq =
-                          (formData.eFaturaNextNumber || "").length >= 7
-                            ? (formData.eFaturaNextNumber || "").slice(7)
-                            : "000000001";
-                        const updated: CompanySettings = {
-                          ...formData,
-                          eFaturaPrefix: p,
-                          defaultInvoicePrefix: p,
-                          eFaturaNextNumber: `${p.padEnd(3, "X")}${yr}${prevSeq}`,
-                        };
-                        persistFormatParamsToCompanyAndSettings(updated);
-                      }}
-                      className="w-16 bg-emerald-50/50 border border-emerald-300 rounded-lg px-2 py-1.5 text-xs font-mono font-extrabold text-center text-emerald-950 uppercase"
-                      title="3 Haneli e-Fatura Ön Eki"
-                    />
-                    <input
-                      type="text"
-                      value={
-                        formData.eFaturaNextNumber ||
-                        `${(formData.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase().trim();
-                        const pfx =
-                          val.length >= 3
-                            ? val.slice(0, 3).replace(/[^A-Z0-9]/g, "")
-                            : formData.eFaturaPrefix || "GIB";
-                        const updated: CompanySettings = {
-                          ...formData,
-                          eFaturaPrefix: pfx || formData.eFaturaPrefix,
-                          defaultInvoicePrefix: pfx || formData.defaultInvoicePrefix,
-                          eFaturaNextNumber: val,
-                        };
-                        persistFormatParamsToCompanyAndSettings(updated);
-                      }}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900"
-                      placeholder="GIB2026000000001"
-                    />
-                  </div>
-                  <p className="text-[10px] text-emerald-700 font-mono">
-                    {eFaturaLastNumber
-                      ? `Son Kesilen: ${eFaturaLastNumber} → Sıradaki: ${
-                          formData.eFaturaNextNumber || ""
-                        }`
-                      : `Sıradaki Ardışık e-Fatura No: ${
-                          formData.eFaturaNextNumber ||
-                          `${(formData.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
-                        }`}
-                  </p>
-                </div>
-
-                {/* e-Arşiv Ön Eki & Sıradaki Ardışık No */}
-                <div className="p-3 rounded-xl bg-white border border-sky-200 space-y-1.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-sky-950 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-sky-500" />
-                      <span>e-Arşiv Ön Eki &amp; Sıradaki Ardışık No</span>
-                    </span>
-                    <span className="text-[9px] font-extrabold bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded">
-                      e-Arşiv
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      maxLength={3}
-                      value={(formData.eArsivPrefix || "EAR").toUpperCase()}
-                      onChange={(e) => {
-                        const p = e.target.value
-                          .toUpperCase()
-                          .replace(/[^A-Z0-9]/g, "")
-                          .slice(0, 3);
-                        const yr = new Date().getFullYear();
-                        const prevSeq =
-                          (formData.eArsivNextNumber || "").length >= 7
-                            ? (formData.eArsivNextNumber || "").slice(7)
-                            : "000000001";
-                        const updated: CompanySettings = {
-                          ...formData,
-                          eArsivPrefix: p,
-                          eArsivNextNumber: `${p.padEnd(3, "X")}${yr}${prevSeq}`,
-                        };
-                        persistFormatParamsToCompanyAndSettings(updated);
-                      }}
-                      className="w-16 bg-sky-50/50 border border-sky-300 rounded-lg px-2 py-1.5 text-xs font-mono font-extrabold text-center text-sky-950 uppercase"
-                      title="3 Haneli e-Arşiv Ön Eki"
-                    />
-                    <input
-                      type="text"
-                      value={
-                        formData.eArsivNextNumber ||
-                        `${(formData.eArsivPrefix || "EAR").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase().trim();
-                        const pfx =
-                          val.length >= 3
-                            ? val.slice(0, 3).replace(/[^A-Z0-9]/g, "")
-                            : formData.eArsivPrefix || "EAR";
-                        const updated: CompanySettings = {
-                          ...formData,
-                          eArsivPrefix: pfx || formData.eArsivPrefix,
-                          eArsivNextNumber: val,
-                        };
-                        persistFormatParamsToCompanyAndSettings(updated);
-                      }}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900"
-                      placeholder="EAR2026000000001"
-                    />
-                  </div>
-                  <p className="text-[10px] text-sky-700 font-mono">
-                    {eArsivLastNumber
-                      ? `Son Kesilen: ${eArsivLastNumber} → Sıradaki: ${
-                          formData.eArsivNextNumber || ""
-                        }`
-                      : `Sıradaki Ardışık e-Arşiv No: ${
-                          formData.eArsivNextNumber ||
-                          `${(formData.eArsivPrefix || "EAR").toUpperCase().slice(0, 3)}${new Date().getFullYear()}000000001`
-                        }`}
-                  </p>
-                </div>
               </div>
             </div>
 
