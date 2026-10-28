@@ -47,6 +47,7 @@ import { NavItem } from "./Sidebar";
 import {
   sendMysoftOutgoingInvoice,
   checkRecipientTaxpayerStatus,
+  getTaxpayerDetails,
   RecipientTaxpayerStatus,
   getMysoftMappingDefaults,
   MysoftMappingDefaults,
@@ -617,6 +618,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
   };
 
   const [branchAddressUpdateToast, setBranchAddressUpdateToast] = useState<string | null>(null);
+  const [isQueryingMysoftBranches, setIsQueryingMysoftBranches] = useState<boolean>(false);
 
   const handleSyncAllBranchAndHeadquartersAddresses = useCallback(() => {
     // 1. Standart Merkez Adresi (İstanbul Şişli)
@@ -737,6 +739,108 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setBranchAddressUpdateToast("Merkez ve tüm şube adresleri başarıyla güncellendi!");
     setTimeout(() => setBranchAddressUpdateToast(null), 3500);
   }, [companySettings, effectiveBranchesList, onSaveCompanySettings, onUpdateBranch]);
+
+  const handleQueryBranchInfoFromMysoft = useCallback(async () => {
+    setIsQueryingMysoftBranches(true);
+    try {
+      const tenantVkn =
+        readStoredMysoftTenantVkn() ||
+        normalizeMysoftTenantIdentifier(companySettings.tenantIdentifierNumber) ||
+        normalizeMysoftTenantIdentifier(companySettings.taxNumber) ||
+        normalizeMysoftTenantIdentifier(companySettings.vknTckn) ||
+        normalizeMysoftTenantIdentifier(companySettings.mysoftCredentials?.tenantIdentifierNumber);
+
+      const targetVkn =
+        tenantVkn ||
+        normalizeMysoftTenantIdentifier(manualTaxNumber);
+
+      if (targetVkn) {
+        const [statusSettled, detailsSettled] = await Promise.allSettled([
+          checkRecipientTaxpayerStatus(targetVkn, undefined, tenantVkn),
+          getTaxpayerDetails(targetVkn, tenantVkn),
+        ]);
+
+        const status = statusSettled.status === "fulfilled" ? statusSettled.value : null;
+        const details = detailsSettled.status === "fulfilled" ? detailsSettled.value : null;
+        const rawData = details?.data || details || status;
+
+        const queriedBranchName =
+          String(
+            rawData?.branchName ||
+              rawData?.subeAdi ||
+              status?.branchName ||
+              selectedCompanyBranch?.name ||
+              "Merkez"
+          ).trim();
+        const queriedBranchCode =
+          String(
+            rawData?.branchCode ||
+              rawData?.subeKodu ||
+              status?.branchCode ||
+              selectedCompanyBranch?.code ||
+              "MRK-001"
+          ).trim();
+        const queriedCity = String(
+          rawData?.city || rawData?.il || status?.city || selectedCompanyBranch?.address?.city || companySettings.city || "İstanbul"
+        ).trim();
+        const queriedDistrict = String(
+          rawData?.district || rawData?.ilce || status?.district || selectedCompanyBranch?.address?.district || companySettings.district || ""
+        ).trim();
+        const queriedNeighborhood = String(
+          rawData?.neighborhood || rawData?.mahalle || status?.neighborhood || selectedCompanyBranch?.address?.neighborhood || ""
+        ).trim();
+        const queriedStreet = String(
+          rawData?.street || rawData?.caddeSokak || status?.street || selectedCompanyBranch?.address?.street || ""
+        ).trim();
+        const queriedFullAddr = String(
+          rawData?.address ||
+            rawData?.fullAddress ||
+            status?.address ||
+            compileStructuredAddress(queriedNeighborhood, queriedStreet, queriedDistrict, queriedCity) ||
+            selectedBranchCleanAddress ||
+            ""
+        ).trim();
+
+        if (selectedCompanyBranch && onUpdateBranch && queriedFullAddr) {
+          onUpdateBranch({
+            ...selectedCompanyBranch,
+            name: selectedCompanyBranch.name || queriedBranchName,
+            code: selectedCompanyBranch.code || queriedBranchCode,
+            address: {
+              ...(selectedCompanyBranch.address || { country: "Türkiye" }),
+              country: "Türkiye",
+              city: queriedCity || selectedCompanyBranch.address?.city || "İstanbul",
+              district: queriedDistrict || selectedCompanyBranch.address?.district || "",
+              neighborhood: queriedNeighborhood || selectedCompanyBranch.address?.neighborhood || "",
+              street: queriedStreet || selectedCompanyBranch.address?.street || "",
+              fullAddress: queriedFullAddr,
+            },
+          });
+        } else {
+          handleSyncAllBranchAndHeadquartersAddresses();
+        }
+
+        setCustomBranchAddressOverride("");
+        setBranchAddressUpdateToast(
+          `Mysoft şube bilgileri sorgulandı (${selectedCompanyBranch?.name || queriedBranchName})`
+        );
+        setTimeout(() => setBranchAddressUpdateToast(null), 3500);
+      } else {
+        handleSyncAllBranchAndHeadquartersAddresses();
+      }
+    } catch {
+      handleSyncAllBranchAndHeadquartersAddresses();
+    } finally {
+      setIsQueryingMysoftBranches(false);
+    }
+  }, [
+    companySettings,
+    manualTaxNumber,
+    selectedCompanyBranch,
+    selectedBranchCleanAddress,
+    onUpdateBranch,
+    handleSyncAllBranchAndHeadquartersAddresses,
+  ]);
 
   const handleOpenQuickBranchEdit = () => {
     if (!selectedCompanyBranch) return;
@@ -6278,8 +6382,66 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 ) : (
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
-                    {/* Üst Satır: Fatura Tarihi, Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
+                    {/* Üst Satır: Mysoft Şube Sorgulama, Fatura Tarihi, Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
                     <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
+                      {/* Mysoft Şube Bilgileri Sorgulama Alanı */}
+                      <div className="w-fit max-w-full shrink-0">
+                        <div className="flex items-center justify-between gap-2 h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Mysoft Şube Bilgileri</span>
+                          </label>
+                          {branchAddressUpdateToast && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded truncate max-w-[180px]">
+                              ✓ Güncellendi
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {effectiveBranchesList.length > 0 && (
+                            <select
+                              value={selectedCompanyBranch?.id || selectedBranchId}
+                              onChange={(e) => {
+                                setSelectedBranchId(e.target.value);
+                                setCustomBranchAddressOverride("");
+                              }}
+                              title={
+                                selectedBranchCleanAddress
+                                  ? `Seçili Şube Adresi: ${selectedBranchCleanAddress}`
+                                  : "Faturanın düzenleneceği merkez / şube seçimi"
+                              }
+                              className="h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs cursor-pointer max-w-[170px] truncate"
+                            >
+                              {effectiveBranchesList.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name}
+                                  {b.code ? ` (${b.code})` : ""}
+                                  {b.address?.city ? ` - ${b.address.city}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void handleQueryBranchInfoFromMysoft()}
+                            disabled={isQueryingMysoftBranches}
+                            title={
+                              selectedBranchCleanAddress
+                                ? `Mysoft'tan Şube Bilgilerini Sorgula • Mevcut: ${selectedBranchCleanAddress}`
+                                : "Mysoft'tan merkez ve şube bilgilerini sorgula ve getir"
+                            }
+                            className="h-[38px] px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                          >
+                            {isQueryingMysoftBranches ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                            )}
+                            <span>Şube Sorgula</span>
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Fatura Tarihi */}
                       <div className="w-fit shrink-0">
                         <div className="flex items-center h-5 mb-1">
