@@ -5911,7 +5911,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* 4. Fatura Tarihi */}
-                      <div className="w-full md:w-36 lg:w-40 shrink-0">
+                      <div className="w-fit shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -5923,7 +5923,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           required
                           value={issueDate}
                           onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
                     </div>
@@ -6206,10 +6206,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta (Üst satırla aynı 5-4-3 ızgara hizası) */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta */}
+                    <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
                       {/* Fatura Tarihi */}
-                      <div className="md:col-span-5">
+                      <div className="w-fit shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6221,12 +6221,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           required
                           value={issueDate}
                           onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
 
                       {/* Telefon No */}
-                      <div className="md:col-span-4">
+                      <div className="w-full md:w-52 shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <Phone className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6243,7 +6243,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* E-Posta */}
-                      <div className="md:col-span-3">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <Mail className="w-3.5 h-3.5 text-purple-600 shrink-0" />
