@@ -6723,50 +6723,129 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* Teslimat Adresi ve Fatura Senaryosu Satırı */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                      <div className="md:col-span-12">
-                        <div className="flex items-center h-5 mb-1">
-                          <label className="text-xs font-bold text-purple-800 flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Teslimat / Sevkiyat Adresi</span>
-                          </label>
-                        </div>
-                        <div className="bg-purple-50/60 px-2.5 py-2 min-h-[38px] flex flex-col justify-center rounded-xl border border-purple-200/80 space-y-1.5">
-                          <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-950 select-none">
-                            <input
-                              type="checkbox"
-                              checked={hasDifferentDeliveryAddress}
-                              onChange={(e) => {
-                                setHasDifferentDeliveryAddress(e.target.checked);
-                                if (!e.target.checked) {
-                                  setDeliveryAddress("");
-                                }
-                              }}
-                              className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
-                            />
-                            <span>Teslimat / Sevkiyat Adresi Farklı mı?</span>
-                          </label>
-                          {hasDifferentDeliveryAddress && (
-                            <div className="pt-1 animate-in fade-in duration-150 space-y-1">
-                              <label className="block text-[10px] font-bold text-purple-900">
-                                Farklı Teslimat Adresi (Faturaya not olarak eklenecektir):
-                              </label>
-                              <textarea
-                                rows={2}
-                                value={deliveryAddress}
-                                onChange={(e) => setDeliveryAddress(e.target.value)}
-                                placeholder="Örnek: Sevkiyat Depo - Org. Sanayi Bölgesi 3. Cadde No:12 Nilüfer / Bursa"
-                                className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 font-medium placeholder-slate-400 focus:ring-2 focus:ring-purple-500 outline-none"
+                    {/* Teslimat Adresi, Fatura Senaryosu ve Fatura Türü Ortak Alanı */}
+                    <div className="w-full bg-purple-50/40 p-3 rounded-xl border border-purple-200/80 shadow-2xs">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                        {/* 1. Teslimat / Sevkiyat Adresi */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between h-5">
+                            <label className="text-[11px] font-bold text-purple-900 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-purple-600 shrink-0" />
+                              <span>Teslimat / Sevkiyat Adresi:</span>
+                            </label>
+                          </div>
+                          <div className="bg-white px-2.5 py-1.5 min-h-[34px] flex flex-col justify-center rounded-lg border border-slate-200 shadow-2xs space-y-1.5">
+                            <label className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-purple-950 select-none">
+                              <input
+                                type="checkbox"
+                                checked={hasDifferentDeliveryAddress}
+                                onChange={(e) => {
+                                  setHasDifferentDeliveryAddress(e.target.checked);
+                                  if (!e.target.checked) {
+                                    setDeliveryAddress("");
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
                               />
-                            </div>
-                          )}
+                              <span>Teslimat / Sevkiyat Adresi Farklı mı?</span>
+                            </label>
+                            {hasDifferentDeliveryAddress && (
+                              <div className="pt-1 animate-in fade-in duration-150 space-y-1">
+                                <label className="block text-[10px] font-bold text-purple-900">
+                                  Farklı Teslimat Adresi (Faturaya not olarak eklenecektir):
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  value={deliveryAddress}
+                                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                                  placeholder="Örnek: Sevkiyat Depo - Org. Sanayi Bölgesi 3. Cadde No:12 Nilüfer / Bursa"
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 font-medium placeholder-slate-400 focus:ring-2 focus:ring-purple-500 outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[9px] leading-tight text-slate-500 font-medium">
+                            Fatura adresinden farklı bir sevkiyat noktası varsa işaretleyip giriniz.
+                          </p>
                         </div>
-                      </div>
 
-                      {/* Fatura Senaryosu ve Fatura Türü (Teslimat/Sevkiyat bölümünün altına kadar genişletildi) */}
-                      <div className="md:col-span-12">
-                        {renderInvoiceScenarioAndProfile()}
+                        {/* 2. Fatura Senaryosu (GİB e-Belge) */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between h-5">
+                            <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                              <FileText className="w-3 h-3 text-purple-600 shrink-0" />
+                              <span>Fatura Senaryosu:</span>
+                            </label>
+                            <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
+                              {invoiceScenario}
+                            </span>
+                          </div>
+                          <select
+                            value={invoiceScenario}
+                            onChange={(e) => {
+                              const val = e.target.value as InvoiceScenario;
+                              setInvoiceScenario(val);
+                              if (val === "EARSIVFATURA") {
+                                setMysoftEDocType("e_arsiv");
+                              } else {
+                                setMysoftEDocType("e_fatura");
+                              }
+                            }}
+                            className="w-full h-[34px] bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                          >
+                            <option value="TICARIFATURA">TICARIFATURA - Ticari Fatura (7 Gün İtiraz/Kabul Süreli)</option>
+                            <option value="TEMELFATURA">TEMELFATURA - Temel Fatura (Doğrudan Kabul Edilen)</option>
+                            <option value="EARSIVFATURA">EARSIVFATURA - e-Arşiv Fatura (Standart / Nihai Tüketici)</option>
+                            <option value="IHRACAT">IHRACAT - İhracat e-Faturası (Gümrük Çıkışlı)</option>
+                            <option value="KAMU">KAMU - Kamu Kurumu Faturası</option>
+                            <option value="HAL">HAL - Hal Kayıt Sistemi (HKS) Faturası</option>
+                          </select>
+                          <p className="text-[9px] leading-tight text-slate-500 font-medium">
+                            {invoiceScenario === "TICARIFATURA" && "Alıcı firma 7 gün içerisinde sistem üzerinden kabul veya ticari ret verebilir."}
+                            {invoiceScenario === "TEMELFATURA" && "Sistemden doğrudan kabul edilir; itirazlar harici yollarla yapılır."}
+                            {invoiceScenario === "EARSIVFATURA" && "e-Fatura mükellefi olmayanlara ve nihai tüketicilere iletilen arşiv faturası."}
+                            {invoiceScenario === "IHRACAT" && "Gümrük ve Ticaret Bakanlığı GTİP onaylı mal ihracatı faturası senaryosu."}
+                            {invoiceScenario === "KAMU" && "Kamu kurum ve kuruluşlarına yönelik harcama onaylı kamu faturası."}
+                            {invoiceScenario === "HAL" && "Hal Kayıt Sistemi bildirimli toptancı hal satış faturası senaryosu."}
+                          </p>
+                        </div>
+
+                        {/* 3. Fatura Türü (GİB Standardı) */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between h-5">
+                            <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                              <Tag className="w-3 h-3 text-purple-600 shrink-0" />
+                              <span>Fatura Türü (GİB Standardı):</span>
+                            </label>
+                            <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                              {invoiceProfileType}
+                            </span>
+                          </div>
+                          <select
+                            value={invoiceProfileType}
+                            onChange={(e) => handleSelectInvoiceProfile(e.target.value as InvoiceProfileType)}
+                            className="w-full h-[34px] bg-white border border-slate-200 focus:border-purple-500 rounded-lg px-2 text-[11px] font-bold text-slate-900 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-2xs cursor-pointer"
+                          >
+                            <option value="SATIS">SATIŞ - Standart Satış Faturası</option>
+                            <option value="TEVKIFAT">TEVKİFAT - KDV Tevkifatlı Fatura (2/10, 5/10, 7/10, 9/10 vb.)</option>
+                            <option value="OZELMATRAH">ÖZEL MATRAH - 2. El Araç / Kâr Marjı / Kıymetli Maden (3065 SK. 23)</option>
+                            <option value="ISTISNA">İSTİSNA - KDV'den Muaf / İstisna Satış (%0 KDV)</option>
+                            <option value="IADE">İADE - Satış / Alış İade Faturası</option>
+                            <option value="IHRACKAYITLI">İHRAÇ KAYITLI - İhraç Kaydıyla Teslim (3065 SK. 11/1-c)</option>
+                            <option value="SGK">SGK - Sosyal Güvenlik Kurumu Faturası</option>
+                            <option value="KOMISYONCU">KOMİSYONCU - Komisyoncu / Aracı Faturası</option>
+                          </select>
+                          <p className="text-[9px] leading-tight text-slate-500 font-medium">
+                            {invoiceProfileType === "SATIS" && "Standart mal ve hizmet teslimi satış faturası profili."}
+                            {invoiceProfileType === "TEVKIFAT" && "KDV'nin bir kısmının alıcı tarafından sorumlu sıfatıyla ödendiği fatura türü."}
+                            {invoiceProfileType === "OZELMATRAH" && "KDV yalnızca kâr marjı veya işçilik farkı üzerinden hesaplanır."}
+                            {invoiceProfileType === "ISTISNA" && "Kanuni istisna maddeleri uyarınca %0 KDV uygulanan teslimler."}
+                            {invoiceProfileType === "IADE" && "Daha önce düzenlenen faturaya istinaden mal/hizmet iade faturası."}
+                            {invoiceProfileType === "IHRACKAYITLI" && "3065 SK. 11/1-c uyarınca ihraç kaydıyla teslim edilen mallar."}
+                            {invoiceProfileType === "SGK" && "Sosyal Güvenlik Kurumu'na yönelik sağlık ve medikal hizmet faturası."}
+                            {invoiceProfileType === "KOMISYONCU" && "Komisyonculuk ve aracılık faaliyetlerine konu fatura türü."}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
