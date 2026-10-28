@@ -6206,8 +6206,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta */}
-                    <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
+                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta, Müşteri Adresi */}
+                    <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
                       {/* Fatura Tarihi */}
                       <div className="w-fit shrink-0">
                         <div className="flex items-center h-5 mb-1">
@@ -6264,12 +6264,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
-                    </div>
 
-                    {/* Açık Adres ve Teslimat Adresi Satırı */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                      <div className="md:col-span-7">
-                        <div className="flex items-center justify-between h-5 mb-1">
+                      {/* Faturada Kaydedilecek Müşteri Adresi */}
+                      <div className="w-fit max-w-full shrink-0">
+                        <div className="flex items-center justify-between gap-2 h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>Faturada Kaydedilecek Müşteri Adresi</span>
@@ -6290,7 +6288,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <input
                           ref={manualAddressInputRef}
                           type="text"
-                          placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14 D: 6"
+                          placeholder="Örn: Barbaros Mah. Çiğdem Sk. No: 14"
                           value={manualAddress}
                           onFocus={clampManualAddressCaret}
                           onClick={clampManualAddressCaret}
@@ -6306,11 +6304,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               )
                             )
                           }
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          style={{
+                            width: `${Math.min(Math.max((manualAddress || "Örn: Barbaros Mah. Çiğdem Sk. No: 14").length + 3, 28), 68)}ch`,
+                          }}
+                          className="max-w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
+                    </div>
 
-                      <div className="md:col-span-5">
+                    {/* Teslimat Adresi ve Fatura Senaryosu Satırı */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                      <div className="md:col-span-12">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-purple-800 flex items-center gap-1">
                             <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
