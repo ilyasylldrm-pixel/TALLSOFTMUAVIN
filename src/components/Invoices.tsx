@@ -386,7 +386,13 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // Customer Mode: "registered" (Kayıtlı Cari Hesap) vs "manual" (Elle Müşteri Bilgisi Gir)
   const [customerMode, setCustomerMode] = useState<"registered" | "manual">(
-    initialContactIdForNewInvoice ? "registered" : (contacts.length === 0 ? "manual" : "registered")
+    (forcedType || "sales") === "sales"
+      ? "manual"
+      : initialContactIdForNewInvoice
+      ? "registered"
+      : contacts.length === 0
+      ? "manual"
+      : "registered"
   );
   const [manualCustomerName, setManualCustomerName] = useState<string>("");
   const [manualTaxNumber, setManualTaxNumber] = useState<string>("");
@@ -2354,12 +2360,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     // Reset manual customer fields & branch fields
     lastQueriedManualVknRef.current = "";
+    setMatchedManualContactId(null);
+    setDismissedVknQueryPrompt("");
+    setIsManualVknDropdownOpen(false);
+    setIsRegisteredVknDropdownOpen(false);
     const defaultCompanyBranch =
       branches.find((b) => b.isMain && b.status !== "passive") ||
       branches.find((b) => b.status !== "passive") ||
       branches[0];
     setSelectedBranchId(defaultCompanyBranch?.id || "");
-    setCustomerMode(initialContactIdForNewInvoice ? "registered" : (contacts.length === 0 ? "manual" : "registered"));
+    setCustomerMode(
+      targetType === "sales"
+        ? "manual"
+        : initialContactIdForNewInvoice
+        ? "registered"
+        : contacts.length === 0
+        ? "manual"
+        : "registered"
+    );
     setManualCustomerName("");
     setManualTaxNumber("");
     setManualTaxOffice("");
@@ -2376,6 +2394,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setCustomerBranchName(targetContact?.branchName || "");
     setCustomerBranchCode(targetContact?.branchCode || "");
     setVknSearchInput(targetContact?.taxNumber ? targetContact.taxNumber.replace(/\D/g, "") : "");
+    if (targetType === "sales" && initialContactIdForNewInvoice && targetContact) {
+      applyContactToManualForm(targetContact);
+    }
     setIssueDate(new Date().toISOString().split("T")[0]);
     setDueDate(
       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -2456,33 +2477,37 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     const matchedContact = contacts.find((c) => c.id === inv.contactId);
     const isManual = Boolean(
+      inv.type === "sales" ||
       inv.isManualCustomer ||
       (!matchedContact && (inv.contactId?.startsWith("manual_") || !inv.contactId))
     );
 
     if (isManual) {
       setCustomerMode("manual");
-      setManualCustomerName(inv.contactName || "");
-      setManualTaxNumber(inv.taxNumber || "");
-      setManualTaxOffice(inv.taxOffice || "");
-      setCustomerBranchName(inv.customerBranchName || "");
-      setCustomerBranchCode(inv.customerBranchCode || "");
+      setMatchedManualContactId(matchedContact ? matchedContact.id : null);
+      setManualCustomerName(inv.contactName || matchedContact?.name || "");
+      setManualTaxNumber(inv.taxNumber || matchedContact?.taxNumber || "");
+      setManualTaxOffice(inv.taxOffice || matchedContact?.taxOffice || "");
+      setCustomerBranchName(inv.customerBranchName || matchedContact?.branchName || "");
+      setCustomerBranchCode(inv.customerBranchCode || matchedContact?.branchCode || "");
       setManualAddress(
         formatAddressWithBranch(
-          inv.customerAddress || "",
-          inv.customerCity || "",
-          inv.customerDistrict || "",
-          inv.customerBranchName,
-          inv.customerBranchCode
+          inv.customerAddress || matchedContact?.address || "",
+          inv.customerCity || matchedContact?.city || "",
+          inv.customerDistrict || matchedContact?.district || "",
+          inv.customerBranchName || matchedContact?.branchName,
+          inv.customerBranchCode || matchedContact?.branchCode
         )
       );
-      setManualCity(inv.customerCity || "");
-      setManualDistrict(inv.customerDistrict || "");
-      setManualPhone(inv.customerPhone || "");
-      setManualEmail(inv.customerEmail || "");
+      setManualCity(inv.customerCity || matchedContact?.city || "");
+      setManualDistrict(inv.customerDistrict || matchedContact?.district || "");
+      setManualPhone(inv.customerPhone || matchedContact?.phone || "");
+      setManualEmail(inv.customerEmail || matchedContact?.email || "");
       setSaveManualAsContact(false);
       setContactId(inv.contactId || `manual_${Date.now()}`);
-      setVknSearchInput(inv.taxNumber ? inv.taxNumber.replace(/\D/g, "") : "");
+      setVknSearchInput(
+        (inv.taxNumber || matchedContact?.taxNumber || "").replace(/\D/g, "")
+      );
     } else {
       setCustomerMode("registered");
       const editContactId = inv.contactId || contacts[0]?.id || "";
@@ -3191,9 +3216,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
         finalContactId = newContact.id;
         effectiveContactObj = newContact;
       } else {
-        finalContactId = existingInvoice?.contactId?.startsWith("manual_")
-          ? existingInvoice.contactId
-          : `manual_${Date.now()}`;
+        finalContactId =
+          matchedManualContactId ||
+          (existingInvoice?.contactId?.startsWith("manual_")
+            ? existingInvoice.contactId
+            : `manual_${Date.now()}`);
         effectiveContactObj = {
           id: finalContactId,
           name: effectiveContactName,
@@ -5764,64 +5791,66 @@ export const Invoices: React.FC<InvoicesProps> = ({
               <div className="space-y-3.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
 
 
-                {/* 1. Müşteri Seçim Modu: Kayıtlı Cari vs Elle Giriş */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
-                  <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => setCustomerMode("registered")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        customerMode === "registered"
-                          ? "bg-white text-purple-700 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      <Building2 className="w-3.5 h-3.5" />
-                      <span>Kayıtlı Cari Hesap Seç</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 font-mono text-slate-500">
-                        {contacts.length}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerMode("manual");
-                        const cleanVkn = vknSearchInput.replace(/\D/g, "").trim();
-                        if (cleanVkn) {
-                          setManualTaxNumber(cleanVkn);
-                          if (recipientStatus && recipientStatus.vknTckn === cleanVkn) {
-                            lastQueriedManualVknRef.current = cleanVkn;
-                            applyQueriedTaxpayerToManualForm(recipientStatus, cleanVkn);
+                {/* 1. Müşteri Seçim Modu: Sadece Gider Faturası için Kayıtlı Cari vs Elle Giriş */}
+                {invType !== "sales" && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setCustomerMode("registered")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          customerMode === "registered"
+                            ? "bg-white text-purple-700 shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Building2 className="w-3.5 h-3.5" />
+                        <span>Kayıtlı Cari Hesap Seç</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 font-mono text-slate-500">
+                          {contacts.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerMode("manual");
+                          const cleanVkn = vknSearchInput.replace(/\D/g, "").trim();
+                          if (cleanVkn) {
+                            setManualTaxNumber(cleanVkn);
+                            if (recipientStatus && recipientStatus.vknTckn === cleanVkn) {
+                              lastQueriedManualVknRef.current = cleanVkn;
+                              applyQueriedTaxpayerToManualForm(recipientStatus, cleanVkn);
+                            }
                           }
-                        }
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        customerMode === "manual"
-                          ? "bg-white text-purple-700 shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Elle Müşteri Bilgisi Gir</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold uppercase">
-                        Cari Hesapsız
-                      </span>
-                    </button>
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          customerMode === "manual"
+                            ? "bg-white text-purple-700 shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Elle Müşteri Bilgisi Gir</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold uppercase">
+                          Cari Hesapsız
+                        </span>
+                      </button>
+                    </div>
+
+                    {customerMode === "manual" ? (
+                      <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/90 px-3 py-1 rounded-lg flex items-center gap-1.5 font-medium">
+                        <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                        <span>Cari kartı açmaya gerek olmadan müşteri ve şube bilgileriyle doğrudan fatura düzenlenir.</span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-500 hidden sm:flex items-center gap-1">
+                        <span>Kayıtlı cari listeden seçebilir veya &quot;Elle Müşteri Bilgisi Gir&quot; ile cari açmadan fatura kesebilirsiniz.</span>
+                      </div>
+                    )}
                   </div>
+                )}
 
-                  {customerMode === "manual" ? (
-                    <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/90 px-3 py-1 rounded-lg flex items-center gap-1.5 font-medium">
-                      <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                      <span>Cari kartı açmaya gerek olmadan müşteri ve şube bilgileriyle doğrudan fatura düzenlenir.</span>
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-slate-500 hidden sm:flex items-center gap-1">
-                      <span>Kayıtlı cari listeden seçebilir veya "Elle Müşteri Bilgisi Gir" ile cari açmadan fatura kesebilirsiniz.</span>
-                    </div>
-                  )}
-                </div>
-
-                {customerMode === "registered" ? (
+                {invType !== "sales" && customerMode === "registered" ? (
                   <>
                     <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
                       {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
