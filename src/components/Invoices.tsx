@@ -1050,12 +1050,117 @@ export const Invoices: React.FC<InvoicesProps> = ({
     );
     return initContact?.taxNumber ? initContact.taxNumber.replace(/\D/g, "") : "";
   });
+  const [dismissedVknQueryPrompt, setDismissedVknQueryPrompt] = useState<string>("");
+  const [isManualVknDropdownOpen, setIsManualVknDropdownOpen] = useState<boolean>(false);
+  const [isRegisteredVknDropdownOpen, setIsRegisteredVknDropdownOpen] = useState<boolean>(false);
+  const [matchedManualContactId, setMatchedManualContactId] = useState<string | null>(null);
+
+  const applyContactToManualForm = useCallback((c: Contact) => {
+    const cleanTax = (c.taxNumber || "").replace(/\D/g, "").slice(0, 11);
+    if (cleanTax) {
+      setManualTaxNumber(cleanTax);
+      setVknSearchInput(cleanTax);
+    }
+    setMatchedManualContactId(c.id);
+    setManualCustomerName(c.name || "");
+    setManualTaxOffice(c.taxOffice || "");
+    setManualPhone(c.phone || "");
+    setManualEmail(c.email || "");
+    setManualCity(c.city || "");
+    setManualDistrict(c.district || "");
+    setManualNeighborhood(c.neighborhood || "");
+    setManualStreet(c.street || "");
+    setCustomerBranchName(c.branchName || "");
+    setCustomerBranchCode(c.branchCode || "");
+
+    const rawOpenAddr =
+      c.address ||
+      [c.neighborhood, c.street, c.buildingNo, c.doorNo]
+        .filter(Boolean)
+        .join(" ");
+    const formattedAddr = formatAddressWithBranch(
+      rawOpenAddr,
+      c.city,
+      c.district,
+      c.branchName,
+      c.branchCode
+    );
+    setManualAddress(formattedAddr || "");
+    setIsManualVknDropdownOpen(false);
+    setIsRegisteredVknDropdownOpen(false);
+  }, []);
+
+  const filteredContactsByManualVkn = React.useMemo(() => {
+    const clean = manualTaxNumber.replace(/\D/g, "").trim();
+    if (clean.length < 2 || clean === "11111111111") return [];
+    return contacts
+      .filter((c) => {
+        const cTax = (c.taxNumber || "").replace(/\D/g, "");
+        return cTax.startsWith(clean) || cTax.includes(clean);
+      })
+      .sort((a, b) => {
+        const aTax = (a.taxNumber || "").replace(/\D/g, "");
+        const bTax = (b.taxNumber || "").replace(/\D/g, "");
+        const aStarts = aTax.startsWith(clean) ? 0 : 1;
+        const bStarts = bTax.startsWith(clean) ? 0 : 1;
+        return aStarts - bStarts;
+      });
+  }, [contacts, manualTaxNumber]);
+
+  const filteredContactsByRegisteredVkn = React.useMemo(() => {
+    const clean = vknSearchInput.replace(/\D/g, "").trim();
+    if (clean.length < 2 || clean === "11111111111") return [];
+    return contacts
+      .filter((c) => {
+        const cTax = (c.taxNumber || "").replace(/\D/g, "");
+        return cTax.startsWith(clean) || cTax.includes(clean);
+      })
+      .sort((a, b) => {
+        const aTax = (a.taxNumber || "").replace(/\D/g, "");
+        const bTax = (b.taxNumber || "").replace(/\D/g, "");
+        const aStarts = aTax.startsWith(clean) ? 0 : 1;
+        const bStarts = bTax.startsWith(clean) ? 0 : 1;
+        return aStarts - bStarts;
+      });
+  }, [contacts, vknSearchInput]);
+
+  const handleManualTaxNumberChange = (rawVal: string) => {
+    const val = rawVal.replace(/\D/g, "").slice(0, 11);
+    setManualTaxNumber(val);
+    setDismissedVknQueryPrompt("");
+    setRecipientStatus(null);
+
+    if (val === "11111111111") {
+      setMatchedManualContactId(null);
+      setInvoiceScenario("EARSIVFATURA");
+      setMysoftEDocType("e_arsiv");
+      setIsManualVknDropdownOpen(false);
+      return;
+    }
+
+    if (val.length >= 2) {
+      setIsManualVknDropdownOpen(true);
+      const exactMatch = contacts.find(
+        (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === val
+      );
+      if (exactMatch) {
+        applyContactToManualForm(exactMatch);
+        return;
+      }
+      setMatchedManualContactId(null);
+    } else {
+      setIsManualVknDropdownOpen(false);
+      setMatchedManualContactId(null);
+    }
+  };
 
   const handleVknInputChange = (val: string) => {
     const cleanVal = val.replace(/\D/g, "").slice(0, 11);
     setVknSearchInput(cleanVal);
+    setDismissedVknQueryPrompt("");
 
     if (cleanVal.length >= 2) {
+      setIsRegisteredVknDropdownOpen(true);
       // 1. Exact match on taxNumber
       const exactMatch = contacts.find(
         (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === cleanVal
@@ -1063,12 +1168,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
       if (exactMatch) {
         setCustomerMode("registered");
         setContactId(exactMatch.id);
-        setCustomerBranchName(exactMatch.branchName || "");
-        setCustomerBranchCode(exactMatch.branchCode || "");
+        applyContactToManualForm(exactMatch);
         return;
       }
 
-      // 2. Starts with search if >= 6 digits or 10/11 digits
+      // 2. Starts with search if >= 6 digits
       if (cleanVal.length >= 6) {
         const startsWithMatches = contacts.filter(
           (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "").startsWith(cleanVal)
@@ -1076,10 +1180,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
         if (startsWithMatches.length === 1) {
           setCustomerMode("registered");
           setContactId(startsWithMatches[0].id);
-          setCustomerBranchName(startsWithMatches[0].branchName || "");
-          setCustomerBranchCode(startsWithMatches[0].branchCode || "");
+          applyContactToManualForm(startsWithMatches[0]);
         }
       }
+    } else {
+      setIsRegisteredVknDropdownOpen(false);
     }
   };
 
@@ -1691,14 +1796,42 @@ export const Invoices: React.FC<InvoicesProps> = ({
     refreshMysoftSerialNumbers();
   }, [refreshMysoftSerialNumbers]);
 
-  // Live e-Fatura vs e-Arşiv Recipient Taxpayer Auto-Detection
+  const executeConfirmedVknQuery = useCallback(
+    (rawTaxNo: string) => {
+      const clean = rawTaxNo.replace(/\D/g, "").trim();
+      if (clean.length !== 10 && clean.length !== 11) return;
+      setDismissedVknQueryPrompt(clean);
+      setIsManualVknDropdownOpen(false);
+      setIsRegisteredVknDropdownOpen(false);
+      setIsCheckingRecipient(true);
+      checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn)
+        .then((status) => {
+          setRecipientStatus(status);
+          lastQueriedManualVknRef.current = clean;
+          applyQueriedTaxpayerToManualForm(status, clean);
+          const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
+          setMysoftEDocType(nextType);
+          setInvoiceScenario(
+            status.isEFaturaUser
+              ? status.suggestedProfile === "TEMELFATURA"
+                ? "TEMELFATURA"
+                : "TICARIFATURA"
+              : "EARSIVFATURA"
+          );
+          void fetchAndApplyNextInvoiceNumber(undefined, nextType);
+        })
+        .finally(() => setIsCheckingRecipient(false));
+    },
+    [mysoftTenantVkn, applyQueriedTaxpayerToManualForm, fetchAndApplyNextInvoiceNumber]
+  );
+
+  // Live e-Fatura vs e-Arşiv Recipient Taxpayer Detection ONLY when a registered contact is selected (do not auto-query while typing VKN)
   useEffect(() => {
+    if (customerMode !== "registered") {
+      return;
+    }
     const contact = contacts.find((c) => c.id === contactId);
-    const taxNum = (
-      customerMode === "manual"
-        ? (manualTaxNumber || vknSearchInput || "")
-        : (contact?.taxNumber || vknSearchInput || "")
-    ).replace(/\D/g, "").trim();
+    const taxNum = (contact?.taxNumber || "").replace(/\D/g, "").trim();
 
     if (!taxNum || (taxNum.length !== 10 && taxNum.length !== 11)) {
       setRecipientStatus(null);
@@ -1724,12 +1857,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
           } else {
             setInvoiceScenario("EARSIVFATURA");
           }
-          if (customerMode === "manual" && taxNum !== "11111111111") {
-            if (lastQueriedManualVknRef.current !== taxNum) {
-              lastQueriedManualVknRef.current = taxNum;
-              applyQueriedTaxpayerToManualForm(status, taxNum);
-            }
-          }
           void fetchAndApplyNextInvoiceNumber(undefined, nextType);
         }
       })
@@ -1740,7 +1867,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [contactId, contacts, customerMode, manualTaxNumber, vknSearchInput, mysoftTenantVkn, fetchAndApplyNextInvoiceNumber, applyQueriedTaxpayerToManualForm]);
+  }, [contactId, contacts, customerMode, mysoftTenantVkn, fetchAndApplyNextInvoiceNumber]);
 
   const handleQuickLookupVkn = async (overrideVkn?: string) => {
     const rawVal = overrideVkn !== undefined ? overrideVkn : newContactTaxNo;
@@ -5698,7 +5825,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   <>
                     <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
                       {/* 1. VKN / TCKN No ile Arama / Otomatik Getirme (Kompakt Genişlik) */}
-                      <div className="w-full md:w-40 lg:w-44 shrink-0">
+                      <div className="relative w-full md:w-44 lg:w-48 shrink-0">
                         <div className="flex items-center justify-between h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -5707,21 +5834,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           {vknSearchInput && (
                             <span
                               className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
-                                contacts.some(
-                                  (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
-                                )
+                                filteredContactsByRegisteredVkn.length > 0
                                   ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                                   : vknSearchInput.length >= 10
                                   ? "bg-amber-100 text-amber-800 border border-amber-200"
                                   : "text-slate-400 font-semibold"
                               }`}
                             >
-                              {contacts.some(
-                                (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
+                              {filteredContactsByRegisteredVkn.some(
+                                (c) => (c.taxNumber || "").replace(/\D/g, "") === vknSearchInput
                               )
                                 ? "✓ Kayıtlı"
+                                : filteredContactsByRegisteredVkn.length > 0
+                                ? `${filteredContactsByRegisteredVkn.length} Cari`
                                 : vknSearchInput.length >= 10
-                                ? "Yok"
+                                ? "Cari Yok"
                                 : `${vknSearchInput.length}/11`}
                             </span>
                           )}
@@ -5732,46 +5859,96 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             maxLength={11}
                             placeholder="10 VKN / 11 TCKN..."
                             value={vknSearchInput}
+                            onFocus={() => {
+                              if (vknSearchInput.length >= 2) setIsRegisteredVknDropdownOpen(true);
+                            }}
                             onChange={(e) => handleVknInputChange(e.target.value)}
                             className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
-                          {(vknSearchInput.length === 10 || vknSearchInput.length === 11) &&
-                            !contacts.some(
-                              (c) => c.taxNumber && c.taxNumber.replace(/\D/g, "") === vknSearchInput
-                            ) && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const clean = vknSearchInput.replace(/\D/g, "").trim();
-                                  setCustomerMode("manual");
-                                  setManualTaxNumber(clean);
-                                  setIsCheckingRecipient(true);
-                                  checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn)
-                                    .then((status) => {
-                                      setRecipientStatus(status);
-                                      lastQueriedManualVknRef.current = clean;
-                                      applyQueriedTaxpayerToManualForm(status, clean);
-                                      const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
-                                      setMysoftEDocType(nextType);
-                                      setInvoiceScenario(
-                                        status.isEFaturaUser
-                                          ? status.suggestedProfile === "TEMELFATURA"
-                                            ? "TEMELFATURA"
-                                            : "TICARIFATURA"
-                                          : "EARSIVFATURA"
-                                      );
-                                      void fetchAndApplyNextInvoiceNumber(undefined, nextType);
-                                    })
-                                    .finally(() => setIsCheckingRecipient(false));
-                                }}
-                                className="h-[38px] px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer shrink-0"
-                                title="Sorgula ve müşteri bilgilerini doldur"
-                              >
-                                <Sparkles className="w-3 h-3 text-purple-200" />
-                                <span>Sorgula</span>
-                              </button>
-                            )}
                         </div>
+
+                        {/* VKN Yazıldıkça Filtrelenen Mevcut Cariler Listesi */}
+                        {isRegisteredVknDropdownOpen &&
+                          vknSearchInput.length >= 2 &&
+                          filteredContactsByRegisteredVkn.length > 0 && (
+                            <div className="absolute left-0 top-full mt-1 z-40 w-80 max-w-[90vw] bg-white border border-purple-200 rounded-xl shadow-lg p-1.5 space-y-1 max-h-56 overflow-y-auto">
+                              <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-purple-700 bg-purple-50/70 rounded-lg">
+                                <span>Eşleşen Kayıtlı Cariler ({filteredContactsByRegisteredVkn.length})</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsRegisteredVknDropdownOpen(false)}
+                                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                              {filteredContactsByRegisteredVkn.map((c) => {
+                                const cAddr =
+                                  c.address ||
+                                  [c.neighborhood, c.street, c.district, c.city].filter(Boolean).join(" ");
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setCustomerMode("registered");
+                                      setContactId(c.id);
+                                      applyContactToManualForm(c);
+                                    }}
+                                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-purple-50 transition-colors cursor-pointer border border-transparent hover:border-purple-200"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-bold text-slate-900 truncate">{c.name}</span>
+                                      <span className="text-[10px] font-mono font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded shrink-0">
+                                        {c.taxNumber}
+                                      </span>
+                                    </div>
+                                    {(c.email || cAddr) && (
+                                      <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                                        {[c.email, cAddr].filter(Boolean).join(" • ")}
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                        {/* Cari Çıkmazsa Kullanıcıya Sorarak Sorgulama Onayı */}
+                        {(vknSearchInput.length === 10 || vknSearchInput.length === 11) &&
+                          vknSearchInput !== "11111111111" &&
+                          filteredContactsByRegisteredVkn.length === 0 &&
+                          dismissedVknQueryPrompt !== vknSearchInput &&
+                          lastQueriedManualVknRef.current !== vknSearchInput && (
+                            <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 shadow-2xs space-y-1.5">
+                              <p className="font-semibold leading-tight">
+                                Bu VKN/TCKN ile kayıtlı cari bulunamadı. GİB / Mysoft üzerinden sorgulama yapılsın mı?
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={isCheckingRecipient}
+                                  onClick={() => {
+                                    const clean = vknSearchInput.replace(/\D/g, "").trim();
+                                    setCustomerMode("manual");
+                                    setManualTaxNumber(clean);
+                                    executeConfirmedVknQuery(clean);
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>{isCheckingRecipient ? "Sorgulanıyor..." : "Evet, Sorgula"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDismissedVknQueryPrompt(vknSearchInput)}
+                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold cursor-pointer"
+                                >
+                                  Hayır
+                                </button>
+                              </div>
+                            </div>
+                          )}
                       </div>
 
                       {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
@@ -6080,9 +6257,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
                     {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
-                    <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
+                    <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
                       {/* Müşteri / Firma Adı / Ünvanı */}
-                      <div className="flex-1 min-w-0">
+                      <div className="w-fit max-w-full shrink-0">
                         <div className="flex items-center h-5 mb-1">
                           <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                             <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6092,15 +6269,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         <input
                           type="text"
                           required
-                          placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret Ltd. Şti."
+                          placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret"
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
-                          className="w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs"
+                          style={{
+                            width: `${Math.min(Math.max((manualCustomerName || "Örn: Ahmet Yılmaz veya ABC Ticaret").length + 3, 28), 64)}ch`,
+                          }}
+                          className="max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
                         />
                       </div>
 
                       {/* VKN / TCKN No */}
-                      <div className="w-fit shrink-0">
+                      <div className="relative w-fit shrink-0">
                         <div className="flex items-center justify-between gap-1.5 h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -6109,9 +6289,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              setManualTaxNumber("11111111111");
-                              setInvoiceScenario("EARSIVFATURA");
-                              setMysoftEDocType("e_arsiv");
+                              handleManualTaxNumberChange("11111111111");
                             }}
                             className="h-5 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 cursor-pointer bg-indigo-50 px-1.5 rounded border border-indigo-100 flex items-center transition-colors"
                             title="e-Arşiv Nihai Tüketici için 11111111111 doldur"
@@ -6125,14 +6303,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             maxLength={11}
                             placeholder="11111111111"
                             value={manualTaxNumber}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/\D/g, "").slice(0, 11);
-                              setManualTaxNumber(val);
-                              if (val === "11111111111") {
-                                setInvoiceScenario("EARSIVFATURA");
-                                setMysoftEDocType("e_arsiv");
+                            onFocus={() => {
+                              if (manualTaxNumber.length >= 2 && manualTaxNumber !== "11111111111") {
+                                setIsManualVknDropdownOpen(true);
                               }
                             }}
+                            onChange={(e) => handleManualTaxNumberChange(e.target.value)}
                             style={{ width: "13.5ch" }}
                             className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs shrink-0"
                           />
@@ -6141,23 +6317,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             onClick={() => {
                               const clean = manualTaxNumber.replace(/\D/g, "").trim();
                               if (clean.length === 10 || clean.length === 11) {
-                                setIsCheckingRecipient(true);
-                                checkRecipientTaxpayerStatus(clean, undefined, mysoftTenantVkn)
-                                  .then((status) => {
-                                    setRecipientStatus(status);
-                                    lastQueriedManualVknRef.current = clean;
-                                    applyQueriedTaxpayerToManualForm(status, clean);
-                                    const nextType = status.isEFaturaUser ? "e_fatura" : "e_arsiv";
-                                    setMysoftEDocType(nextType);
-                                    setInvoiceScenario(status.isEFaturaUser ? (status.suggestedProfile === "TEMELFATURA" ? "TEMELFATURA" : "TICARIFATURA") : "EARSIVFATURA");
-                                    void fetchAndApplyNextInvoiceNumber(undefined, nextType);
-                                  })
-                                  .finally(() => setIsCheckingRecipient(false));
+                                const exactContact = contacts.find(
+                                  (c) => (c.taxNumber || "").replace(/\D/g, "") === clean
+                                );
+                                if (exactContact) {
+                                  applyContactToManualForm(exactContact);
+                                } else {
+                                  setDismissedVknQueryPrompt("");
+                                  executeConfirmedVknQuery(clean);
+                                }
                               }
                             }}
                             disabled={isCheckingRecipient || !manualTaxNumber || (manualTaxNumber.length !== 10 && manualTaxNumber.length !== 11) || manualTaxNumber === "11111111111"}
                             className="h-[38px] px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                            title="GİB & Mysoft'tan firma ünvanı, vergi dairesi ve adresini otomatik getir"
+                            title="GİB & Mysoft'tan firma ünvanı, vergi dairesi ve adresini getir"
                           >
                             {isCheckingRecipient ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -6167,6 +6340,89 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <span className="hidden sm:inline">Sorgula</span>
                           </button>
                         </div>
+
+                        {/* VKN Yazıldıkça Filtrelenen Mevcut Cariler Açılır Listesi */}
+                        {isManualVknDropdownOpen &&
+                          manualTaxNumber.length >= 2 &&
+                          filteredContactsByManualVkn.length > 0 && (
+                            <div className="absolute left-0 top-full mt-1 z-40 w-80 max-w-[90vw] bg-white border border-purple-200 rounded-xl shadow-lg p-1.5 space-y-1 max-h-56 overflow-y-auto">
+                              <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-purple-700 bg-purple-50/70 rounded-lg">
+                                <span>Mevcut Cariler ({filteredContactsByManualVkn.length}) — Seçerek Doldur</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsManualVknDropdownOpen(false)}
+                                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                              {filteredContactsByManualVkn.map((c) => {
+                                const cAddr =
+                                  c.address ||
+                                  [c.neighborhood, c.street, c.district, c.city].filter(Boolean).join(" ");
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => applyContactToManualForm(c)}
+                                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-purple-50 transition-colors cursor-pointer border border-transparent hover:border-purple-200"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-bold text-slate-900 truncate">{c.name}</span>
+                                      <span className="text-[10px] font-mono font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded shrink-0">
+                                        {c.taxNumber}
+                                      </span>
+                                    </div>
+                                    {(c.email || cAddr) && (
+                                      <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                                        {[c.email, cAddr].filter(Boolean).join(" • ")}
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                        {/* Mevcut Cariden Dolduruldu Bildirimi */}
+                        {matchedManualContactId && (
+                          <div className="mt-1.5 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>Kayıtlı cariden ünvan, e-posta ve adres dolduruldu</span>
+                          </div>
+                        )}
+
+                        {/* Cari Çıkmazsa Kullanıcıya Sorarak Sorgulama Onayı */}
+                        {(manualTaxNumber.length === 10 || manualTaxNumber.length === 11) &&
+                          manualTaxNumber !== "11111111111" &&
+                          filteredContactsByManualVkn.length === 0 &&
+                          dismissedVknQueryPrompt !== manualTaxNumber &&
+                          lastQueriedManualVknRef.current !== manualTaxNumber && (
+                            <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 shadow-2xs space-y-1.5 max-w-[260px]">
+                              <p className="font-semibold leading-tight">
+                                Bu VKN/TCKN ile kayıtlı cari bulunamadı. GİB / Mysoft üzerinden sorgulama yapılsın mı?
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={isCheckingRecipient}
+                                  onClick={() => executeConfirmedVknQuery(manualTaxNumber)}
+                                  className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>{isCheckingRecipient ? "Sorgulanıyor..." : "Evet, Sorgula"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDismissedVknQueryPrompt(manualTaxNumber)}
+                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold cursor-pointer"
+                                >
+                                  Hayır
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                         {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
                           <div
                             className={`mt-1.5 p-1.5 rounded-lg border text-[11px] flex items-center justify-between gap-1.5 animate-fadeIn ${
