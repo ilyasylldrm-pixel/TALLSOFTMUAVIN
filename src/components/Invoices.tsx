@@ -6285,8 +6285,25 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 ) : (
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
-                    {/* Üst Satır: Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
+                    {/* Üst Satır: Fatura Tarihi, Müşteri Adı, VKN/TCKN, Vergi Dairesi */}
                     <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
+                      {/* Fatura Tarihi */}
+                      <div className="w-fit shrink-0">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Fatura Tarihi *</span>
+                          </label>
+                        </div>
+                        <input
+                          type="date"
+                          required
+                          value={issueDate}
+                          onChange={(e) => setIssueDate(e.target.value)}
+                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                        />
+                      </div>
+
                       {/* Müşteri / Firma Adı / Ünvanı */}
                       <div className="w-fit max-w-full shrink-0">
                         <div className="flex items-center h-5 mb-1">
@@ -6493,24 +6510,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
                     </div>
 
-                    {/* İkinci Satır: Fatura Tarihi, Telefon, E-posta, Müşteri Adresi */}
+                    {/* İkinci Satır: Telefon, E-posta, Müşteri Adresi */}
                     <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
-                      {/* Fatura Tarihi */}
-                      <div className="w-fit shrink-0">
-                        <div className="flex items-center h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Fatura Tarihi *</span>
-                          </label>
-                        </div>
-                        <input
-                          type="date"
-                          required
-                          value={issueDate}
-                          onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
-                        />
-                      </div>
 
                       {/* Telefon No */}
                       <div className="w-fit shrink-0">
