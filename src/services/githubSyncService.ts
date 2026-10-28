@@ -422,8 +422,9 @@ export class GitHubSyncService {
     }
   }
 
-  private async ensureGitInitialized(repoUrl: string, branch = "main"): Promise<boolean> {
+  private async ensureGitInitialized(repoUrl: string, branch = "main", token?: string): Promise<boolean> {
     const cwd = process.cwd();
+    const authArg = buildGitAuthArg(token);
     this.clearGitIndexLock(cwd);
     try {
       await execPromise(`git config --global --add safe.directory "${cwd}"`, { cwd }).catch(() => {});
@@ -449,7 +450,11 @@ export class GitHubSyncService {
         await execPromise("git rev-parse --verify HEAD", { cwd });
       } catch {
         try {
-          await execPromise(`git fetch --depth=1 origin ${branch}`, { cwd });
+          try {
+            await execPromise(`git ${authArg} fetch --depth=1 origin ${branch}`, { cwd });
+          } catch {
+            await execPromise(`git fetch --depth=1 origin ${branch}`, { cwd });
+          }
           await execPromise(`git reset --mixed origin/${branch}`, { cwd });
           await execPromise(`git branch -M ${branch}`, { cwd });
           await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {});
