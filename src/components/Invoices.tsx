@@ -6459,25 +6459,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         />
                       </div>
 
-                      {/* Müşteri / Firma Adı / Ünvanı */}
-                      <div className="w-fit max-w-full shrink-0">
-                        <div className="flex items-center h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                            <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Müşteri Adı / Ticari Ünvanı *</span>
-                          </label>
-                        </div>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret"
-                          value={manualCustomerName}
-                          onChange={(e) => setManualCustomerName(e.target.value)}
-                          style={{ width: "410px" }}
-                          className="w-[410px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
-                        />
-                      </div>
-
                       {/* VKN / TCKN No */}
                       <div className="relative w-fit max-w-full shrink-0">
                         <div className="flex items-center gap-2 h-5 mb-1">
@@ -6613,6 +6594,25 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               })}
                             </div>
                           )}
+                      </div>
+
+                      {/* Müşteri / Firma Adı / Ünvanı */}
+                      <div className="w-fit max-w-full shrink-0">
+                        <div className="flex items-center h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <span>Müşteri Adı / Ticari Ünvanı *</span>
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret"
+                          value={manualCustomerName}
+                          onChange={(e) => setManualCustomerName(e.target.value)}
+                          style={{ width: "410px" }}
+                          className="w-[410px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
+                        />
                       </div>
                     </div>
 
