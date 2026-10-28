@@ -1831,7 +1831,36 @@ export const Invoices: React.FC<InvoicesProps> = ({
     [mysoftTenantVkn, applyQueriedTaxpayerToManualForm, fetchAndApplyNextInvoiceNumber]
   );
 
-  // Live e-Fatura vs e-Arşiv Recipient Taxpayer Detection ONLY when a registered contact is selected (do not auto-query while typing VKN)
+  // Auto-query GİB/Mysoft directly when VKN/TCKN (10 or 11 digits) has no matching contact in existing contacts
+  useEffect(() => {
+    if (customerMode !== "manual") return;
+    const clean = manualTaxNumber.replace(/\D/g, "").trim();
+    if (
+      (clean.length !== 10 && clean.length !== 11) ||
+      clean === "11111111111" ||
+      filteredContactsByManualVkn.length > 0 ||
+      lastQueriedManualVknRef.current === clean
+    ) {
+      return;
+    }
+
+    // Short delay on 10 digits in case user is typing an 11-digit TCKN; immediate on 11 digits
+    const delayMs = clean.length === 10 ? 400 : 0;
+    const timer = window.setTimeout(() => {
+      executeConfirmedVknQuery(clean);
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    customerMode,
+    manualTaxNumber,
+    filteredContactsByManualVkn.length,
+    executeConfirmedVknQuery,
+  ]);
+
+  // Live e-Fatura vs e-Arşiv Recipient Taxpayer Detection when a registered contact is selected
   useEffect(() => {
     if (customerMode !== "registered") {
       return;
@@ -5942,42 +5971,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               })}
                             </div>
                           )}
-
-                        {/* Cari Çıkmazsa Kullanıcıya Sorarak Sorgulama Onayı */}
-                        {(vknSearchInput.length === 10 || vknSearchInput.length === 11) &&
-                          vknSearchInput !== "11111111111" &&
-                          filteredContactsByRegisteredVkn.length === 0 &&
-                          dismissedVknQueryPrompt !== vknSearchInput &&
-                          lastQueriedManualVknRef.current !== vknSearchInput && (
-                            <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 shadow-2xs space-y-1.5">
-                              <p className="font-semibold leading-tight">
-                                Bu VKN/TCKN ile kayıtlı cari bulunamadı. GİB / Mysoft üzerinden sorgulama yapılsın mı?
-                              </p>
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  disabled={isCheckingRecipient}
-                                  onClick={() => {
-                                    const clean = vknSearchInput.replace(/\D/g, "").trim();
-                                    setCustomerMode("manual");
-                                    setManualTaxNumber(clean);
-                                    executeConfirmedVknQuery(clean);
-                                  }}
-                                  className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                  <span>{isCheckingRecipient ? "Sorgulanıyor..." : "Evet, Sorgula"}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDismissedVknQueryPrompt(vknSearchInput)}
-                                  className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold cursor-pointer"
-                                >
-                                  Hayır
-                                </button>
-                              </div>
-                            </div>
-                          )}
                       </div>
 
                       {/* 2. Cari Hesap Seçimi (Daraltılmış / Dengeli Alan) */}
@@ -6393,37 +6386,6 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               <span>Kayıtlı cariden dolduruldu</span>
                             </div>
                           )}
-
-                          {/* Cari Çıkmazsa Kullanıcıya Sorarak Sorgulama Onayı (Sorgula Butonunun Sağında) */}
-                          {(manualTaxNumber.length === 10 || manualTaxNumber.length === 11) &&
-                            manualTaxNumber !== "11111111111" &&
-                            filteredContactsByManualVkn.length === 0 &&
-                            dismissedVknQueryPrompt !== manualTaxNumber &&
-                            lastQueriedManualVknRef.current !== manualTaxNumber && (
-                              <div className="min-h-[38px] px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-950 shadow-2xs flex items-center gap-2 shrink-0">
-                                <span className="font-semibold">
-                                  Kayıtlı cari bulunamadı. GİB / Mysoft&apos;tan sorgulansın mı?
-                                </span>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    type="button"
-                                    disabled={isCheckingRecipient}
-                                    onClick={() => executeConfirmedVknQuery(manualTaxNumber)}
-                                    className="px-2 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                  >
-                                    <Sparkles className="w-3 h-3" />
-                                    <span>{isCheckingRecipient ? "Sorgulanıyor..." : "Evet, Sorgula"}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDismissedVknQueryPrompt(manualTaxNumber)}
-                                    className="px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold cursor-pointer"
-                                  >
-                                    Hayır
-                                  </button>
-                                </div>
-                              </div>
-                            )}
 
                           {/* Mükellefiyet Durumu (Sorgula Butonunun Sağında) */}
                           {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
