@@ -6473,8 +6473,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret"
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
-                          style={{ width: "400px" }}
-                          className="w-[400px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
+                          style={{ width: "410px" }}
+                          className="w-[410px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
                         />
                       </div>
 
@@ -6508,8 +6508,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               }
                             }}
                             onChange={(e) => handleManualTaxNumberChange(e.target.value)}
-                            style={{ width: "13.5ch" }}
-                            className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs shrink-0"
+                            style={{ width: "150px" }}
+                            className="w-[150px] h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs shrink-0"
                           />
                           <button
                             type="button"
@@ -6630,7 +6630,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="Örn: Kadıköy V.D."
                           value={manualTaxOffice}
                           onChange={(e) => setManualTaxOffice(e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          style={{ width: "220px" }}
+                          className="w-[220px] max-w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
 
@@ -6647,10 +6648,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="05XX XXX XX XX"
                           value={manualPhone}
                           onChange={(e) => setManualPhone(e.target.value)}
-                          style={{
-                            width: `${Math.min(Math.max((manualPhone || "05XX XXX XX XX").length + 2, 15), 24)}ch`,
-                          }}
-                          className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
+                          style={{ width: "175px" }}
+                          className="w-[175px] max-w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
 
@@ -6667,10 +6666,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="musteri@ornek.com"
                           value={manualEmail}
                           onChange={(e) => setManualEmail(e.target.value)}
-                          style={{
-                            width: `${Math.min(Math.max((manualEmail || "musteri@ornek.com").length + 3, 19), 38)}ch`,
-                          }}
-                          className="h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
+                          style={{ width: "170px" }}
+                          className="w-[170px] max-w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
 
@@ -6713,10 +6710,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               )
                             )
                           }
-                          style={{
-                            width: `${Math.min(Math.max((manualAddress || "Örn: Barbaros Mah. Çiğdem Sk. No: 14").length + 3, 28), 68)}ch`,
-                          }}
-                          className="max-w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
+                          style={{ width: "500px" }}
+                          className="w-[500px] max-w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs transition-all"
                         />
                       </div>
                     </div>
