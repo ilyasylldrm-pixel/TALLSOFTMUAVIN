@@ -1145,6 +1145,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
       } else if (typeof c.isEFaturaUser === "boolean") {
         setMysoftEDocType(c.isEFaturaUser ? "e_fatura" : "e_arsiv");
         setInvoiceScenario(c.isEFaturaUser ? "TICARIFATURA" : "EARSIVFATURA");
+      } else if (cleanTax.length === 11) {
+        setMysoftEDocType("e_arsiv");
+        setInvoiceScenario("EARSIVFATURA");
+      } else if (cleanTax.length === 10) {
+        setMysoftEDocType("e_fatura");
+        setInvoiceScenario("TICARIFATURA");
       }
     }
     setMatchedManualContactId(c.id);
@@ -1225,6 +1231,17 @@ export const Invoices: React.FC<InvoicesProps> = ({
       return;
     }
 
+    // Yazılan VKN (10 hane) veya TCKN (11 hane) uzunluğuna göre anında e-Fatura veya e-Arşiv serisini seç
+    if (val.length === 11) {
+      setMysoftEDocType("e_arsiv");
+      setInvoiceScenario("EARSIVFATURA");
+    } else if (val.length === 10) {
+      setMysoftEDocType("e_fatura");
+      if (invoiceScenario === "EARSIVFATURA") {
+        setInvoiceScenario("TICARIFATURA");
+      }
+    }
+
     if (val.length >= 2) {
       setIsManualVknDropdownOpen(true);
       const exactMatch = contacts.find(
@@ -1252,6 +1269,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setMysoftEDocType("e_arsiv");
       setIsRegisteredVknDropdownOpen(false);
       return;
+    }
+
+    if (cleanVal.length === 11) {
+      setMysoftEDocType("e_arsiv");
+      setInvoiceScenario("EARSIVFATURA");
+    } else if (cleanVal.length === 10) {
+      setMysoftEDocType("e_fatura");
+      if (invoiceScenario === "EARSIVFATURA") {
+        setInvoiceScenario("TICARIFATURA");
+      }
     }
 
     if (cleanVal.length >= 2) {
@@ -1300,7 +1327,21 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setCustomerBranchCode(found.branchCode || "");
     }
     if (found && found.taxNumber) {
-      setVknSearchInput(found.taxNumber.replace(/\D/g, ""));
+      const cleanTax = found.taxNumber.replace(/\D/g, "");
+      setVknSearchInput(cleanTax);
+      if (cleanTax === "11111111111") {
+        setMysoftEDocType("e_arsiv");
+        setInvoiceScenario("EARSIVFATURA");
+      } else if (typeof found.isEFaturaUser === "boolean") {
+        setMysoftEDocType(found.isEFaturaUser ? "e_fatura" : "e_arsiv");
+        setInvoiceScenario(found.isEFaturaUser ? "TICARIFATURA" : "EARSIVFATURA");
+      } else if (cleanTax.length === 11) {
+        setMysoftEDocType("e_arsiv");
+        setInvoiceScenario("EARSIVFATURA");
+      } else if (cleanTax.length === 10) {
+        setMysoftEDocType("e_fatura");
+        setInvoiceScenario("TICARIFATURA");
+      }
     } else {
       setVknSearchInput("");
     }
@@ -1354,56 +1395,104 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [recipientStatus, setRecipientStatus] = useState<RecipientTaxpayerStatus | null>(null);
   const [isCheckingRecipient, setIsCheckingRecipient] = useState<boolean>(false);
   const [mysoftMappingDefaults, setMysoftMappingDefaults] = useState<MysoftMappingDefaults | null>(null);
-  const [selectedEFaturaPrefix, setSelectedEFaturaPrefix] = useState<string>(
-    () =>
-      (
-        companySettings.eFaturaPrefix ||
-        (companySettings.defaultInvoicePrefix &&
-        companySettings.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
-          ? companySettings.defaultInvoicePrefix
-          : "") ||
-        "GIB"
+  // Fatura & Belge Format Parametreleri bölümünden aktif firma ayarlarını oku
+  const activeStoredCompanyFormat = React.useMemo(() => {
+    try {
+      const companies = getCompaniesList();
+      const targetVkn = (
+        companySettings.vkn ||
+        companySettings.tckn ||
+        companySettings.taxNumber ||
+        companySettings.vknTckn ||
+        ""
       )
-        .trim()
-        .toUpperCase()
-        .slice(0, 3) || "GIB",
+        .replace(/\D/g, "")
+        .trim();
+      const matched =
+        (targetVkn &&
+          companies.find(
+            (c) =>
+              (c.vkn || c.tckn || c.taxNumber || "").replace(/\D/g, "").trim() ===
+              targetVkn,
+          )) ||
+        companies.find((c) => c.isActive) ||
+        companies[0];
+      return matched || null;
+    } catch {
+      return null;
+    }
+  }, [
+    companySettings.vkn,
+    companySettings.tckn,
+    companySettings.taxNumber,
+    companySettings.vknTckn,
+    companySettings.eFaturaPrefix,
+    companySettings.eArsivPrefix,
+    companySettings.eFaturaNextNumber,
+    companySettings.eArsivNextNumber,
+  ]);
+
+  const formatParamEFaturaPrefix = (
+    companySettings.eFaturaPrefix ||
+    activeStoredCompanyFormat?.eFaturaPrefix ||
+    (companySettings.defaultInvoicePrefix &&
+    companySettings.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+      ? companySettings.defaultInvoicePrefix
+      : "") ||
+    (activeStoredCompanyFormat?.defaultInvoicePrefix &&
+    activeStoredCompanyFormat.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
+      ? activeStoredCompanyFormat.defaultInvoicePrefix
+      : "") ||
+    ""
+  )
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 3);
+
+  const formatParamEArsivPrefix = (
+    companySettings.eArsivPrefix ||
+    activeStoredCompanyFormat?.eArsivPrefix ||
+    ""
+  )
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 3);
+
+  const formatParamEFaturaNextNumber = (
+    companySettings.eFaturaNextNumber ||
+    activeStoredCompanyFormat?.eFaturaNextNumber ||
+    ""
+  ).trim();
+
+  const formatParamEArsivNextNumber = (
+    companySettings.eArsivNextNumber ||
+    activeStoredCompanyFormat?.eArsivNextNumber ||
+    ""
+  ).trim();
+
+  const [selectedEFaturaPrefix, setSelectedEFaturaPrefix] = useState<string>(
+    () => formatParamEFaturaPrefix || "GIB",
   );
   const [selectedEArsivPrefix, setSelectedEArsivPrefix] = useState<string>(
-    () => (companySettings.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3) || "EAR",
+    () => formatParamEArsivPrefix || "EAR",
   );
   const [isLoadingMysoftSeries, setIsLoadingMysoftSeries] = useState<boolean>(false);
 
   // Sync e-Fatura & e-Arşiv prefixes when Fatura & Belge Format Parametreleri (companySettings) changes
   useEffect(() => {
-    const nextEFat = (
-      companySettings.eFaturaPrefix ||
-      (companySettings.defaultInvoicePrefix &&
-      companySettings.defaultInvoicePrefix.trim().toUpperCase() !== "MUV2026"
-        ? companySettings.defaultInvoicePrefix
-        : "") ||
-      ""
-    )
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 3);
-    if (nextEFat) {
-      setSelectedEFaturaPrefix(nextEFat);
+    if (formatParamEFaturaPrefix) {
+      setSelectedEFaturaPrefix(formatParamEFaturaPrefix);
     }
-    const nextEArs = (companySettings.eArsivPrefix || "")
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 3);
-    if (nextEArs) {
-      setSelectedEArsivPrefix(nextEArs);
+    if (formatParamEArsivPrefix) {
+      setSelectedEArsivPrefix(formatParamEArsivPrefix);
     }
   }, [
-    companySettings.eFaturaPrefix,
-    companySettings.eArsivPrefix,
-    companySettings.defaultInvoicePrefix,
-    companySettings.eFaturaNextNumber,
-    companySettings.eArsivNextNumber,
+    formatParamEFaturaPrefix,
+    formatParamEArsivPrefix,
+    formatParamEFaturaNextNumber,
+    formatParamEArsivNextNumber,
   ]);
   const [isManualInvoiceNumber, setIsManualInvoiceNumber] = useState<boolean>(false);
 
@@ -2170,15 +2259,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setQuickContactStatus(null);
   };
 
-  const handleSelectProductFromPicker = (prod: Product) => {
+  const [activeStockSearchRowId, setActiveStockSearchRowId] = useState<string | null>(null);
+
+  const handleSelectProductFromPicker = (prod: Product, overrideRowId?: string) => {
     const defaultUnitPrice = invType === "sales" ? prod.sellPrice : prod.buyPrice;
     const desc = `${prod.name}${prod.code ? ` (${prod.code})` : ""}`;
     const vat = prod.vatRate || 20;
+    const effectiveRowId = overrideRowId || targetItemRowId;
 
-    if (targetItemRowId) {
+    if (effectiveRowId) {
       setItems((prevItems) =>
         prevItems.map((item) => {
-          if (item.id === targetItemRowId) {
+          if (item.id === effectiveRowId) {
             const qty = Number(item.quantity) || 1;
             const gross = qty * defaultUnitPrice;
             let discAmt = Number(item.discountAmount) || 0;
@@ -2225,6 +2317,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
     setIsProductPickerOpen(false);
     setTargetItemRowId(null);
+    setActiveStockSearchRowId(null);
   };
   const [issueDate, setIssueDate] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -2311,26 +2404,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
         customPrefix ||
         (isEArsiv
           ? nonGenericCandidate(selectedEArsivPrefix) ||
-            nonGenericCandidate(infoPrefix) ||
+            formatParamEArsivPrefix ||
             nonGenericCandidate(mysoftMappingDefaults?.eArsivPrefix) ||
-            nonGenericCandidate(companySettings.eArsivPrefix) ||
+            nonGenericCandidate(infoPrefix) ||
             nonGenericCandidate(discoveredEDocPrefix) ||
             selectedEArsivPrefix ||
             mysoftMappingDefaults?.eArsivPrefix ||
-            companySettings.eArsivPrefix ||
             discoveredEDocPrefix ||
             "EAR"
           : nonGenericCandidate(selectedEFaturaPrefix) ||
-            nonGenericCandidate(infoPrefix) ||
+            formatParamEFaturaPrefix ||
             nonGenericCandidate(mysoftMappingDefaults?.eFaturaPrefix) ||
-            nonGenericCandidate(companySettings.eFaturaPrefix) ||
+            nonGenericCandidate(infoPrefix) ||
             nonGenericCandidate(discoveredEDocPrefix) ||
-            nonGenericCandidate(companySettings.defaultInvoicePrefix) ||
             selectedEFaturaPrefix ||
             mysoftMappingDefaults?.eFaturaPrefix ||
-            companySettings.eFaturaPrefix ||
             discoveredEDocPrefix ||
-            companySettings.defaultInvoicePrefix ||
             "GIB");
 
       const prefix =
@@ -2357,8 +2446,16 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
       let savedSeq = 0;
       const savedNextCandidates = isEArsiv
-        ? [mysoftMappingDefaults?.eArsivNextNumber, companySettings.eArsivNextNumber]
-        : [mysoftMappingDefaults?.eFaturaNextNumber, companySettings.eFaturaNextNumber];
+        ? [
+            formatParamEArsivNextNumber,
+            companySettings.eArsivNextNumber,
+            mysoftMappingDefaults?.eArsivNextNumber,
+          ]
+        : [
+            formatParamEFaturaNextNumber,
+            companySettings.eFaturaNextNumber,
+            mysoftMappingDefaults?.eFaturaNextNumber,
+          ];
       for (const savedNext of savedNextCandidates) {
         if (!savedNext) continue;
         const match = /^([A-Za-z0-9]{3})(20\d{2})(\d{1,9})$/.exec(savedNext.trim());
@@ -2404,6 +2501,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
       return `${prefix}${currentYear}${String(nextSeq).padStart(9, "0")}`;
     },
     [
+      formatParamEArsivPrefix,
+      formatParamEFaturaPrefix,
+      formatParamEArsivNextNumber,
+      formatParamEFaturaNextNumber,
       selectedEArsivPrefix,
       selectedEFaturaPrefix,
       mysoftMappingDefaults,
@@ -6773,6 +6874,126 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           })()
                         )}
                       </div>
+
+                      {/* 5. Resmi Fatura Seçeneği (Fatura Numarası Sağında - Fatura & Belge Format Parametrelerinden Veri Alır) */}
+                      {invType === "sales" && formDocKind === "invoice" && (
+                        <div className="flex-1 min-w-[270px]">
+                          <div className="flex items-center justify-between gap-1.5 h-5 mb-1">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <span>Resmi Fatura Seçeneği</span>
+                            </label>
+                            <span className="h-5 px-1.5 rounded bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold flex items-center gap-1">
+                              <span>Format Parametreleri</span>
+                            </span>
+                          </div>
+                          <div className="min-h-[38px] bg-purple-50/50 border border-purple-200 rounded-xl px-2.5 py-1 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                            <label className="flex items-center gap-1.5 text-xs font-extrabold text-purple-950 cursor-pointer select-none shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={sendToMysoft}
+                                onChange={(e) => {
+                                  const nextChecked = e.target.checked;
+                                  setSendToMysoft(nextChecked);
+                                  setMysoftSaveError(null);
+                                  setIsManualInvoiceNumber(false);
+                                  if (nextChecked) {
+                                    setInvoiceNumberInput(
+                                      isCurrentSalesEArsiv
+                                        ? activeEArsivNextNo
+                                        : activeEFaturaNextNo,
+                                    );
+                                    void fetchAndApplyNextInvoiceNumber();
+                                  } else {
+                                    setInvoiceNumberInput(activeGyrNextNo);
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                              />
+                              <span>{sendToMysoft ? "Resmi Fatura" : "Gayriresmi (GYR)"}</span>
+                            </label>
+                            {sendToMysoft ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <select
+                                  value={`${isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura"}:${isCurrentSalesEArsiv ? selectedEArsivPrefix : selectedEFaturaPrefix}`}
+                                  onChange={(e) => {
+                                    const [docMode, pfx] = e.target.value.split(":");
+                                    const cleanPfx = (pfx || "").trim().toUpperCase().slice(0, 3);
+                                    setIsManualInvoiceNumber(false);
+                                    if (docMode === "e_arsiv") {
+                                      setMysoftEDocType("e_arsiv");
+                                      setInvoiceScenario("EARSIVFATURA");
+                                      if (cleanPfx) setSelectedEArsivPrefix(cleanPfx);
+                                      setInvoiceNumberInput(
+                                        computeMysoftSequentialNumber("e_arsiv", cleanPfx || undefined),
+                                      );
+                                    } else {
+                                      setMysoftEDocType("e_fatura");
+                                      if (invoiceScenario === "EARSIVFATURA") {
+                                        setInvoiceScenario("TICARIFATURA");
+                                      }
+                                      if (cleanPfx) setSelectedEFaturaPrefix(cleanPfx);
+                                      setInvoiceNumberInput(
+                                        computeMysoftSequentialNumber("e_fatura", cleanPfx || undefined),
+                                      );
+                                    }
+                                  }}
+                                  className="h-7 bg-white border border-purple-200 rounded-lg px-2 text-[11px] font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer"
+                                  title="Fatura & Belge Format Parametreleri bölümünden alınan e-Fatura ve e-Arşiv seri numaraları"
+                                >
+                                  <option value={`e_fatura:${formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB"}`}>
+                                    e-Fatura ({formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB"}) → {computeMysoftSequentialNumber("e_fatura", formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB")}
+                                  </option>
+                                  <option value={`e_arsiv:${formatParamEArsivPrefix || selectedEArsivPrefix || "EAR"}`}>
+                                    e-Arşiv ({formatParamEArsivPrefix || selectedEArsivPrefix || "EAR"}) → {computeMysoftSequentialNumber("e_arsiv", formatParamEArsivPrefix || selectedEArsivPrefix || "EAR")}
+                                  </option>
+                                  {(mysoftMappingDefaults?.prefixes || [])
+                                    .filter((p) => {
+                                      const up = String(p.prefix || "").trim().toUpperCase().slice(0, 3);
+                                      return (
+                                        up &&
+                                        up !== (formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB") &&
+                                        up !== (formatParamEArsivPrefix || selectedEArsivPrefix || "EAR")
+                                      );
+                                    })
+                                    .map((p, idx) => {
+                                      const up = String(p.prefix || "").trim().toUpperCase().slice(0, 3);
+                                      const isEArs =
+                                        Number(p.edocumentType) === 2 ||
+                                        String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                                      const mType = isEArs ? "e_arsiv" : "e_fatura";
+                                      return (
+                                        <option key={`${up}_${idx}`} value={`${mType}:${up}`}>
+                                          {isEArs ? "e-Arşiv" : "e-Fatura"} ({up}) → {computeMysoftSequentialNumber(mType, up)}
+                                        </option>
+                                      );
+                                    })}
+                                </select>
+                                {isCurrentSalesEArsiv && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsSignatureStudioOpen(true)}
+                                    className="h-7 px-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                                    title="e-Arşiv İmza & Kaşe Ayarları"
+                                  >
+                                    <Sparkles className="w-3 h-3 text-amber-700" />
+                                    <span>İmza</span>
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[11px] font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                {activeGyrNextNo}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-[10px] text-purple-800 font-medium truncate">
+                            {sendToMysoft
+                              ? `VKN/TCKN (${vknSearchInput || "Seçili Cari"}) → ${isCurrentSalesEArsiv ? `e-Arşiv Serisi (${selectedEArsivPrefix})` : `e-Fatura Serisi (${selectedEFaturaPrefix})`}`
+                              : "Gayriresmi / Dahili kayıt (GİB'e gönderilmez)"}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Selected Cari Details Card */}
@@ -6926,11 +7147,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 ) : (
                   /* MANUEL MÜŞTERİ GİRİŞİ ALANLARI (Cari Hesapsız / Münferit) */
                   <div className="space-y-3.5 bg-white p-4 rounded-xl border border-purple-200/80 shadow-2xs">
-                    {/* Üst Satır: VKN/TCKN, Müşteri Adı, Fatura Tarihi */}
-                    <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-start gap-3">
+                    {/* Üst Satır: VKN/TCKN, Müşteri Adı, Fatura Tarihi, Fatura Numarası, Resmi Fatura Seçeneği */}
+                    <div className="flex flex-col md:flex-row md:flex-nowrap items-stretch md:items-start gap-2.5">
                       {/* VKN / TCKN No */}
                       <div className="relative w-fit max-w-full shrink-0">
-                        <div className="flex items-center gap-2 h-5 mb-1">
+                        <div className="flex items-center gap-1.5 h-5 mb-1">
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                             <CreditCard className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                             <span>VKN / TCKN</span>
@@ -6946,7 +7167,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             11111111111 (Nihai)
                           </button>
                         </div>
-                        <div className="flex items-center flex-wrap gap-1.5">
+                        <div className="flex items-center flex-nowrap gap-1.5">
                           <input
                             type="text"
                             maxLength={11}
@@ -6978,7 +7199,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               }
                             }}
                             disabled={isCheckingRecipient || !manualTaxNumber || (manualTaxNumber.length !== 10 && manualTaxNumber.length !== 11) || manualTaxNumber === "11111111111"}
-                            className="h-[38px] px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            className="h-[38px] px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                             title="GİB & Mysoft'tan firma ünvanı, vergi dairesi ve adresini getir"
                           >
                             {isCheckingRecipient ? (
@@ -6988,38 +7209,37 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             )}
                             <span className="hidden sm:inline">Sorgula</span>
                           </button>
+                        </div>
 
-                          {/* Mevcut Cariden Dolduruldu Bildirimi (Sorgula Butonunun Sağında) */}
-                          {matchedManualContactId && (
-                            <div className="h-[38px] px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-800 flex items-center gap-1.5 shrink-0">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>Kayıtlı cariden dolduruldu</span>
-                            </div>
-                          )}
-
-                          {/* Mükellefiyet Durumu (Sorgula Butonunun Sağında) */}
-                          {customerMode === "manual" && recipientStatus && recipientStatus.vknTckn === manualTaxNumber && (
-                            <div
-                              className={`h-[38px] px-2.5 rounded-xl border text-[11px] flex items-center gap-1.5 shrink-0 animate-fadeIn ${
-                                recipientStatus.isEFaturaUser
-                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
-                                  : "bg-sky-500/10 border-sky-500/20 text-sky-700"
-                              }`}
-                            >
-                              <span className="font-semibold whitespace-nowrap">
-                                {recipientStatus.isEFaturaUser
-                                  ? "🟢 GİB e-Fatura Mükellefi"
-                                  : "🔵 e-Arşiv Alıcısı"}
-                                {recipientStatus.activityStatus === "terminated" ? " (⚠️ Terk/Kapalı)" : ""}
+                        {/* Mevcut Cariden Dolduruldu / Mükellefiyet Durumu (Alt Satır Bilgi Rozeti) */}
+                        {(matchedManualContactId ||
+                          (customerMode === "manual" &&
+                            recipientStatus &&
+                            recipientStatus.vknTckn === manualTaxNumber)) && (
+                          <div className="mt-1 flex items-center flex-wrap gap-1">
+                            {matchedManualContactId && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span>Kayıtlı cari</span>
                               </span>
-                              {recipientStatus.pkAlias && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/60 border border-emerald-500/30 truncate max-w-[140px]" title={recipientStatus.pkAlias}>
-                                  PK: {recipientStatus.pkAlias.split("@")[0]}
+                            )}
+                            {customerMode === "manual" &&
+                              recipientStatus &&
+                              recipientStatus.vknTckn === manualTaxNumber && (
+                                <span
+                                  className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold flex items-center gap-1 ${
+                                    recipientStatus.isEFaturaUser
+                                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                                      : "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                                  }`}
+                                >
+                                  {recipientStatus.isEFaturaUser
+                                    ? "🟢 e-Fatura Mükellefi"
+                                    : "🔵 e-Arşiv Alıcısı"}
                                 </span>
                               )}
-                            </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
 
                         {/* VKN Yazıldıkça Filtrelenen Mevcut Cariler Açılır Listesi */}
                         {isManualVknDropdownOpen &&
@@ -7066,11 +7286,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       </div>
 
                       {/* Müşteri / Firma Adı / Ünvanı */}
-                      <div className="w-fit max-w-full shrink-0">
+                      <div className="flex-1 min-w-[170px] max-w-[290px]">
                         <div className="flex items-center h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1 truncate">
                             <User className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Müşteri Adı / Ticari Ünvanı *</span>
+                            <span className="truncate">Müşteri Adı / Ticari Ünvanı *</span>
                           </label>
                         </div>
                         <input
@@ -7079,8 +7299,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           placeholder="Örn: Ahmet Yılmaz veya ABC Ticaret"
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
-                          style={{ width: "360px" }}
-                          className="w-[360px] max-w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
+                          className="w-full h-[38px] bg-purple-50/20 border border-purple-300 rounded-xl px-2.5 text-xs font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 shadow-2xs transition-all"
                         />
                       </div>
 
@@ -7097,64 +7316,44 @@ export const Invoices: React.FC<InvoicesProps> = ({
                           required
                           value={issueDate}
                           onChange={(e) => setIssueDate(e.target.value)}
-                          className="w-[134px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                          className="w-[130px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                         />
                       </div>
 
-                      {/* Fatura Numarası (Fatura Tarihi Sağında - VKN/TCKN'ye Göre e-Fatura veya e-Arşiv Sıra No) */}
-                      <div className="w-full sm:w-[250px] max-w-full shrink-0">
-                        <div className="flex items-center justify-between gap-1.5 h-5 mb-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      {/* Fatura Numarası (Fatura Tarihi Sağında - 150px Sabit Genişlik) */}
+                      <div className="w-[150px] shrink-0">
+                        <div className="flex items-center justify-between gap-1 h-5 mb-1">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1 truncate">
                             <Hash className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                            <span>Fatura Numarası</span>
+                            <span className="truncate">Fatura No</span>
                           </label>
-                          {invType === "sales" && !editingInvoiceId ? (
-                            sendToMysoft ? (
-                              <div className="flex items-center gap-1">
-                                <span
-                                  className={`h-5 px-1.5 rounded text-[10px] font-extrabold border flex items-center ${
-                                    isCurrentSalesEArsiv
-                                      ? "bg-sky-50 text-sky-800 border-sky-200"
-                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                  }`}
-                                  title="Yazılan VKN / TCKN mükellefiyet durumuna göre belirlenen belge türü ve aktif seri"
-                                >
-                                  {isCurrentSalesEArsiv
-                                    ? `e-Arşiv (${selectedEArsivPrefix})`
-                                    : `e-Fatura (${selectedEFaturaPrefix})`}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setIsManualInvoiceNumber(false);
-                                    setInvoiceNumberInput(activeMysoftSerialNumber);
-                                    void fetchAndApplyNextInvoiceNumber();
-                                  }}
-                                  disabled={isFetchingNextDocNo}
-                                  title="Yazılan VKN / TCKN'ye göre sıradaki e-Fatura / e-Arşiv numarasını otomatik ata"
-                                  className="h-5 px-1.5 rounded bg-purple-50 border border-purple-200 text-[10px] text-purple-700 hover:bg-purple-100 hover:text-purple-900 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
-                                >
-                                  <RefreshCw className={`w-3 h-3 shrink-0 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="h-5 px-1.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-mono font-bold flex items-center">
-                                GYR Ön Eki
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-[10px] text-slate-400 font-medium">Otomatik</span>
+                          {invType === "sales" && !editingInvoiceId && (
+                            <span
+                              className={`h-4 px-1 rounded text-[9px] font-extrabold border flex items-center shrink-0 ${
+                                !sendToMysoft
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : isCurrentSalesEArsiv
+                                    ? "bg-sky-50 text-sky-800 border-sky-200"
+                                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              }`}
+                            >
+                              {!sendToMysoft
+                                ? "GYR"
+                                : isCurrentSalesEArsiv
+                                  ? selectedEArsivPrefix
+                                  : selectedEFaturaPrefix}
+                            </span>
                           )}
                         </div>
-                        <div className="relative">
+                        <div className="relative w-[150px]">
                           <input
                             type="text"
                             placeholder={
                               sendToMysoft
                                 ? isCurrentSalesEArsiv
-                                  ? `Örn: ${activeEArsivNextNo}`
-                                  : `Örn: ${activeEFaturaNextNo}`
-                                : `Örn: ${activeGyrNextNo}`
+                                  ? activeEArsivNextNo
+                                  : activeEFaturaNextNo
+                                : activeGyrNextNo
                             }
                             value={invoiceNumberInput}
                             onChange={(e) => {
@@ -7164,7 +7363,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                 val.trim().length > 0 && val.trim() !== activeSalesSerialNumber,
                               );
                             }}
-                            className="w-full h-[38px] bg-white border border-slate-200 rounded-xl px-2.5 pr-8 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
+                            className="w-[150px] h-[38px] bg-white border border-slate-200 rounded-xl px-2 pr-7 text-[11px] font-mono font-bold text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 shadow-2xs"
                           />
                           {invType === "sales" && !editingInvoiceId && (
                             <button
@@ -7180,91 +7379,184 @@ export const Invoices: React.FC<InvoicesProps> = ({
                               }}
                               disabled={isFetchingNextDocNo}
                               title="Sıradaki Fatura Numarasını Ata"
-                              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition cursor-pointer"
                             >
-                              <RefreshCw className={`w-3.5 h-3.5 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
+                              <RefreshCw className={`w-3 h-3 ${isFetchingNextDocNo ? "animate-spin text-purple-600" : ""}`} />
                             </button>
                           )}
                         </div>
                         {invType === "sales" && !editingInvoiceId && (
-                          (() => {
-                            if (!sendToMysoft) {
-                              return (
-                                <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                  <span>
-                                    {`GYR Serisi → Sıradaki: ${invoiceNumberInput || activeGyrNextNo}`}
-                                  </span>
-                                </p>
-                              );
-                            }
-
-                            const isEArsDoc = isCurrentSalesEArsiv;
-                            const expectedPfx = isEArsDoc
-                              ? selectedEArsivPrefix ||
-                                mysoftMappingDefaults?.eArsivPrefix ||
-                                companySettings?.eArsivPrefix ||
-                                ""
-                              : selectedEFaturaPrefix ||
-                                mysoftMappingDefaults?.eFaturaPrefix ||
-                                companySettings?.eFaturaPrefix ||
-                                "";
-                            const lastUsedNo =
-                              mysoftNumberInfo?.lastInvoiceNumber ||
-                              (isEArsDoc
-                                ? mysoftMappingDefaults?.eArsivLastNumber
-                                : mysoftMappingDefaults?.eFaturaLastNumber);
-
-                            const seqCheck = validateSequentialInvoiceNumber({
-                              enteredNumber: invoiceNumberInput || activeMysoftSerialNumber,
-                              expectedPrefix: expectedPfx,
-                              lastUsedNumber: lastUsedNo,
-                            });
-
-                            if (seqCheck.hasWarning) {
-                              return (
-                                <div
-                                  className={`mt-1.5 p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 max-w-[360px] ${
-                                    seqCheck.status === "gap"
-                                      ? "bg-amber-50 border-amber-300 text-amber-900"
-                                      : "bg-red-50 border-red-300 text-red-900"
-                                  }`}
-                                >
-                                  <div className="flex items-start gap-1.5 min-w-0">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
-                                    <div className="min-w-0">
-                                      <div className="font-extrabold">{seqCheck.title}</div>
-                                      <p className="leading-snug">{seqCheck.message}</p>
-                                    </div>
-                                  </div>
-                                  {seqCheck.expectedNextNumber && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setIsManualInvoiceNumber(false);
-                                        setInvoiceNumberInput(seqCheck.expectedNextNumber);
-                                      }}
-                                      className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold shrink-0 cursor-pointer"
-                                    >
-                                      Düzelt
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                <span>
-                                  {isEArsDoc ? "e-Arşiv" : "e-Fatura"} Sıra No:{" "}
-                                  <strong>{invoiceNumberInput || activeMysoftSerialNumber}</strong>
-                                </span>
-                              </p>
-                            );
-                          })()
+                          <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span className="truncate">
+                              {!sendToMysoft
+                                ? `GYR: ${invoiceNumberInput || activeGyrNextNo}`
+                                : `${isCurrentSalesEArsiv ? "e-Arşiv" : "e-Fatura"}: ${invoiceNumberInput || activeMysoftSerialNumber}`}
+                            </span>
+                          </p>
                         )}
                       </div>
+
+                      {/* Resmi Fatura Seçeneği (Fatura Numarası Sağında - 330px Genişlik) */}
+                      {invType === "sales" && formDocKind === "invoice" && (
+                        <div className="w-[330px] max-w-full shrink-0">
+                          <div className="w-[330px] max-w-full flex items-center justify-between gap-1.5 h-5 mb-1">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1 truncate">
+                              <ShieldCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <span className="truncate">Resmi Fatura Seçeneği</span>
+                            </label>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span
+                                className="h-5 px-1.5 rounded bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold flex items-center"
+                                title="Fatura & Belge Format Parametreleri bölümünden seri ve sıra numarası verisi alınmaktadır"
+                              >
+                                Format Parametreleri
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsManualInvoiceNumber(false);
+                                  void refreshMysoftSerialNumbers();
+                                  void fetchAndApplyNextInvoiceNumber();
+                                }}
+                                disabled={isLoadingMysoftSeries || isFetchingNextDocNo}
+                                title="Fatura & Belge Format Parametreleri ve Mysoft serilerini yenile"
+                                className="h-5 px-1.5 rounded bg-white border border-purple-200 text-[10px] text-purple-700 hover:bg-purple-100 font-bold flex items-center cursor-pointer disabled:opacity-50"
+                              >
+                                <RefreshCw
+                                  className={`w-3 h-3 ${
+                                    isLoadingMysoftSeries || isFetchingNextDocNo ? "animate-spin text-purple-600" : ""
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="w-[330px] max-w-full h-[38px] bg-purple-50/50 border border-purple-200 rounded-xl px-2 flex items-center justify-between gap-1.5 shadow-2xs">
+                            <label className="flex items-center gap-1 text-[11px] font-extrabold text-purple-950 cursor-pointer select-none shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={sendToMysoft}
+                                onChange={(e) => {
+                                  const nextChecked = e.target.checked;
+                                  setSendToMysoft(nextChecked);
+                                  setMysoftSaveError(null);
+                                  setIsManualInvoiceNumber(false);
+                                  if (nextChecked) {
+                                    setInvoiceNumberInput(
+                                      isCurrentSalesEArsiv
+                                        ? activeEArsivNextNo
+                                        : activeEFaturaNextNo,
+                                    );
+                                    void fetchAndApplyNextInvoiceNumber();
+                                  } else {
+                                    setInvoiceNumberInput(activeGyrNextNo);
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 rounded border-purple-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                              />
+                              <span>{sendToMysoft ? "Resmi" : "GYR"}</span>
+                            </label>
+
+                            {sendToMysoft ? (
+                              <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">
+                                <select
+                                  value={`${isCurrentSalesEArsiv ? "e_arsiv" : "e_fatura"}:${isCurrentSalesEArsiv ? selectedEArsivPrefix : selectedEFaturaPrefix}`}
+                                  onChange={(e) => {
+                                    const [docMode, pfx] = e.target.value.split(":");
+                                    const cleanPfx = (pfx || "").trim().toUpperCase().slice(0, 3);
+                                    setIsManualInvoiceNumber(false);
+                                    if (docMode === "e_arsiv") {
+                                      setMysoftEDocType("e_arsiv");
+                                      setInvoiceScenario("EARSIVFATURA");
+                                      if (cleanPfx) setSelectedEArsivPrefix(cleanPfx);
+                                      setInvoiceNumberInput(
+                                        computeMysoftSequentialNumber("e_arsiv", cleanPfx || undefined),
+                                      );
+                                    } else {
+                                      setMysoftEDocType("e_fatura");
+                                      if (invoiceScenario === "EARSIVFATURA") {
+                                        setInvoiceScenario("TICARIFATURA");
+                                      }
+                                      if (cleanPfx) setSelectedEFaturaPrefix(cleanPfx);
+                                      setInvoiceNumberInput(
+                                        computeMysoftSequentialNumber("e_fatura", cleanPfx || undefined),
+                                      );
+                                    }
+                                  }}
+                                  className="h-7 min-w-0 flex-1 bg-white border border-purple-200 rounded-lg px-1.5 text-[10px] font-mono font-bold text-slate-900 focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer truncate"
+                                  title="Fatura & Belge Format Parametreleri bölümünden alınan e-Fatura ve e-Arşiv seri numaraları"
+                                >
+                                  <option value={`e_fatura:${formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB"}`}>
+                                    e-Fatura ({formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB"}) → {computeMysoftSequentialNumber("e_fatura", formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB")}
+                                  </option>
+                                  <option value={`e_arsiv:${formatParamEArsivPrefix || selectedEArsivPrefix || "EAR"}`}>
+                                    e-Arşiv ({formatParamEArsivPrefix || selectedEArsivPrefix || "EAR"}) → {computeMysoftSequentialNumber("e_arsiv", formatParamEArsivPrefix || selectedEArsivPrefix || "EAR")}
+                                  </option>
+                                  {(mysoftMappingDefaults?.prefixes || [])
+                                    .filter((p) => {
+                                      const up = String(p.prefix || "").trim().toUpperCase().slice(0, 3);
+                                      return (
+                                        up &&
+                                        up !== (formatParamEFaturaPrefix || selectedEFaturaPrefix || "GIB") &&
+                                        up !== (formatParamEArsivPrefix || selectedEArsivPrefix || "EAR")
+                                      );
+                                    })
+                                    .map((p, idx) => {
+                                      const up = String(p.prefix || "").trim().toUpperCase().slice(0, 3);
+                                      const isEArs =
+                                        Number(p.edocumentType) === 2 ||
+                                        String(p.edocumentType || "").toUpperCase().includes("ARSIV");
+                                      const mType = isEArs ? "e_arsiv" : "e_fatura";
+                                      return (
+                                        <option key={`${up}_${idx}`} value={`${mType}:${up}`}>
+                                          {isEArs ? "e-Arşiv" : "e-Fatura"} ({up}) → {computeMysoftSequentialNumber(mType, up)}
+                                        </option>
+                                      );
+                                    })}
+                                </select>
+                                {isCurrentSalesEArsiv && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsSignatureStudioOpen(true)}
+                                    className="h-7 px-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[10px] font-bold flex items-center gap-0.5 cursor-pointer shrink-0"
+                                    title="e-Arşiv İmza & Kaşe Ayarları"
+                                  >
+                                    <Sparkles className="w-2.5 h-2.5 text-amber-700" />
+                                    <span>İmza</span>
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[11px] font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                {activeGyrNextNo}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="mt-1 text-[10px] text-purple-800 flex items-center gap-1 font-medium truncate">
+                            {sendToMysoft ? (
+                              <>
+                                <span
+                                  className={`inline-block w-2 h-2 rounded-full shrink-0 ${
+                                    isCurrentSalesEArsiv ? "bg-sky-500" : "bg-emerald-500"
+                                  }`}
+                                />
+                                <span className="truncate">
+                                  {manualTaxNumber
+                                    ? `${manualTaxNumber.length === 11 ? "TCKN" : "VKN"} (${manualTaxNumber}) → `
+                                    : "Format Parametresi → "}
+                                  {isCurrentSalesEArsiv
+                                    ? `e-Arşiv Serisi: ${selectedEArsivPrefix} (${activeEArsivNextNo})`
+                                    : `e-Fatura Serisi: ${selectedEFaturaPrefix} (${activeEFaturaNextNo})`}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="truncate">Gayriresmi / Dahili Fatura (GYR Serisi ile kaydedilir)</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* İkinci Satır: Vergi Dairesi, Telefon, E-posta, Müşteri Adresi */}
@@ -7588,8 +7880,41 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                     ))}
                                   </select>
 
-                                  {/* Stok Rehberi Kutucuğu */}
-                                  <div className="flex items-center gap-1.5">
+                                  {/* Açıklama & Stok Rehberi Seçimi (Tek Satırda) */}
+                                  <div className="relative flex items-center gap-1.5">
+                                    <div className="relative flex-1 min-w-0">
+                                      <input
+                                        type="text"
+                                        required
+                                        placeholder="Açıklama / Masraf Detayı (ör: Araç Yakıtı - 34 ABC 123 Plaka)"
+                                        value={item.description}
+                                        onChange={(e) =>
+                                          handleItemChange(item.id, "description", e.target.value)
+                                        }
+                                        className="w-full bg-white border border-slate-200 focus:border-purple-500 rounded-lg py-1.5 pl-2.5 pr-20 text-xs text-slate-900 placeholder-slate-400 font-medium outline-none focus:ring-2 focus:ring-purple-500/20"
+                                      />
+                                      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                        {item.productId && (() => {
+                                          const selProd = products.find((p) => p.id === item.productId);
+                                          const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
+                                          return (
+                                            <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                              {qty.toLocaleString("tr-TR")} {selProd?.unit || "Adet"}
+                                            </span>
+                                          );
+                                        })()}
+                                        {item.productId && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleItemChange(item.id, "productId", "")}
+                                            className="text-slate-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                            title="Stok seçimini temizle"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
                                     <button
                                       type="button"
                                       id={`stock-directory-trigger-purchase-${item.id}`}
@@ -7597,140 +7922,62 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                         setTargetItemRowId(item.id);
                                         setIsProductPickerOpen(true);
                                       }}
-                                      className="flex-1 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-lg text-xs cursor-pointer transition-all shadow-2xs group text-left"
-                                      title="Stok Rehberini Aç ve Ürün / Hizmet / Malzeme Seç"
+                                      className="h-[30px] px-2.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-[11px] font-bold text-purple-700 flex items-center gap-1 cursor-pointer shrink-0 transition-colors shadow-2xs"
+                                      title="Stok Rehberini Aç ve Ürünü Seçip Yapıştır"
                                     >
-                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                        <Package className="w-3.5 h-3.5 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
-                                        <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
-                                        <span className="text-[11px] text-slate-600 font-medium truncate">
-                                          {item.productId
-                                            ? (() => {
-                                                const selProd = products.find((p) => p.id === item.productId);
-                                                const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
-                                                return `${selProd?.name || item.description || "Stok Seçildi"} (Stok: ${qty.toLocaleString("tr-TR")} ${selProd?.unit || "Adet"})`;
-                                              })()
-                                            : `Stok rehberinden seçin (${products.length} ürün • Top. ${products.reduce((s, p) => s + Number(p.stockQuantity ?? p.stock ?? 0), 0).toLocaleString("tr-TR")} adet)...`}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        {item.productId && (() => {
-                                          const selProd = products.find((p) => p.id === item.productId);
-                                          const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
-                                          return (
-                                            <>
-                                              <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
-                                                {qty.toLocaleString("tr-TR")} {selProd?.unit || "Adet"}
-                                              </span>
-                                              <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
-                                                {selProd?.code || "Seçili"}
-                                              </span>
-                                            </>
-                                          );
-                                        })()}
-                                        <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
-                                          <Search className="w-2.5 h-2.5 text-purple-600" />
-                                          <span>Rehber</span>
-                                        </span>
-                                      </div>
+                                      <Search className="w-3 h-3 text-purple-600 shrink-0" />
+                                      <span>Rehber</span>
                                     </button>
-                                    {item.productId && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          handleItemChange(item.id, "productId", "");
-                                        }}
-                                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
-                                        title="Stok seçimini temizle"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
                                   </div>
-
-                                  <input
-                                    type="text"
-                                    required
-                                    placeholder="Açıklama / Masraf Detayı (ör: Araç Yakıtı - 34 ABC 123 Plaka)"
-                                    value={item.description}
-                                    onChange={(e) =>
-                                      handleItemChange(item.id, "description", e.target.value)
-                                    }
-                                    className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
-                                  />
                                 </div>
                               ) : (
-                                <div className="space-y-1.5">
-                                  {/* Stok Rehberi Kutucuğu */}
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      id={`stock-directory-trigger-${item.id}`}
-                                      onClick={() => {
-                                        setTargetItemRowId(item.id);
-                                        setIsProductPickerOpen(true);
-                                      }}
-                                      className="flex-1 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-50 hover:bg-purple-50/70 border border-slate-200 hover:border-purple-300 rounded-lg text-xs cursor-pointer transition-all shadow-2xs group text-left"
-                                      title="Stok Rehberini Aç ve Ürün/Hizmet Seç"
-                                    >
-                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                        <Package className="w-3.5 h-3.5 text-purple-600 shrink-0 group-hover:scale-110 transition-transform" />
-                                        <span className="font-bold text-[11px] text-slate-700 shrink-0">Stok Rehberi:</span>
-                                        <span className="text-[11px] text-slate-600 font-medium truncate">
-                                          {item.productId
-                                            ? (() => {
-                                                const selProd = products.find((p) => p.id === item.productId);
-                                                const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
-                                                return `${selProd?.name || item.description || "Stok Seçildi"} (Stok: ${qty.toLocaleString("tr-TR")} ${selProd?.unit || "Adet"})`;
-                                              })()
-                                            : `Stok rehberinden seçin (${products.length} ürün • Top. ${products.reduce((s, p) => s + Number(p.stockQuantity ?? p.stock ?? 0), 0).toLocaleString("tr-TR")} adet)...`}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        {item.productId && (() => {
-                                          const selProd = products.find((p) => p.id === item.productId);
-                                          const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
-                                          return (
-                                            <>
-                                              <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
-                                                {qty.toLocaleString("tr-TR")} {selProd?.unit || "Adet"}
-                                              </span>
-                                              <span className="text-[10px] font-mono font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded">
-                                                {selProd?.code || "Seçili"}
-                                              </span>
-                                            </>
-                                          );
-                                        })()}
-                                        <span className="text-[10px] font-bold text-purple-700 bg-white border border-purple-200 group-hover:bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs transition-colors">
-                                          <Search className="w-2.5 h-2.5 text-purple-600" />
-                                          <span>Rehber</span>
-                                        </span>
-                                      </div>
-                                    </button>
-                                    {item.productId && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          handleItemChange(item.id, "productId", "");
-                                        }}
-                                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
-                                        title="Stok seçimini temizle"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
+                                <div className="relative flex items-center gap-1.5">
+                                  <div className="relative flex-1 min-w-0">
+                                    <input
+                                      type="text"
+                                      required
+                                      placeholder="Açıklama (ör: Yazılım danışmanlık hizmeti)"
+                                      value={item.description}
+                                      onChange={(e) =>
+                                        handleItemChange(item.id, "description", e.target.value)
+                                      }
+                                      className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-lg py-1.5 pl-2.5 pr-20 text-xs text-slate-900 placeholder-slate-400 font-medium outline-none focus:ring-2 focus:ring-purple-500/20"
+                                    />
+                                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                      {item.productId && (() => {
+                                        const selProd = products.find((p) => p.id === item.productId);
+                                        const qty = Number(selProd?.stockQuantity ?? selProd?.stock ?? 0);
+                                        return (
+                                          <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                            {qty.toLocaleString("tr-TR")} {selProd?.unit || "Adet"}
+                                          </span>
+                                        );
+                                      })()}
+                                      {item.productId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleItemChange(item.id, "productId", "")}
+                                          className="text-slate-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                          title="Stok seçimini temizle"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-
-                                  <input
-                                    type="text"
-                                    required
-                                    placeholder="Açıklama (ör: Yazılım danışmanlık hizmeti)"
-                                    value={item.description}
-                                    onChange={(e) =>
-                                      handleItemChange(item.id, "description", e.target.value)
-                                    }
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-slate-900 placeholder-slate-400 font-medium"
-                                  />
+                                  <button
+                                    type="button"
+                                    id={`stock-directory-trigger-${item.id}`}
+                                    onClick={() => {
+                                      setTargetItemRowId(item.id);
+                                      setIsProductPickerOpen(true);
+                                    }}
+                                    className="h-[30px] px-2.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-[11px] font-bold text-purple-700 flex items-center gap-1 cursor-pointer shrink-0 transition-colors shadow-2xs"
+                                    title="Stok Rehberini Aç ve Ürünü Seçip Yapıştır"
+                                  >
+                                    <Search className="w-3 h-3 text-purple-600 shrink-0" />
+                                    <span>Rehber</span>
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -7831,7 +8078,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   parseInt(e.target.value) || 0
                                 )
                               }
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-center text-slate-900"
+                              className="w-[65px] bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-center text-slate-900"
                             >
                               <option value={20}>%20</option>
                               <option value={10}>%10</option>
@@ -8048,10 +8295,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
                 </div>
               </div>
 
-              {/* Mysoft / e-Belge Satış Belgesi Ayarları (Sayfaya Göre Tam Genişlik) */}
-              <div className="w-full">
-                {renderMysoftSalesDocumentSettings()}
-              </div>
+              {(mysoftSaveError || mysoftSaveNotice) && (
+                <div className="space-y-2">
+                  {mysoftSaveError && (
+                    <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                      <p className="font-semibold">{mysoftSaveError}</p>
+                    </div>
+                  )}
+                  {mysoftSaveNotice && (
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                      {mysoftSaveNotice}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
                 <button
