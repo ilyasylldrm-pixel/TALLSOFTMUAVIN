@@ -4122,7 +4122,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased">
+    <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased md:gap-x-4 lg:gap-x-5">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -4188,7 +4188,7 @@ export default function App() {
           data.settings?.manualBackupReminderEnabled !== false && (
             <div
               role="alert"
-              className="w-full bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-800/70 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-rose-950 dark:text-rose-100"
+              className="w-full bg-rose-50 dark:bg-rose-950/40 border-b md:border-l md:rounded-l-xl border-rose-200 dark:border-rose-800/70 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-rose-950 dark:text-rose-100"
             >
               <div className="flex items-start sm:items-center gap-2.5 min-w-0">
                 <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5 sm:mt-0" />

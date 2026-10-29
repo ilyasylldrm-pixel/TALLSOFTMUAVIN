@@ -116,14 +116,14 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className="relative w-full box-border sticky top-0 z-30 transition-colors border-b shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 backdrop-blur-md haze-header-bg"
+      className="relative w-full box-border sticky top-0 z-30 transition-colors border-b shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 backdrop-blur-md haze-header-bg md:border-l md:rounded-bl-xl"
       style={{
         backgroundColor: theme.headerBg,
         borderColor: theme.headerBorder,
         color: theme.headerText,
         height: "123px",
         marginBottom: "0px",
-        paddingLeft: "21px",
+        paddingLeft: "24px",
         paddingRight: "20px",
         marginRight: "0px",
       }}

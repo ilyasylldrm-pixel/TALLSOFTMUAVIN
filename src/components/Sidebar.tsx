@@ -270,8 +270,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Brand Header */}
       <div
-        className="px-4 py-3.5 border-b flex items-center justify-between gap-2 min-h-[72px] md:h-[123px]"
-        style={{ borderColor: theme.sidebarBorder }}
+        className="w-[280px] px-4 py-3.5 border-b flex items-center justify-between gap-2 min-h-[72px] md:h-[123px]"
+        style={{ borderColor: theme.sidebarBorder, width: "280px" }}
       >
         <div className="min-w-0 flex-1 flex flex-col justify-center">
           <Logo
@@ -327,7 +327,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto custom-scrollbar">
+      <nav
+        className="w-[280px] flex-1 px-3 py-2 space-y-1 overflow-y-auto custom-scrollbar"
+        style={{ width: "280px" }}
+      >
         {navItems.map((item) => {
           const Icon = item.icon;
           const isOrderItem = item.id === "orders_module" || item.id === "orders";
@@ -1012,7 +1015,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Quick Action: Yayınla & Senkronize Et */}
       {onOpenGitHubPublish && isAdmin && (
-        <div className="px-3 pt-2">
+        <div className="w-[280px] px-3 pt-2" style={{ width: "280px" }}>
           <button
             type="button"
             onClick={onOpenGitHubPublish}
@@ -1028,8 +1031,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Company Info Footer (Collapsed) */}
       <div
-        className="p-3 border-t flex flex-col items-center justify-center relative group"
-        style={{ borderColor: theme.sidebarBorder }}
+        className="w-[280px] p-3 border-t flex flex-col items-center justify-center relative group"
+        style={{ borderColor: theme.sidebarBorder, width: "280px" }}
       >
         <button
           type="button"
@@ -1054,8 +1057,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar - Sabit Genişlik (Kayma ve daralma kaldırıldı) */}
       <aside
-        className="hidden md:flex flex-col shrink-0 w-64 h-screen sticky top-0 shadow-2xs z-20"
+        className="hidden md:flex flex-col shrink-0 w-[280px] h-screen sticky top-0 shadow-2xs z-20"
         style={{
+          width: "280px",
           backgroundColor: theme.sidebarBg,
           color: theme.sidebarText,
           borderColor: theme.sidebarBorder,

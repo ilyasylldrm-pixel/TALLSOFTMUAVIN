@@ -1317,6 +1317,111 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const payrollRecords = sortedPayrollEmployees.map((emp) => calculatePayrollForEmployee(emp));
   const totalEmployerMonthlyCost = payrollRecords.reduce((sum, r) => sum + r.totalEmployerCost, 0);
 
+  const hrSubmodulesList: { id: HRSubModule; label: string; shortLabel: string; icon: React.ElementType; badge?: string | number }[] = [
+    { id: "employees", label: "Personel Listesi", shortLabel: "Personel", icon: Users, badge: employees.length },
+    { id: "payroll", label: "Bordro & Maaş", shortLabel: "Bordro", icon: Receipt, badge: `${payrollMonth}` },
+    { id: "leaves", label: "İzin Yönetimi", shortLabel: "İzinler", icon: Calendar, badge: leaveRequests.filter((l) => l.status === "pending").length || undefined },
+    { id: "advances", label: "Avans & Masraflar", shortLabel: "Avans/Masraf", icon: CreditCard, badge: advanceRequests.filter((a) => a.status === "pending").length || undefined },
+    { id: "sgk", label: "SGK & Özlük Belgeleri", shortLabel: "SGK & Özlük", icon: ShieldCheck, badge: "%5 Teşvik" },
+    { id: "severance", label: "Kıdem & İhbar", shortLabel: "Kıdem/İhbar", icon: Scale },
+    { id: "zimmet", label: "Zimmet & Demirbaş", shortLabel: "Zimmet", icon: Laptop, badge: assetCustodies.length || undefined },
+    { id: "allowances", label: "Yan Haklar & Ödenekler", shortLabel: "Yan Haklar", icon: Gift },
+  ];
+
+  const subModuleInfo = useMemo(() => {
+    switch (activeSubTab) {
+      case "payroll":
+        return {
+          badge: "Bordro & Maaş Hesaplama",
+          badgeIcon: <Receipt className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Bordro, Maaş & Puantaj Hesaplama",
+          description: "Aylık SGK puantaj matrahları, gelir/damga vergisi istisnaları, net/brüt hakedişler ve işverene toplam maliyet dökümleri.",
+          stats: [
+            { label: "Bordro Dönemi", value: payrollMonth, tone: "info" as const },
+            { label: "Toplam Net Hakediş", value: formatTRY(payrollRecords.reduce((sum, r) => sum + r.payableNetSalary, 0)), tone: "default" as const },
+          ],
+        };
+      case "leaves":
+        return {
+          badge: "İzin & Hak Ediş Yönetimi",
+          badgeIcon: <Calendar className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "İzin Yönetimi & 4857 S.K. Hak Edişleri",
+          description: "Yıllık ücretli izin bakiyeleri, analık/babalık/evlilik izinleri, izin talep onay akışı ve resmi izin formları.",
+          stats: [
+            { label: "Onay Bekleyen", value: `${leaveRequests.filter((l) => l.status === "pending").length} Talep`, tone: "info" as const },
+            { label: "Şu An İzinli", value: `${onLeaveCount} Personel`, tone: "default" as const },
+          ],
+        };
+      case "advances":
+        return {
+          badge: "Avans, Masraf & Kesintiler",
+          badgeIcon: <CreditCard className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Avans, Masraflar & İcra/Nafaka Takibi",
+          description: "Personele ödenen maaş ve masraf avansları ile icra müdürlükleri maaş haczi yasal kesinti takibi.",
+          stats: [
+            { label: "Bekleyen Avans", value: `${advanceRequests.filter((a) => a.status === "pending").length} Talep`, tone: "info" as const },
+            { label: "Aktif İcra Dosyası", value: `${legalDeductions.filter((d) => d.status === "active").length} Dosya`, tone: "default" as const },
+          ],
+        };
+      case "sgk":
+        return {
+          badge: "SGK Mevzuatı & Özlük",
+          badgeIcon: <ShieldCheck className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "SGK Mevzuatı & Özlük Dosyası Yönetimi",
+          description: "İş Kanunu ve SGK mevzuatına uygun standart özlük evrakları checklisti, eksik belge takibi ve SGK kodları.",
+          stats: [
+            { label: "SGK Sicil No", value: companySettings.sgkCredentials?.workplaceRegistrationNo ? companySettings.sgkCredentials.workplaceRegistrationNo.substring(0, 14) + "..." : "2.8470.01.01...", tone: "info" as const },
+            { label: "Teşvik Durumu", value: "5510 %5 İndirim Aktif", tone: "default" as const },
+          ],
+        };
+      case "severance":
+        return {
+          badge: "Tazminat & Fesih",
+          badgeIcon: <Scale className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Kıdem & İhbar Tazminatı Hesaplama",
+          description: "4857 ve 1475 sayılı kanunlara göre giydirilmiş brüt ücret, kıdem tavanı kontrolü, ihbar önelleri ve ibraname dökümleri.",
+          stats: [
+            { label: "2026 Kıdem Tavanı", value: "₺46.550,00", tone: "info" as const },
+            { label: "Damga Vergisi", value: "Binde 7,59", tone: "default" as const },
+          ],
+        };
+      case "zimmet":
+        return {
+          badge: "Zimmet & Demirbaş",
+          badgeIcon: <Laptop className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Zimmet & Demirbaş Takip Sistemi",
+          description: "Şirket personellerine teslim edilen bilgisayar, telefon, tablet, araç ve ekipmanların teslim/iade tutanakları.",
+          stats: [
+            { label: "Zimmetli Varlık", value: `${assetCustodies.length} Kayıt`, tone: "info" as const },
+            { label: "Aktif Zimmet", value: `${assetCustodies.filter((a) => a.status === "active").length} Teslim`, tone: "default" as const },
+          ],
+        };
+      case "allowances":
+        return {
+          badge: "Yan Haklar & Ödenekler",
+          badgeIcon: <Gift className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Personel Yan Hakları & Ticari Ödenekler",
+          description: "Yol ve yemek yardımı standartları, günlük SGK istisna limitleri ve puantaj bordro entegrasyonu.",
+          stats: [
+            { label: "Yemek Standardı", value: `${formatTRY(allowanceForm.defaultFoodAllowance)} / Ay`, tone: "info" as const },
+            { label: "Yol Standardı", value: `${formatTRY(allowanceForm.defaultRoadAllowance)} / Ay`, tone: "default" as const },
+          ],
+        };
+      case "employees":
+      default:
+        return {
+          badge: "İnsan Kaynakları & Bordro",
+          badgeIcon: <Users className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Personel Listesi & Kadro Yönetimi",
+          description: "Çalışan özlük dosyaları, departman/şube görevlendirmeleri, maaş anlaşmaları ve kadro dökümleri.",
+          stats: [
+            { label: "Kısa Ünvan", value: getHrCompanyTitle(companySettings), tone: "info" as const },
+            { label: "Kadro Büyüklüğü", value: `${employees.length} Çalışan`, tone: "default" as const },
+          ],
+        };
+    }
+  }, [activeSubTab, payrollMonth, payrollRecords, leaveRequests, onLeaveCount, advanceRequests, legalDeductions, companySettings, assetCustodies, allowanceForm, employees.length]);
+
   const handleOpenCreateEmployee = () => {
     setEditingEmployee(null);
     setNewEmpForm({
@@ -4961,111 +5066,6 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
 
 
-
-  const hrSubmodulesList: { id: HRSubModule; label: string; shortLabel: string; icon: React.ElementType; badge?: string | number }[] = [
-    { id: "employees", label: "Personel Listesi", shortLabel: "Personel", icon: Users, badge: employees.length },
-    { id: "payroll", label: "Bordro & Maaş", shortLabel: "Bordro", icon: Receipt, badge: `${payrollMonth}` },
-    { id: "leaves", label: "İzin Yönetimi", shortLabel: "İzinler", icon: Calendar, badge: leaveRequests.filter((l) => l.status === "pending").length || undefined },
-    { id: "advances", label: "Avans & Masraflar", shortLabel: "Avans/Masraf", icon: CreditCard, badge: advanceRequests.filter((a) => a.status === "pending").length || undefined },
-    { id: "sgk", label: "SGK & Özlük Belgeleri", shortLabel: "SGK & Özlük", icon: ShieldCheck, badge: "%5 Teşvik" },
-    { id: "severance", label: "Kıdem & İhbar", shortLabel: "Kıdem/İhbar", icon: Scale },
-    { id: "zimmet", label: "Zimmet & Demirbaş", shortLabel: "Zimmet", icon: Laptop, badge: assetCustodies.length || undefined },
-    { id: "allowances", label: "Yan Haklar & Ödenekler", shortLabel: "Yan Haklar", icon: Gift },
-  ];
-
-  const subModuleInfo = useMemo(() => {
-    switch (activeSubTab) {
-      case "payroll":
-        return {
-          badge: "Bordro & Maaş Hesaplama",
-          badgeIcon: <Receipt className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "Bordro, Maaş & Puantaj Hesaplama",
-          description: "Aylık SGK puantaj matrahları, gelir/damga vergisi istisnaları, net/brüt hakedişler ve işverene toplam maliyet dökümleri.",
-          stats: [
-            { label: "Bordro Dönemi", value: payrollMonth, tone: "info" as const },
-            { label: "Toplam Net Hakediş", value: formatTRY(payrollRecords.reduce((sum, r) => sum + r.payableNetSalary, 0)), tone: "default" as const },
-          ],
-        };
-      case "leaves":
-        return {
-          badge: "İzin & Hak Ediş Yönetimi",
-          badgeIcon: <Calendar className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "İzin Yönetimi & 4857 S.K. Hak Edişleri",
-          description: "Yıllık ücretli izin bakiyeleri, analık/babalık/evlilik izinleri, izin talep onay akışı ve resmi izin formları.",
-          stats: [
-            { label: "Onay Bekleyen", value: `${leaveRequests.filter((l) => l.status === "pending").length} Talep`, tone: "info" as const },
-            { label: "Şu An İzinli", value: `${onLeaveCount} Personel`, tone: "default" as const },
-          ],
-        };
-      case "advances":
-        return {
-          badge: "Avans, Masraf & Kesintiler",
-          badgeIcon: <CreditCard className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "Avans, Masraflar & İcra/Nafaka Takibi",
-          description: "Personele ödenen maaş ve masraf avansları ile icra müdürlükleri maaş haczi yasal kesinti takibi.",
-          stats: [
-            { label: "Bekleyen Avans", value: `${advanceRequests.filter((a) => a.status === "pending").length} Talep`, tone: "info" as const },
-            { label: "Aktif İcra Dosyası", value: `${legalDeductions.filter((d) => d.status === "active").length} Dosya`, tone: "default" as const },
-          ],
-        };
-      case "sgk":
-        return {
-          badge: "SGK Mevzuatı & Özlük",
-          badgeIcon: <ShieldCheck className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "SGK Mevzuatı & Özlük Dosyası Yönetimi",
-          description: "İş Kanunu ve SGK mevzuatına uygun standart özlük evrakları checklisti, eksik belge takibi ve SGK kodları.",
-          stats: [
-            { label: "SGK Sicil No", value: companySettings.sgkCredentials?.workplaceRegistrationNo ? companySettings.sgkCredentials.workplaceRegistrationNo.substring(0, 14) + "..." : "2.8470.01.01...", tone: "info" as const },
-            { label: "Teşvik Durumu", value: "5510 %5 İndirim Aktif", tone: "default" as const },
-          ],
-        };
-      case "severance":
-        return {
-          badge: "Tazminat & Fesih",
-          badgeIcon: <Scale className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "Kıdem & İhbar Tazminatı Hesaplama",
-          description: "4857 ve 1475 sayılı kanunlara göre giydirilmiş brüt ücret, kıdem tavanı kontrolü, ihbar önelleri ve ibraname dökümleri.",
-          stats: [
-            { label: "2026 Kıdem Tavanı", value: "₺46.550,00", tone: "info" as const },
-            { label: "Damga Vergisi", value: "Binde 7,59", tone: "default" as const },
-          ],
-        };
-      case "zimmet":
-        return {
-          badge: "Zimmet & Demirbaş",
-          badgeIcon: <Laptop className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "Zimmet & Demirbaş Takip Sistemi",
-          description: "Şirket personellerine teslim edilen bilgisayar, telefon, tablet, araç ve ekipmanların teslim/iade tutanakları.",
-          stats: [
-            { label: "Zimmetli Varlık", value: `${assetCustodies.length} Kayıt`, tone: "info" as const },
-            { label: "Aktif Zimmet", value: `${assetCustodies.filter((a) => a.status === "active").length} Teslim`, tone: "default" as const },
-          ],
-        };
-      case "allowances":
-        return {
-          badge: "Yan Haklar & Ödenekler",
-          badgeIcon: <Gift className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "Personel Yan Hakları & Ticari Ödenekler",
-          description: "Yol ve yemek yardımı standartları, günlük SGK istisna limitleri ve puantaj bordro entegrasyonu.",
-          stats: [
-            { label: "Yemek Standardı", value: `${formatTRY(allowanceForm.defaultFoodAllowance)} / Ay`, tone: "info" as const },
-            { label: "Yol Standardı", value: `${formatTRY(allowanceForm.defaultRoadAllowance)} / Ay`, tone: "default" as const },
-          ],
-        };
-      case "employees":
-      default:
-        return {
-          badge: "İnsan Kaynakları & Bordro",
-          badgeIcon: <Users className="w-2.5 h-2.5 text-[#0f6bae]" />,
-          title: "Personel Listesi & Kadro Yönetimi",
-          description: "Çalışan özlük dosyaları, departman/şube görevlendirmeleri, maaş anlaşmaları ve kadro dökümleri.",
-          stats: [
-            { label: "Kısa Ünvan", value: getHrCompanyTitle(companySettings), tone: "info" as const },
-            { label: "Kadro Büyüklüğü", value: `${employees.length} Çalışan`, tone: "default" as const },
-          ],
-        };
-    }
-  }, [activeSubTab, payrollMonth, payrollRecords, leaveRequests, onLeaveCount, advanceRequests, legalDeductions, companySettings, assetCustodies, allowanceForm, employees.length]);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 sm:space-y-7 max-w-7xl mx-auto">
