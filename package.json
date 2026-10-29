@@ -9,6 +9,7 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist build",
     "deploy:cloudrun": "bash deploy-cloudrun.sh",
+    "push:github": "bash push-to-github.sh",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

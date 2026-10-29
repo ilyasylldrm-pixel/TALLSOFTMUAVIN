@@ -34,7 +34,7 @@ echo "Dosyalar sahneleniyor (git add .)..."
 git add .
 if [ -n "$(git status --porcelain)" ]; then
   echo "Değişiklikler commit ediliyor..."
-  git commit -m "feat: Admin paneli kimlik bilgileri, modül yetkilendirme ve gelir faturası arayüz güncellemeleri ($(date +'%Y-%m-%d %H:%M'))"
+  git commit -m "feat: Fatura tarihi sağına otomatik e-Fatura / e-Arşiv sıra numarası alanı ve arayüz düzenlemeleri ($(date +'%Y-%m-%d %H:%M'))"
 fi
 
 # 5. Uzak dal ile birleştir (varsa)
