@@ -72,6 +72,11 @@ import {
   ChevronUp,
   SlidersHorizontal,
   Pin,
+  LayoutGrid,
+  List,
+  Key,
+  ClipboardCheck,
+  Copy,
 } from "lucide-react";
 import { Employee, PayrollRecord, LeaveRequest, AdvanceRequest, LegalDeduction, CompanySettings, Branch, Warehouse, CostProject, AssetCustody, AdditionalPaymentItem, Transaction } from "../types";
 import { sgkOccupations } from "../data/sgkOccupations";
@@ -104,6 +109,16 @@ const MONTH_NAMES = [
   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
 ];
 
+export type HRSubModule =
+  | "employees"
+  | "payroll"
+  | "leaves"
+  | "advances"
+  | "sgk"
+  | "severance"
+  | "zimmet"
+  | "allowances";
+
 interface HRManagementProps {
   employees: Employee[];
   leaveRequests: LeaveRequest[];
@@ -131,6 +146,8 @@ interface HRManagementProps {
   onAddTransaction?: (tx: Transaction) => void;
   onUpdateTransaction?: (tx: Transaction) => void;
   onSaveSettings?: (settings: CompanySettings) => void;
+  activeSubTab?: HRSubModule;
+  onSelectSubTab?: (subTab: HRSubModule) => void;
 }
 
 export const HRManagement: React.FC<HRManagementProps> = ({
@@ -160,11 +177,24 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   onAddTransaction,
   onUpdateTransaction,
   onSaveSettings,
+  activeSubTab: externalSubTab,
+  onSelectSubTab,
 }) => {
   const { theme } = useTheme();
-  const [activeSubTab, setActiveSubTab] = useState<
-    "employees" | "payroll" | "leaves" | "advances" | "sgk" | "severance" | "zimmet" | "allowances"
-  >("employees");
+  const [activeSubTab, setActiveSubTab] = useState<HRSubModule>(externalSubTab || "employees");
+
+  useEffect(() => {
+    if (externalSubTab && externalSubTab !== activeSubTab) {
+      setActiveSubTab(externalSubTab);
+    }
+  }, [externalSubTab]);
+
+  const handleSubTabChange = (tab: HRSubModule) => {
+    setActiveSubTab(tab);
+    if (onSelectSubTab) {
+      onSelectSubTab(tab);
+    }
+  };
   const [advanceInnerTab, setAdvanceInnerTab] = useState<"requests" | "legal_deductions">("requests");
 
   // Para Birimi Formatlayıcı (Lira ve Kuruş: ₺12.500,00)
@@ -229,6 +259,37 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [employeeSortBy, setEmployeeSortBy] = useState<
     "name_asc" | "name_desc" | "date_desc" | "date_asc" | "salary_desc" | "salary_asc"
   >("name_asc");
+  const [employeeViewMode, setEmployeeViewMode] = useState<"table" | "grid">("table");
+
+  // SGK & Özlük Belgeleri Durumu
+  const [sgkActiveTab, setSgkActiveTab] = useState<"checklist" | "codes" | "occupations">("checklist");
+  const [sgkSearchCode, setSgkSearchCode] = useState("");
+  const [selectedSgkEmployeeId, setSelectedSgkEmployeeId] = useState<string>("all");
+  const [employeeDocsStatus, setEmployeeDocsStatus] = useState<Record<string, Record<string, boolean>>>(() => {
+    try {
+      const raw = localStorage.getItem("muavin_hr_employee_docs");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const handleToggleEmployeeDoc = (empId: string, docKey: string) => {
+    setEmployeeDocsStatus((prev) => {
+      const empDocs = prev[empId] || {};
+      const updated = {
+        ...prev,
+        [empId]: {
+          ...empDocs,
+          [docKey]: !empDocs[docKey],
+        },
+      };
+      try {
+        localStorage.setItem("muavin_hr_employee_docs", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Modals & Selection States
   const [isAddEmployeeOpen, setIsAddEmployeeOpen] = useState(false);
@@ -4901,298 +4962,689 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
 
 
+  const hrSubmodulesList: { id: HRSubModule; label: string; shortLabel: string; icon: React.ElementType; badge?: string | number }[] = [
+    { id: "employees", label: "Personel Listesi", shortLabel: "Personel", icon: Users, badge: employees.length },
+    { id: "payroll", label: "Bordro & Maaş", shortLabel: "Bordro", icon: Receipt, badge: `${payrollMonth}` },
+    { id: "leaves", label: "İzin Yönetimi", shortLabel: "İzinler", icon: Calendar, badge: leaveRequests.filter((l) => l.status === "pending").length || undefined },
+    { id: "advances", label: "Avans & Masraflar", shortLabel: "Avans/Masraf", icon: CreditCard, badge: advanceRequests.filter((a) => a.status === "pending").length || undefined },
+    { id: "sgk", label: "SGK & Özlük Belgeleri", shortLabel: "SGK & Özlük", icon: ShieldCheck, badge: "%5 Teşvik" },
+    { id: "severance", label: "Kıdem & İhbar", shortLabel: "Kıdem/İhbar", icon: Scale },
+    { id: "zimmet", label: "Zimmet & Demirbaş", shortLabel: "Zimmet", icon: Laptop, badge: assetCustodies.length || undefined },
+    { id: "allowances", label: "Yan Haklar & Ödenekler", shortLabel: "Yan Haklar", icon: Gift },
+  ];
+
+  const subModuleInfo = useMemo(() => {
+    switch (activeSubTab) {
+      case "payroll":
+        return {
+          badge: "Bordro & Maaş Hesaplama",
+          badgeIcon: <Receipt className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Bordro, Maaş & Puantaj Hesaplama",
+          description: "Aylık SGK puantaj matrahları, gelir/damga vergisi istisnaları, net/brüt hakedişler ve işverene toplam maliyet dökümleri.",
+          stats: [
+            { label: "Bordro Dönemi", value: payrollMonth, tone: "info" as const },
+            { label: "Toplam Net Hakediş", value: formatTRY(payrollRecords.reduce((sum, r) => sum + r.payableNetSalary, 0)), tone: "default" as const },
+          ],
+        };
+      case "leaves":
+        return {
+          badge: "İzin & Hak Ediş Yönetimi",
+          badgeIcon: <Calendar className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "İzin Yönetimi & 4857 S.K. Hak Edişleri",
+          description: "Yıllık ücretli izin bakiyeleri, analık/babalık/evlilik izinleri, izin talep onay akışı ve resmi izin formları.",
+          stats: [
+            { label: "Onay Bekleyen", value: `${leaveRequests.filter((l) => l.status === "pending").length} Talep`, tone: "info" as const },
+            { label: "Şu An İzinli", value: `${onLeaveCount} Personel`, tone: "default" as const },
+          ],
+        };
+      case "advances":
+        return {
+          badge: "Avans, Masraf & Kesintiler",
+          badgeIcon: <CreditCard className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Avans, Masraflar & İcra/Nafaka Takibi",
+          description: "Personele ödenen maaş ve masraf avansları ile icra müdürlükleri maaş haczi yasal kesinti takibi.",
+          stats: [
+            { label: "Bekleyen Avans", value: `${advanceRequests.filter((a) => a.status === "pending").length} Talep`, tone: "info" as const },
+            { label: "Aktif İcra Dosyası", value: `${legalDeductions.filter((d) => d.status === "active").length} Dosya`, tone: "default" as const },
+          ],
+        };
+      case "sgk":
+        return {
+          badge: "SGK Mevzuatı & Özlük",
+          badgeIcon: <ShieldCheck className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "SGK Mevzuatı & Özlük Dosyası Yönetimi",
+          description: "İş Kanunu ve SGK mevzuatına uygun standart özlük evrakları checklisti, eksik belge takibi ve SGK kodları.",
+          stats: [
+            { label: "SGK Sicil No", value: companySettings.sgkCredentials?.workplaceRegistrationNo ? companySettings.sgkCredentials.workplaceRegistrationNo.substring(0, 14) + "..." : "2.8470.01.01...", tone: "info" as const },
+            { label: "Teşvik Durumu", value: "5510 %5 İndirim Aktif", tone: "default" as const },
+          ],
+        };
+      case "severance":
+        return {
+          badge: "Tazminat & Fesih",
+          badgeIcon: <Scale className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Kıdem & İhbar Tazminatı Hesaplama",
+          description: "4857 ve 1475 sayılı kanunlara göre giydirilmiş brüt ücret, kıdem tavanı kontrolü, ihbar önelleri ve ibraname dökümleri.",
+          stats: [
+            { label: "2026 Kıdem Tavanı", value: "₺46.550,00", tone: "info" as const },
+            { label: "Damga Vergisi", value: "Binde 7,59", tone: "default" as const },
+          ],
+        };
+      case "zimmet":
+        return {
+          badge: "Zimmet & Demirbaş",
+          badgeIcon: <Laptop className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Zimmet & Demirbaş Takip Sistemi",
+          description: "Şirket personellerine teslim edilen bilgisayar, telefon, tablet, araç ve ekipmanların teslim/iade tutanakları.",
+          stats: [
+            { label: "Zimmetli Varlık", value: `${assetCustodies.length} Kayıt`, tone: "info" as const },
+            { label: "Aktif Zimmet", value: `${assetCustodies.filter((a) => a.status === "active").length} Teslim`, tone: "default" as const },
+          ],
+        };
+      case "allowances":
+        return {
+          badge: "Yan Haklar & Ödenekler",
+          badgeIcon: <Gift className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Personel Yan Hakları & Ticari Ödenekler",
+          description: "Yol ve yemek yardımı standartları, günlük SGK istisna limitleri ve puantaj bordro entegrasyonu.",
+          stats: [
+            { label: "Yemek Standardı", value: `${formatTRY(allowanceForm.defaultFoodAllowance)} / Ay`, tone: "info" as const },
+            { label: "Yol Standardı", value: `${formatTRY(allowanceForm.defaultRoadAllowance)} / Ay`, tone: "default" as const },
+          ],
+        };
+      case "employees":
+      default:
+        return {
+          badge: "İnsan Kaynakları & Bordro",
+          badgeIcon: <Users className="w-2.5 h-2.5 text-[#0f6bae]" />,
+          title: "Personel Listesi & Kadro Yönetimi",
+          description: "Çalışan özlük dosyaları, departman/şube görevlendirmeleri, maaş anlaşmaları ve kadro dökümleri.",
+          stats: [
+            { label: "Kısa Ünvan", value: getHrCompanyTitle(companySettings), tone: "info" as const },
+            { label: "Kadro Büyüklüğü", value: `${employees.length} Çalışan`, tone: "default" as const },
+          ],
+        };
+    }
+  }, [activeSubTab, payrollMonth, payrollRecords, leaveRequests, onLeaveCount, advanceRequests, legalDeductions, companySettings, assetCustodies, allowanceForm, employees.length]);
+
   return (
     <div className="p-4 sm:p-6 space-y-6 sm:space-y-7 max-w-7xl mx-auto">
-      {/* 1. TOP TITLE & ACTION HEADER WITH EDITORIAL BACKGROUND */}
+      {/* 1. TOP TITLE & ACTION HEADER WITH DYNAMIC SUBMODULE DATA */}
       <ModuleEntranceHeader
-        badge="İnsan Kaynakları & Bordro"
-        badgeIcon={<UserCheck className="w-2.5 h-2.5 text-[#0f6bae]" />}
-        title="Personel, Bordro ve Özlük Takibi"
-        description="Çalışan özlük dosyaları, kanuni SGK bordro matrahları, yıllık izin hakkı ve masraf/avans taleplerini tek ekrandan yönetin."
-        stats={[
-          {
-            label: "Kısa Ünvan",
-            value: getHrCompanyTitle(companySettings),
-            tone: "info",
-          },
-          {
-            label: "SGK Sicil",
-            value: companySettings.sgkCredentials?.workplaceRegistrationNo || "2.8470.01.01.1029384.034.01-12",
-            tone: "default",
-          },
-        ]}
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={handleOpenCreateEmployee}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-2xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
-              style={{ backgroundColor: theme.primaryColor }}
-            >
-              <UserPlus className="w-4 h-4 stroke-[2.5]" />
-              <span>+ Yeni Personel Ekle</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsBulkPayrollModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
-              title="Tüm Aktif Personeller İçin Toplu Puantaj ve Bordro Hakedişi Hazırla"
-            >
-              <Layers className="w-4 h-4 text-purple-600" />
-              <span>Toplu Bordro</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAddLeaveOpen(true)}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
-            >
-              <Calendar className="w-4 h-4 text-purple-600" />
-              <span>İzin Talebi</span>
-            </button>
-          </>
-        }
+        badge={subModuleInfo.badge}
+        badgeIcon={subModuleInfo.badgeIcon}
+        title={subModuleInfo.title}
+        description={subModuleInfo.description}
+        stats={subModuleInfo.stats}
       />
 
-      {/* 2. TOP 4 KPI SUMMARY CARDS */}
+      {/* 2. CONTEXT-AWARE 4 KPI SUMMARY CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Toplam Kadro */}
-        <div
-          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
-          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400">Toplam Kadro</span>
-              <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
-                {employees.length} Çalışan
+        {activeSubTab === "payroll" ? (
+          <>
+            {/* Payroll Card 1: Toplam Brüt */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam Brüt Maaş</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                    {formatTRY(payrollRecords.reduce((sum, r) => sum + r.grossSalary, 0))}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-purple-600 shrink-0">
+                  <Receipt className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-purple-600">Dönem: {payrollMonth}</span>
+                <span>• {payrollRecords.length} Personel bordrosu</span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
-              <img src={ASSET_ICONS.toplamAlacak} alt="" className="w-6 h-6 object-contain" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs">
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-              {activeCount} Aktif
-            </span>
-            <span className="text-slate-400 text-[11px]">· {onLeaveCount} İzinli personel</span>
-          </div>
-        </div>
 
-        {/* Card 2: Aylık Net Maaş Toplamı */}
-        <div
-          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
-          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400">Aylık Net Maaş Hakedişi</span>
-              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
-                {formatTRY(totalMonthlyNetSalary)}
+            {/* Payroll Card 2: SGK & Vergi */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Yasal Kesintiler (SGK + Vergi)</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-amber-600">
+                    {formatTRY(payrollRecords.reduce((sum, r) => sum + r.sgkEmployeeShare + r.unemploymentEmployeeShare + r.incomeTax + r.stampTax, 0))}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 shrink-0">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-amber-600">SGK İşçi & Gelir/Damga</span>
+                <span>• Muhtasar matrahı</span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-              <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs">
-            <span className="text-[11px] font-bold text-emerald-600">
-              Net Ödeme
-            </span>
-            <span className="text-slate-400 text-[11px]">• Personel net hakedişleri</span>
-          </div>
-        </div>
 
-        {/* Card 3: Toplam İşveren Maliyeti */}
-        <div
-          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
-          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400">Toplam İşveren Maliyeti</span>
-              <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
-                {formatTRY(totalEmployerMonthlyCost)}
+            {/* Payroll Card 3: Ödenecek Net Maaş */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam Ödenecek Net Maaş</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                    {formatTRY(payrollRecords.reduce((sum, r) => sum + r.payableNetSalary, 0))}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 shrink-0">
+                  <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
+                  Net Ödeme
+                </span>
+                <span>• Avans & kesintiler düşüldü</span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
-              <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs">
-            <span className="text-[11px] font-bold text-rose-600">
-              Maaş + SGK + Yan Hak
-            </span>
-            <span className="text-slate-400 text-[11px]">• Toplam şirket yükü</span>
-          </div>
-        </div>
 
-        {/* Card 4: SGK İşyeri Dosyası & Şirket Ünvanı */}
-        <div
-          className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
-          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400">İşveren / SGK Dosyası</span>
-              <div className="text-xs sm:text-sm font-bold font-mono tracking-tight" style={{ color: theme.pageText }} title={getHrCompanyTitle(companySettings)}>
-                {getHrCompanyTitle(companySettings)}
+            {/* Payroll Card 4: Toplam İşveren Maliyeti */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam İşveren Maliyeti</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                    {formatTRY(totalEmployerMonthlyCost)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600 shrink-0">
+                  <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                <span className="text-rose-600 font-bold">5510 %5 Teşvikli</span>
+                <span>SGK İşveren + Yan Hak</span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-              <img src={ASSET_ICONS.alacak} alt="" className="w-6 h-6 object-contain" />
+          </>
+        ) : activeSubTab === "leaves" ? (
+          <>
+            {/* Leaves Card 1 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam İzin Talebi</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                    {leaveRequests.length} Talep
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-purple-600 shrink-0">
+                  <Calendar className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-emerald-600">{leaveRequests.filter((l) => l.status === "approved").length} Onaylandı</span>
+                <span>• {leaveRequests.filter((l) => l.status === "rejected").length} Red</span>
+              </div>
             </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-1.5 text-xs">
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-              5510 %5 Teşvik Aktif
-            </span>
-            <span className="text-[10.5px] font-mono text-slate-400 truncate" title={companySettings.sgkCredentials?.workplaceRegistrationNo || "SGK Sicil"}>
-              {companySettings.sgkCredentials?.workplaceRegistrationNo ? `Sicil: ${companySettings.sgkCredentials.workplaceRegistrationNo.substring(0, 10)}...` : "SGK Sicil Aktif"}
-            </span>
-          </div>
-        </div>
+
+            {/* Leaves Card 2 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Onay Bekleyenler</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-amber-600">
+                    {leaveRequests.filter((l) => l.status === "pending").length} Talep
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 shrink-0">
+                  <Clock className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="text-amber-600 font-bold">Yönetici Onayı</span>
+                <span>• Karar bekleyen izinler</span>
+              </div>
+            </div>
+
+            {/* Leaves Card 3 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Şu An İzinli Personel</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-blue-600">
+                    {onLeaveCount} Çalışan
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 shrink-0">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-blue-600">Fiili Kadro:</span>
+                <span>{employees.length - onLeaveCount} Görevde</span>
+              </div>
+            </div>
+
+            {/* Leaves Card 4 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Kalan İzin Havuzu</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                    {employees.reduce((sum, e) => sum + Math.max(0, e.annualLeaveAllowance - e.usedAnnualLeave), 0)} Gün
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 shrink-0">
+                  <Award className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-emerald-600">4857 S.K. Md. 53</span>
+                <span>• Toplam kalan hak</span>
+              </div>
+            </div>
+          </>
+        ) : activeSubTab === "advances" ? (
+          <>
+            {/* Advances Card 1 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Bekleyen Avans Talepleri</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-amber-600">
+                    {advanceRequests.filter((a) => a.status === "pending").length} Talep
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 shrink-0">
+                  <CreditCard className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-amber-600">Onay & Ödeme Bekliyor</span>
+              </div>
+            </div>
+
+            {/* Advances Card 2 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Ödenen Avans Toplamı</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                    {formatTRY(advanceRequests.filter((a) => a.status === "paid").reduce((sum, a) => sum + (a.amount || 0), 0))}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 shrink-0">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-emerald-600">Bordro Mahsuplu</span>
+                <span>• Maaşlardan düşülecek</span>
+              </div>
+            </div>
+
+            {/* Advances Card 3 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Aktif İcra & Maaş Hacizleri</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                    {legalDeductions.filter((d) => d.status === "active").length} Dosya
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600 shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-rose-600">İcra & Nafaka</span>
+                <span>• Yasal 1/4 kesinti</span>
+              </div>
+            </div>
+
+            {/* Advances Card 4 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Kalan Yasal Borç Tutarı</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                    {formatTRY(legalDeductions.filter((d) => d.status === "active").reduce((sum, d) => sum + Math.max(0, d.totalDebtAmount - d.paidAmount), 0))}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-purple-600 shrink-0">
+                  <Scale className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-purple-600">İcra Müdürlükleri</span>
+                <span>• Kalan toplam borç</span>
+              </div>
+            </div>
+          </>
+        ) : activeSubTab === "allowances" ? (
+          <>
+            {/* Allowances Card 1 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Standart Yemek Yardımı</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-amber-600">
+                    {formatTRY(allowanceForm.defaultFoodAllowance)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 shrink-0">
+                  <Utensils className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-amber-600">2026 İstisnası: 300 ₺/Gün</span>
+                <span>• Aylık Sabit</span>
+              </div>
+            </div>
+
+            {/* Allowances Card 2 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Standart Yol Yardımı</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-blue-600">
+                    {formatTRY(allowanceForm.defaultRoadAllowance)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 shrink-0">
+                  <Bus className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-blue-600">Ulaşım Desteği: {formatTRY(allowanceForm.dailyRoadAllowanceRate)}/gün</span>
+              </div>
+            </div>
+
+            {/* Allowances Card 3 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Kişi Başı Aylık Yan Hak</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-purple-600">
+                    {formatTRY(allowanceForm.defaultFoodAllowance + allowanceForm.defaultRoadAllowance)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-purple-600 shrink-0">
+                  <Gift className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-purple-600">Yemek + Yol Paketi</span>
+              </div>
+            </div>
+
+            {/* Allowances Card 4 */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Şirket Toplam Aylık Yan Hak Yükü</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                    {formatTRY((allowanceForm.defaultFoodAllowance + allowanceForm.defaultRoadAllowance) * activeCount)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600 shrink-0">
+                  <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-bold text-rose-600">{activeCount} Aktif Çalışana</span>
+                <span>• Otomatik Entegre</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Default/Employees Card 1: Toplam Kadro */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam Kadro</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight" style={{ color: theme.pageText }}>
+                    {employees.length} Çalışan
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 dark:bg-purple-950/40 flex items-center justify-center text-purple-600 shrink-0">
+                  <Users className="w-6 h-6" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
+                  {activeCount} Aktif
+                </span>
+                <span className="text-slate-400 text-[11px]">· {onLeaveCount} İzinli personel</span>
+              </div>
+            </div>
+
+            {/* Default/Employees Card 2: Aylık Net Maaş Toplamı */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Aylık Net Maaş Hakedişi</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600">
+                    {formatTRY(totalMonthlyNetSalary)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 shrink-0">
+                  <img src={ASSET_ICONS.nakit} alt="" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className="text-[11px] font-bold text-emerald-600">
+                  Net Ödeme
+                </span>
+                <span className="text-slate-400 text-[11px]">• Personel net hakedişleri</span>
+              </div>
+            </div>
+
+            {/* Default/Employees Card 3: Toplam İşveren Maliyeti */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">Toplam İşveren Maliyeti</span>
+                  <div className="text-2xl font-bold font-mono tracking-tight text-rose-600">
+                    {formatTRY(totalEmployerMonthlyCost)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-rose-600 shrink-0">
+                  <img src={ASSET_ICONS.toplamBorc} alt="" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs">
+                <span className="text-[11px] font-bold text-rose-600">
+                  Maaş + SGK + Yan Hak
+                </span>
+                <span className="text-slate-400 text-[11px]">• Toplam şirket yükü</span>
+              </div>
+            </div>
+
+            {/* Default/Employees Card 4: SGK İşyeri Dosyası & Şirket Ünvanı */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs transition-all hover:shadow-md"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-slate-400">İşveren / SGK Dosyası</span>
+                  <div className="text-xs sm:text-sm font-bold font-mono tracking-tight" style={{ color: theme.pageText }} title={getHrCompanyTitle(companySettings)}>
+                    {getHrCompanyTitle(companySettings)}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 shrink-0">
+                  <img src={ASSET_ICONS.alacak} alt="" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
+                  5510 %5 Teşvik Aktif
+                </span>
+                <span className="text-[10.5px] font-mono text-slate-400 truncate" title={companySettings.sgkCredentials?.workplaceRegistrationNo || "SGK Sicil"}>
+                  {companySettings.sgkCredentials?.workplaceRegistrationNo ? `Sicil: ${companySettings.sgkCredentials.workplaceRegistrationNo.substring(0, 10)}...` : "SGK Sicil Aktif"}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* SUB-TABS NAVIGATION */}
-      <div
-        className="flex items-center justify-between rounded-2xl p-1.5 border shadow-2xs overflow-x-auto"
-        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-      >
-        <div className="flex items-center gap-1 min-w-max">
-          <button
-            onClick={() => setActiveSubTab("employees")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "employees"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            Personel Listesi ({employees.length})
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("payroll")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "payroll"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Receipt className="w-4 h-4" />
-            Bordro & Maaş Hesaplama
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("leaves")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "leaves"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            İzin Yönetimi ({leaveRequests.length})
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("advances")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "advances"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            Avans & Masraflar ({advanceRequests.length})
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("sgk")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "sgk"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            SGK & Özlük Belgeleri
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("severance")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "severance"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Scale className="w-4 h-4" />
-            <span>Kıdem & İhbar Tazminatı</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("zimmet")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "zimmet"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Laptop className="w-4 h-4" />
-            <span>Zimmet & Demirbaş Takibi</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab("allowances")}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-              activeSubTab === "allowances"
-                ? "bg-purple-700 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Gift className="w-4 h-4" />
-            <span>Yan Haklar & Ödenekler</span>
-          </button>
-        </div>
-      </div>
 
       {/* SUB-TAB 1: PERSONEL LISTESI */}
       {activeSubTab === "employees" && (
-        <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+        <div
+          className="rounded-2xl border shadow-2xs p-4 sm:p-5 space-y-4"
+          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+        >
           {/* Filters & Search Bar */}
           <div className="space-y-3">
-            {/* Top Bar: Search, Stats & Primary Action */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
+            {/* Top Bar: Search, View Mode Switcher, Stats & Actions */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
                 <div className="relative w-full max-w-sm">
-                  <Search className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     placeholder="Ad Soyad, TCKN veya Unvan ile ara..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-purple-200/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 placeholder-slate-400 text-xs rounded-xl pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
                   />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-                <div className="hidden sm:inline-flex text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-3 py-2 rounded-xl border border-purple-200/50 whitespace-nowrap shrink-0">
-                  Toplam <span className="font-bold text-purple-950 ml-1">{filteredEmployees.length}</span> personel
+
+                {/* View Mode Toggle: Table vs Cards */}
+                <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeViewMode("table")}
+                    className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      employeeViewMode === "table"
+                        ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-400 shadow-2xs"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                    title="Tablo Görünümü (ERP Listesi)"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeViewMode("grid")}
+                    className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      employeeViewMode === "grid"
+                        ? "bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-400 shadow-2xs"
+                        : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                    title="Kart / Ekip Rehberi Görünümü"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="hidden sm:inline-flex text-xs text-purple-900 dark:text-purple-300 font-semibold bg-purple-50 dark:bg-purple-950/60 px-3 py-2 rounded-xl border border-purple-200/50 dark:border-purple-800/60 whitespace-nowrap shrink-0">
+                  Toplam <span className="font-bold text-purple-950 dark:text-purple-100 ml-1">{filteredEmployees.length}</span> personel
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="sm:hidden text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-2.5 py-1.5 rounded-xl border border-purple-200/50 whitespace-nowrap">
-                  <span className="font-bold text-purple-950">{filteredEmployees.length}</span> personel
-                </div>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <ExportButtons
+                  getExportData={() => ({
+                    filename: `Personel_Listesi_${new Date().toISOString().split("T")[0]}`,
+                    title: "FİRMA PERSONEL VE KADRO LİSTESİ",
+                    subtitle: `Toplam ${filteredEmployees.length} Çalışan`,
+                    headers: [
+                      "Personel Ad Soyad",
+                      "TCKN",
+                      "Departman",
+                      "Unvan",
+                      "İşe Giriş Tarihi",
+                      "Net/Brüt Maaş",
+                      "Kalan İzin",
+                      "Durum",
+                    ],
+                    rows: filteredEmployees.map((e) => [
+                      e.fullName,
+                      e.tckn || "-",
+                      e.department || "-",
+                      e.title || "-",
+                      e.startDate || "-",
+                      `${formatTRY(e.salaryAmount)} (${e.salaryType})`,
+                      `${e.annualLeaveAllowance - e.usedAnnualLeave} Gün`,
+                      e.status === "active" ? "Aktif" : e.status === "on_leave" ? "İzinli" : "Ayrıldı",
+                    ]),
+                  })}
+                  size="sm"
+                />
+
                 <button
                   type="button"
                   onClick={() => setIsEmployeeListModalOpen(true)}
-                  className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 font-bold rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+                  className="px-3.5 py-2 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 font-bold rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
                   title="Resmi Personel ve Kadro Listesi Dökümünü Görüntüle ve Yazdır"
                 >
-                  <Users className="w-3.5 h-3.5 text-purple-700" />
-                  <span>Personel Listesi</span>
+                  <Users className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
+                  <span>Personel Dökümü</span>
                 </button>
                 <button
                   type="button"
@@ -5207,11 +5659,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
 
             {/* Bottom Bar: Filters & Sorting */}
-            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Departmanlar</option>
                 <option value="Yazılım & IT">Yazılım & IT</option>
@@ -5224,7 +5676,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Şubeler</option>
                 {branches.map((b) => (
@@ -5237,7 +5689,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <select
                 value={selectedWarehouse}
                 onChange={(e) => setSelectedWarehouse(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Depolar</option>
                 {warehouses.map((w) => (
@@ -5250,7 +5702,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="bg-white border border-purple-200/60 text-slate-700 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs transition-all cursor-pointer"
               >
                 <option value="all">Tüm Durumlar</option>
                 <option value="active">Aktif</option>
@@ -5258,13 +5710,13 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 <option value="terminated">Ayrıldı</option>
               </select>
 
-              <div className="flex items-center gap-1.5 bg-white border border-purple-200/60 rounded-xl px-2.5 py-1.5 shadow-2xs ml-auto">
-                <ArrowUpDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                <span className="text-[11px] font-bold text-slate-500 shrink-0 hidden md:inline">Sıralama:</span>
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 shadow-2xs ml-auto">
+                <ArrowUpDown className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0 hidden md:inline">Sıralama:</span>
                 <select
                   value={employeeSortBy}
                   onChange={(e) => setEmployeeSortBy(e.target.value as any)}
-                  className="bg-transparent border-0 text-slate-800 text-xs font-bold focus:outline-none cursor-pointer pr-1"
+                  className="bg-transparent border-0 text-slate-800 dark:text-slate-200 text-xs font-bold focus:outline-none cursor-pointer pr-1"
                 >
                   <option value="name_asc">Alfabetik (A → Z)</option>
                   <option value="name_desc">Alfabetik (Z → A)</option>
@@ -5277,250 +5729,398 @@ export const HRManagement: React.FC<HRManagementProps> = ({
             </div>
           </div>
 
-          {/* Employees Table */}
-          <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl bg-slate-50/60 border border-purple-200/60 p-2 sm:p-3 shadow-2xs">
-            <table className="w-full text-left text-xs border-separate border-spacing-y-2.5 min-w-[720px]">
-              <thead>
-                <tr className="text-purple-950 font-extrabold uppercase tracking-wider text-[11px]">
-                  <th className="pb-2 px-3">Çalışan Bilgisi</th>
-                  <th className="pb-2 px-3">Departman & Unvan</th>
-                  <th className="pb-2 px-3">İşe Giriş Tarihi</th>
-                  <th className="pb-2 px-3">Anlaşma & Maaş</th>
-                  <th className="pb-2 px-3">İzin Hakkı</th>
-                  <th className="pb-2 px-3">Durum</th>
-                  <th className="pb-2 px-2 sm:px-3 text-right whitespace-nowrap">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEmployees.map((emp) => (
-                  <tr
+          {/* VIEW 1: TEAM DIRECTORY CARDS VIEW */}
+          {employeeViewMode === "grid" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredEmployees.map((emp) => {
+                const initials = emp.fullName
+                  .split(" ")
+                  .map((p) => p[0])
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase();
+                const age = calculateAge(emp.birthDate);
+                const remainingLeave = emp.annualLeaveAllowance - emp.usedAnnualLeave;
+
+                return (
+                  <div
                     key={emp.id}
-                    className="bg-white hover:bg-gradient-to-r hover:from-blue-50/90 hover:via-sky-50/60 hover:to-blue-50/90 hover:shadow-[0_1px_3px_rgba(15,23,42,0.04),0_1px_2px_rgba(15,23,42,0.02)] transition-all duration-200 group rounded-xl relative z-0 hover:z-10 cursor-pointer"
+                    className="rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-md flex flex-col justify-between space-y-4 group"
+                    style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
                   >
-                    <td className="py-3 px-3 rounded-l-xl border-y border-l border-purple-200/50 group-hover:border-blue-300 group-hover:bg-blue-50/30 transition-all">
-                      <div>
-                        <div className="font-extrabold text-slate-900 group-hover:text-blue-950 text-sm flex items-center gap-1.5 wrap flex-wrap">
-                          <span>{emp.fullName}</span>
-                          {emp.gender && (
-                            <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full whitespace-nowrap border ${
-                              emp.gender === "Kadın"
-                                ? "bg-pink-50 text-pink-700 border-pink-200"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
-                            }`}>
-                              {emp.gender === "Kadın" ? "Kadın ♀" : "Erkek ♂"}
-                            </span>
-                          )}
-                          {calculateAge(emp.birthDate) !== null && (
-                            <span className="text-[10px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                              {calculateAge(emp.birthDate)} Yaş
-                            </span>
-                          )}
-                          {emp.isRetired && (
-                            <span className="text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap inline-flex items-center gap-1">
-                              <span>🏖️</span>
-                              <span>Emekli (SGDP)</span>
-                            </span>
-                          )}
+                    {/* Top Header: Avatar, Name, Status */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 text-white font-extrabold flex items-center justify-center text-sm shadow-sm shrink-0">
+                          {initials}
                         </div>
-                        <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
-                          <span>TCKN: {emp.tckn}</span>
-                          {calculateAge(emp.birthDate) !== null && calculateAge(emp.birthDate)! < 18 && (
-                            <span className="text-[10px] font-extrabold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded-md border border-rose-200">
-                              18 Yaş Altı
-                            </span>
-                          )}
+                        <div className="min-w-0">
+                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 truncate group-hover:text-purple-600 transition-colors">
+                            {emp.fullName}
+                          </h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
+                            {emp.title || "Çalışan"}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400 font-mono">
+                            <span>TCKN: {emp.tckn}</span>
+                            {age !== null && (
+                              <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded font-sans">
+                                {age} Yaş
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="font-semibold text-slate-800">{emp.title}</div>
-                      <div className="flex flex-wrap items-center gap-1 mt-1">
-                        <span className="inline-block bg-purple-50 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-100">
-                          {emp.department}
-                        </span>
-                        {emp.branchName && (
-                          <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-900 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md border border-indigo-200">
-                            <Store className="w-3 h-3 text-indigo-600" />
-                            {emp.branchName}
+
+                      <div className="shrink-0">
+                        {emp.status === "active" && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Aktif
                           </span>
                         )}
-                        {emp.warehouseName && (
-                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md border border-amber-200">
-                            <WarehouseIcon className="w-3 h-3 text-amber-600" />
-                            {emp.warehouseName}
+                        {emp.status === "on_leave" && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full">
+                            İzinli
+                          </span>
+                        )}
+                        {emp.status === "terminated" && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-full">
+                            Ayrıldı
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-slate-600 text-xs font-semibold">
-                      {formatDate(emp.startDate)}
-                    </td>
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all font-mono tabular-nums font-tabular-num-md">
-                      <div className="font-bold text-slate-900 font-mono tabular-nums font-tabular-num-md">
-                        {formatTRY(emp.salaryAmount)}
-                        <span className="text-[10px] text-slate-500 uppercase ml-1 font-sans">
-                          ({emp.salaryType})
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 font-mono tabular-nums font-tabular-num-md flex items-center gap-1.5 flex-wrap">
-                        {(() => {
-                          const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
-                          const f = applyAll ? (companySettings?.defaultFoodAllowance ?? 5500) : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
-                          const r = applyAll ? (companySettings?.defaultRoadAllowance ?? 2500) : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
-                          return (
-                            <>
-                              <span>Yemek: {formatTRY(f)}</span>
-                              <span>·</span>
-                              <span>Yol: {formatTRY(r)}</span>
-                              {applyAll && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold border border-purple-200" title="Firma Sistem Ayarları Ticari Parametrelerinden Otomatik Alınıyor">
-                                  Ticari Parametre
-                                </span>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      <div className="text-xs font-bold text-slate-800">
-                        Kalan: {emp.annualLeaveAllowance - emp.usedAnnualLeave} Gün
-                      </div>
-                      <div className="w-24 bg-purple-100/60 rounded-full h-1.5 mt-1 overflow-hidden border border-purple-200/40">
-                        <div
-                          className="bg-purple-600 h-1.5 rounded-full"
-                          style={{
-                            width: `${Math.min(100, ((emp.annualLeaveAllowance - emp.usedAnnualLeave) / emp.annualLeaveAllowance) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 border-y border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all">
-                      {emp.status === "active" && (
-                        <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Aktif
+                    </div>
+
+                    {/* Department, Branch, Warehouse Tags */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="bg-purple-50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 font-bold px-2 py-0.5 rounded-lg border border-purple-200 dark:border-purple-800">
+                        {emp.department}
+                      </span>
+                      {emp.branchName && (
+                        <span className="inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                          <Store className="w-3 h-3 text-indigo-600" />
+                          {emp.branchName}
                         </span>
                       )}
-                      {emp.status === "on_leave" && (
-                        <span className="bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-2.5 py-1 rounded-full">
-                          İzinli
+                      {emp.warehouseName && (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 font-bold px-2 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <WarehouseIcon className="w-3 h-3 text-amber-600" />
+                          {emp.warehouseName}
                         </span>
                       )}
-                      {emp.status === "terminated" && (
-                        <span className="bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-2.5 py-1 rounded-full">
-                          Ayrıldı
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 sm:py-3 px-2 sm:px-3 rounded-r-xl border-y border-r border-purple-200/50 group-hover:border-purple-300 group-hover:bg-purple-50/30 transition-all text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1 sm:gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditEmployee(emp)}
-                          className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
-                          title={`${emp.fullName} bilgilerini ve personel kartını düzenle`}
-                          aria-label="Personeli Düzenle"
-                        >
-                          <Edit className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                          <span className="hidden sm:inline lg:hidden xl:inline">Düzenle</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditPayroll(emp)}
-                          className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
-                          title={`${emp.fullName} için Puantaj ve Bordro Hazırla`}
-                          aria-label="Bordro Hazırla"
-                        >
-                          <Calculator className="w-3.5 h-3.5 text-purple-200 shrink-0" />
-                          <span className="hidden sm:inline lg:hidden xl:inline">Bordro Hazırla</span>
-                          <span className="hidden lg:inline xl:hidden">Bordro</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedEmployeeForDetail(emp)}
-                          className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/70 font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
-                          title="Özlük Dosyası ve Personel Bilgilerini Görüntüle"
-                          aria-label="Özlük Detayı"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                          <span className="hidden sm:inline lg:hidden xl:inline">Özlük Detayı</span>
-                          <span className="hidden lg:inline xl:hidden">Özlük</span>
-                        </button>
+                    </div>
+
+                    {/* Salary & Allowances Box */}
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">Maaş Anlaşması:</span>
+                        <div className="font-black text-slate-900 dark:text-slate-100 font-mono tabular-nums">
+                          {formatTRY(emp.salaryAmount)}
+                          <span className="text-[10px] text-slate-500 font-sans ml-1 uppercase">({emp.salaryType})</span>
+                        </div>
                       </div>
-                    </td>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>İşe Giriş:</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{formatDate(emp.startDate)}</span>
+                      </div>
+                      {/* Leave entitlement bar */}
+                      <div className="pt-1 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-slate-500">Yıllık İzin Bakiyesi:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{remainingLeave} / {emp.annualLeaveAllowance} Gün</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="bg-purple-600 h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, Math.max(0, (remainingLeave / (emp.annualLeaveAllowance || 1)) * 100))}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Direct Contact Links */}
+                    <div className="flex items-center gap-2 pt-1">
+                      {emp.phone && (
+                        <a
+                          href={`tel:${emp.phone}`}
+                          className="flex-1 py-1.5 px-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                          title="Telefonla Ara"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="truncate">{emp.phone}</span>
+                        </a>
+                      )}
+                      {emp.email && (
+                        <a
+                          href={`mailto:${emp.email}`}
+                          className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-[11px] transition-colors shrink-0"
+                          title="E-posta Gönder"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-slate-500" />
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Bottom Action Buttons */}
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditEmployee(emp)}
+                        className="flex-1 py-1.5 px-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Düzenle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditPayroll(emp)}
+                        className="flex-1 py-1.5 px-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <Calculator className="w-3.5 h-3.5 text-purple-200" />
+                        <span>Bordro</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEmployeeForDetail(emp)}
+                        className="p-2 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-xl text-xs transition-all cursor-pointer active:scale-95"
+                        title="Özlük Dosyasını Görüntüle"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredEmployees.length === 0 && (
+                <div className="col-span-full p-12 text-center text-slate-500 font-medium">
+                  Aranan kriterlere uygun personel kaydı bulunamadı.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* VIEW 2: HIGH-DENSITY ERP DATA TABLE */}
+          {employeeViewMode === "table" && (
+            <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-3.5">Çalışan Bilgisi</th>
+                    <th className="py-3 px-3">Departman & Görev</th>
+                    <th className="py-3 px-3">İşe Giriş</th>
+                    <th className="py-3 px-3">Maaş & Haklar</th>
+                    <th className="py-3 px-3">İzin Bakiyesi</th>
+                    <th className="py-3 px-3">Durum</th>
+                    <th className="py-3 px-3 text-right whitespace-nowrap">İşlemler</th>
                   </tr>
-                ))}
-                {filteredEmployees.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
-                      Aranan kriterlere uygun personel kaydı bulunamadı.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredEmployees.map((emp) => {
+                    const initials = emp.fullName
+                      .split(" ")
+                      .map((p) => p[0])
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase();
+                    const age = calculateAge(emp.birthDate);
+                    const remainingLeave = emp.annualLeaveAllowance - emp.usedAnnualLeave;
+
+                    return (
+                      <tr
+                        key={emp.id}
+                        className="hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors group cursor-pointer"
+                      >
+                        <td className="py-3 px-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-700 text-white font-extrabold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                              {initials}
+                            </div>
+                            <div>
+                              <div className="font-extrabold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
+                                <span>{emp.fullName}</span>
+                                {emp.gender && (
+                                  <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded border ${
+                                    emp.gender === "Kadın"
+                                      ? "bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800"
+                                      : "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                                  }`}>
+                                    {emp.gender === "Kadın" ? "♀ Kadın" : "♂ Erkek"}
+                                  </span>
+                                )}
+                                {age !== null && (
+                                  <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded font-sans">
+                                    {age} Yaş
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-400 font-mono flex items-center gap-2 mt-0.5">
+                                <span>TCKN: {emp.tckn}</span>
+                                {emp.phone && <span>• {emp.phone}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">{emp.title || "Çalışan"}</div>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            <span className="bg-purple-50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-200/60 dark:border-purple-800">
+                              {emp.department}
+                            </span>
+                            {emp.branchName && (
+                              <span className="inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-300 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                                <Store className="w-3 h-3 text-indigo-600" />
+                                {emp.branchName}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-300 text-xs font-semibold">
+                          <div>{formatDate(emp.startDate)}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">
+                            {(() => {
+                              if (!emp.startDate) return "—";
+                              const s = new Date(emp.startDate);
+                              const now = new Date();
+                              let y = now.getFullYear() - s.getFullYear();
+                              let m = now.getMonth() - s.getMonth();
+                              if (now.getDate() < s.getDate()) m -= 1;
+                              if (m < 0) { y -= 1; m += 12; }
+                              return `${Math.max(0, y)} Yıl, ${Math.max(0, m)} Ay`;
+                            })()}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3 font-mono tabular-nums">
+                          <div className="font-bold text-slate-900 dark:text-slate-100">
+                            {formatTRY(emp.salaryAmount)}
+                            <span className="text-[10px] text-slate-500 uppercase ml-1 font-sans">
+                              ({emp.salaryType})
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 font-sans">
+                            {(() => {
+                              const applyAll = companySettings?.applyAllowancesToAllEmployees !== false;
+                              const f = applyAll ? (companySettings?.defaultFoodAllowance ?? 5500) : (emp.foodAllowance ?? companySettings?.defaultFoodAllowance ?? 5500);
+                              const r = applyAll ? (companySettings?.defaultRoadAllowance ?? 2500) : (emp.roadAllowance ?? companySettings?.defaultRoadAllowance ?? 2500);
+                              return (
+                                <span>Yemek: {formatTRY(f)} · Yol: {formatTRY(r)}</span>
+                              );
+                            })()}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {remainingLeave} / {emp.annualLeaveAllowance} Gün
+                          </div>
+                          <div className="w-24 bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 mt-1 overflow-hidden">
+                            <div
+                              className="bg-purple-600 h-1.5 rounded-full"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, (remainingLeave / (emp.annualLeaveAllowance || 1)) * 100))}%`,
+                              }}
+                            />
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          {emp.status === "active" && (
+                            <span className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Aktif
+                            </span>
+                          )}
+                          {emp.status === "on_leave" && (
+                            <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">
+                              İzinli
+                            </span>
+                          )}
+                          {emp.status === "terminated" && (
+                            <span className="bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold px-2.5 py-1 rounded-full">
+                              Ayrıldı
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1 sm:gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditEmployee(emp)}
+                              className="bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800 font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                              title={`${emp.fullName} bilgilerini ve personel kartını düzenle`}
+                            >
+                              <Edit className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
+                              <span className="hidden sm:inline">Düzenle</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPayroll(emp)}
+                              className="bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                              title={`${emp.fullName} için Puantaj ve Bordro Hazırla`}
+                            >
+                              <Calculator className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                              <span className="hidden sm:inline">Bordro</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmployeeForDetail(emp)}
+                              className="bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-bold p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs transition-all inline-flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+                              title="Özlük Dosyası ve Personel Bilgilerini Görüntüle"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400 shrink-0" />
+                              <span className="hidden sm:inline">Özlük</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredEmployees.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
+                        Aranan kriterlere uygun personel kaydı bulunamadı.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
       {/* SUB-TAB 2: BORDRO & MAAŞ HESAPLAMA */}
       {activeSubTab === "payroll" && (
         <div className="space-y-4">
-          {/* Top KPI Cards for Payroll Period */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-[11px] font-bold text-slate-500 uppercase block">Toplam Brüt Maaş Yükü</span>
-              <span className="text-xl font-black text-slate-900 mt-1 block">
-                {formatTRY(payrollRecords.reduce((sum, r) => sum + r.grossSalary, 0))}
-              </span>
-              <span className="text-[11px] text-slate-400 font-medium">Bordro dönemindeki toplam brüt hakediş</span>
-            </div>
-
-            <div
-              style={{ backgroundColor: "#83b8ff" }}
-              className="p-4 rounded-2xl border border-[#60a5fa] shadow-xs text-slate-950"
-            >
-              <span className="text-[11px] font-black text-slate-900 uppercase block">Toplam Net Ödenecek Maaş (İşlem Tutarı)</span>
-              <span className="text-xl font-black text-slate-950 mt-1 block font-mono">
-                {formatTRY(payrollRecords.reduce((sum, r) => sum + r.payableNetSalary, 0))}
-              </span>
-              <span className="text-[11px] text-slate-800 font-semibold">Avans & Kesintiler Düşülmüş Net Tutar</span>
-            </div>
-
-            <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200 shadow-xs">
-              <span className="text-[11px] font-bold text-amber-800 uppercase block">Entegre Avans Kesintileri</span>
-              <span className="text-xl font-black text-amber-900 mt-1 block">
-                {formatTRY(payrollRecords.reduce((sum, r) => sum + (r.advanceDeduction || 0), 0))}
-              </span>
-              <span className="text-[11px] text-amber-700 font-medium">Avans Yönetiminden Otomatik Aktarıldı</span>
-            </div>
-
-            <div className="bg-purple-50/80 p-4 rounded-2xl border border-purple-200 shadow-xs">
-              <span className="text-[11px] font-bold text-purple-900 uppercase block">Toplam İşveren Maliyeti</span>
-              <span className="text-xl font-black text-purple-950 mt-1 block">
-                {formatTRY(totalEmployerMonthlyCost)}
-              </span>
-              <span className="text-[11px] text-purple-800 font-medium">SGK İşveren + Yan Haklar Dahil</span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+          <div
+            className="rounded-2xl border shadow-2xs p-4 sm:p-5 space-y-4"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-bold text-purple-950 uppercase">Hakediş & Bordro Dönemi:</label>
-                <input
-                  type="month"
-                  value={payrollMonth}
-                  onChange={(e) => setPayrollMonth(e.target.value)}
-                  className="bg-white border border-purple-200/60 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs"
-                />
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase">Hakediş & Bordro Dönemi:</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="month"
+                    value={payrollMonth}
+                    onChange={(e) => setPayrollMonth(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 shadow-2xs"
+                  />
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setActiveSubTab("allowances")}
+                  onClick={() => handleSubTabChange("allowances")}
                   className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 active:scale-95 font-bold px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
                   title="Personel Yan Hakları & Ticari Ödenek Parametrelerini Düzenle"
                 >
@@ -5765,6 +6365,62 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                     );
                   })}
                 </tbody>
+                {(() => {
+                  const payrollTotals = payrollRecords.reduce(
+                    (acc, r) => ({
+                      gross: acc.gross + (r.grossSalary || 0),
+                      legal:
+                        acc.legal +
+                        (r.sgkEmployeeShare || 0) +
+                        (r.unemploymentEmployeeShare || 0) +
+                        (r.incomeTax || 0) +
+                        (r.stampTax || 0),
+                      deductions:
+                        acc.deductions +
+                        (r.advanceDeduction || 0) +
+                        (r.unpaidLeaveDeduction || 0) +
+                        (r.executionDeduction || 0) +
+                        (r.alimonyDeduction || 0) +
+                        (r.otherDeductions || 0),
+                      net: acc.net + (r.payableNetSalary || 0),
+                      cost: acc.cost + (r.totalEmployerCost || 0),
+                    }),
+                    { gross: 0, legal: 0, deductions: 0, net: 0, cost: 0 }
+                  );
+
+                  return (
+                    <tfoot>
+                      <tr className="bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 font-extrabold border-t-2 border-purple-300 dark:border-purple-800 rounded-xl">
+                        <td className="py-3 px-3 rounded-l-xl">
+                          <div className="text-xs uppercase tracking-wider font-black text-purple-900 dark:text-purple-300">
+                            GENEL TOPLAM ({payrollRecords.length} Personel)
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{payrollMonth} Dönemi</div>
+                        </td>
+                        <td className="py-3 px-3 font-mono font-black text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums">
+                          {formatTRY(payrollTotals.gross)}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-xs text-slate-600 dark:text-slate-300 tabular-nums">
+                          {formatTRY(payrollTotals.legal)}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-xs text-rose-600 dark:text-rose-400 tabular-nums">
+                          {payrollTotals.deductions > 0 ? `-${formatTRY(payrollTotals.deductions)}` : "—"}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-black text-sm sm:text-base text-emerald-600 dark:text-emerald-400 tabular-nums">
+                          {formatTRY(payrollTotals.net)}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-black text-xs sm:text-sm text-purple-900 dark:text-purple-300 tabular-nums">
+                          {formatTRY(payrollTotals.cost)}
+                        </td>
+                        <td className="py-3 px-3 rounded-r-xl text-center">
+                          <span className="text-[10px] bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 px-2 py-0.5 rounded font-bold">
+                            {payrollRecords.length} Bordro
+                          </span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
           </div>
@@ -5920,15 +6576,19 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 </div>
 
                 {/* KIDEME GÖRE KALAN YILLIK İZİN HAK EDİŞ TABLOSU */}
-                <div id="leave-entitlements-table" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-100 pb-3">
+                <div
+                  id="leave-entitlements-table"
+                  className="rounded-2xl border shadow-2xs p-4 space-y-3"
+                  style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+                >
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                     <div className="flex items-center gap-2">
-                      <Award className="w-5 h-5 text-purple-700" />
+                      <Award className="w-5 h-5 text-purple-700 dark:text-purple-400" />
                       <div>
-                        <h3 className="font-black text-slate-900 text-sm sm:text-base">
+                        <h3 className="font-black text-slate-900 dark:text-slate-100 text-sm sm:text-base">
                           Personel Kıdem & Kalan Yıllık İzin Hak Ediş Takip Tablosu
                         </h3>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                           Personellerin işe giriş tarihine ve çalıştığı yıl/ay süresine göre 4857 Sayılı İş Kanunu Md. 53 uyarınca hak kazandığı ve kalan izin günleri.
                         </p>
                       </div>
@@ -6116,7 +6776,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           })()}
 
           {/* 2. MEVCUT İZİN TALEPLERİ LİSTESİ */}
-          <div id="leave-requests-section" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+          <div
+            id="leave-requests-section"
+            className="rounded-2xl border shadow-2xs p-4 space-y-4"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="text-xs text-purple-900/80 font-semibold bg-purple-50/60 px-3 py-1.5 rounded-xl border border-purple-200/50">
@@ -6509,14 +7173,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           )}
 
           {/* Inner Sub-Tab Switching Buttons */}
-          <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-purple-200/60 shadow-2xs">
+          <div
+            className="flex items-center justify-between p-1.5 rounded-2xl border shadow-2xs flex-wrap gap-2"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setAdvanceInnerTab("requests")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   advanceInnerTab === "requests"
                     ? "bg-purple-700 text-white shadow-xs"
-                    : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
                 <CreditCard className="w-4 h-4" />
@@ -6528,7 +7195,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   advanceInnerTab === "legal_deductions"
                     ? "bg-purple-700 text-white shadow-xs"
-                    : "text-purple-950/80 hover:text-purple-950 hover:bg-purple-50/60"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
                 <AlertCircle className="w-4 h-4" />
@@ -6624,7 +7291,11 @@ export const HRManagement: React.FC<HRManagementProps> = ({
 
           {/* INNER VIEW 1: AVANS & MASRAF TALEPLERİ */}
           {advanceInnerTab === "requests" && (
-            <div id="advance-requests-section" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+            <div
+              id="advance-requests-section"
+              className="rounded-2xl border shadow-2xs p-4 space-y-4"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
               {/* AUTO-SCROLL & HIZLI ODAKLANMA REHBER ÇUBUĞU */}
               <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-3.5 border border-purple-700/60 shadow-md">
                 <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
@@ -6954,13 +7625,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
 
               {/* Deductions Main Table */}
-              <div id="legal-deductions-section" className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-4 space-y-4">
+              <div
+                id="legal-deductions-section"
+                className="rounded-2xl border shadow-2xs p-4 space-y-4"
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+              >
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
-                    <h3 className="font-bold text-slate-900 text-sm">
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                       Personel İcra, Nafaka ve Yasal Kesinti Dosyaları Listesi
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       1. sıradaki icra borcu bittiğinde sıradaki dosya otomatik olarak 1. sıraya alınır ve bordroya yansıtılır.
                     </p>
                   </div>
@@ -7335,92 +8010,487 @@ export const HRManagement: React.FC<HRManagementProps> = ({
         </div>
       )}
 
-      {/* SUB-TAB 5: SGK & OZLUK BELGELERI */}
+      {/* SUB-TAB 5: SGK & ÖZLÜK BELGELERİ */}
       {activeSubTab === "sgk" && (
-        <div className="bg-white rounded-2xl border border-purple-200/60 shadow-2xs p-5 space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-slate-50/60 rounded-2xl p-5 border border-purple-200/60 shadow-2xs space-y-4">
-                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-purple-700" />
-                  SGK İşyeri Sicil ve e-Bildirge Durumu
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white p-4 rounded-xl border border-purple-200/50 shadow-2xs">
-                    <div className="text-xs text-purple-950/70 font-semibold">SGK İşyeri Sicil Numarası</div>
-                    <div className="text-sm font-black text-slate-950 font-mono mt-1">
-                      {companySettings.sgkCredentials?.workplaceRegistrationNo || "2.8470.01.01.1029384.034.01-12"}
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-xl border border-purple-200/50 shadow-2xs">
-                    <div className="text-xs text-purple-950/70 font-semibold">e-Bildirge Kullanıcı Kodu</div>
-                    <div className="text-sm font-black text-slate-950 font-mono mt-1">
-                      {companySettings.sgkCredentials?.userCode || "28470291038"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-purple-50/80 rounded-xl border border-purple-200/70 text-purple-950 text-xs space-y-1 shadow-2xs">
-                  <div className="font-bold flex items-center gap-1.5 text-purple-950">
-                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-                    5510 Sayılı Kanun %5 Hazine Teşviki Durumu:
-                  </div>
-                  <p className="text-purple-900/90 font-medium">
-                    Şirketinizin SGK prim borcu bulunmadığı için aylık Muhtasar ve Prim Hizmet Beyannamesinde %5 malullük, yaşlılık ve ölüm sigortası primi indiriminden faydalanılmaktadır.
-                  </p>
-                </div>
+        <div className="space-y-4">
+          {/* Top Registration Status & 5510 Incentive Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div
+              className="rounded-2xl p-4 border shadow-2xs space-y-1"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                <span>SGK İşyeri Sicil No</span>
+                <ShieldCheck className="w-4 h-4 text-purple-600" />
               </div>
-
-              <div className="bg-slate-50/60 rounded-2xl p-5 border border-purple-200/60 shadow-2xs space-y-4">
-                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                  <Paperclip className="w-5 h-5 text-purple-700" />
-                  Standart Özlük Dosyası Evrak Kontrol Listesi
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-semibold text-slate-800">
-                  <div className="flex items-center gap-2.5 p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> T.C. Kimlik Kartı Fotokopisi
-                  </div>
-                  <div className="flex items-center gap-2.5 p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Yerleşim Yeri (İkametgah) Belgesi
-                  </div>
-                  <div className="flex items-center gap-2.5 p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Adli Sicil Kaydı (E-Devlet)
-                  </div>
-                  <div className="flex items-center gap-2.5 p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> Sağlık Raporu (Akciğer Grafisi vb.)
-                  </div>
-                  <div className="flex items-center gap-2.5 p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> SGK İşe Giriş Bildirgesi
-                  </div>
-                  <div className="flex items-center gap-2.5 p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> İş Sözleşmesi (Belirsiz Süreli)
-                  </div>
-                </div>
+              <div className="text-sm font-black font-mono tracking-tight" style={{ color: theme.pageText }}>
+                {companySettings.sgkCredentials?.workplaceRegistrationNo || "2.8470.01.01.1029384.034.01-12"}
               </div>
+              <div className="text-[10px] text-slate-400">Ana İşyeri Dosyası • İstanbul SGK İM</div>
             </div>
 
-            <div className="space-y-6">
-              <div className="bg-slate-50/60 rounded-2xl p-5 border border-purple-200/60 shadow-2xs space-y-3">
-                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                  İşten Çıkış Kodları (SGK Referans)
-                </h3>
-                <div className="space-y-2 text-xs">
-                  <div className="p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <span className="font-extrabold text-purple-900">Kod 03:</span> Belirsiz süreli sözleşmenin işçi tarafından feshi (İstifa)
-                  </div>
-                  <div className="p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <span className="font-extrabold text-purple-900">Kod 04:</span> Belirsiz süreli sözleşmenin işveren tarafından feshi
-                  </div>
-                  <div className="p-3 bg-white rounded-xl border border-purple-200/50 shadow-2xs">
-                    <span className="font-extrabold text-purple-900">Kod 22:</span> Diğer nedenler
-                  </div>
-                </div>
+            <div
+              className="rounded-2xl p-4 border shadow-2xs space-y-1"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                <span>e-Bildirge Kullanıcı Kodu</span>
+                <Key className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div className="text-sm font-black font-mono tracking-tight" style={{ color: theme.pageText }}>
+                {companySettings.sgkCredentials?.userCode || "28470291038"}
+              </div>
+              <div className="text-[10px] text-slate-400">Sistem Şifresi & e-Devlet Entegrasyonu Aktif</div>
+            </div>
+
+            <div
+              className="rounded-2xl p-4 border shadow-2xs space-y-1 bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
+            >
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <span>5510 S.K. %5 Hazine Teşviki</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+              <div className="text-sm font-black text-emerald-900 dark:text-emerald-200">
+                Aktif Uygulanıyor
+              </div>
+              <div className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                Düzenli prim ödemesi ile aylık %5 prim indirimi bordroya yansıtılmaktadır.
               </div>
             </div>
           </div>
+
+          {/* SGK Inner Sub-Tab Segmented Switcher */}
+          <div
+            className="flex flex-wrap items-center justify-between p-1.5 rounded-2xl border shadow-2xs gap-2"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSgkActiveTab("checklist")}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  sgkActiveTab === "checklist"
+                    ? "bg-purple-700 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                <ClipboardCheck className="w-4 h-4" />
+                <span>Özlük Evrakları Takip Matrisi</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSgkActiveTab("codes")}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  sgkActiveTab === "codes"
+                    ? "bg-purple-700 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>SGK İşten Çıkış Kodları ({sgkTerminationReasons.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSgkActiveTab("occupations")}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  sgkActiveTab === "occupations"
+                    ? "bg-purple-700 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                <Search className="w-4 h-4" />
+                <span>SGK Meslek Kodları Arama ({sgkOccupations.length})</span>
+              </button>
+            </div>
+
+            {sgkActiveTab !== "checklist" && (
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={sgkActiveTab === "codes" ? "Fesih kodu veya neden ara..." : "Meslek adı veya kod ara..."}
+                  value={sgkSearchCode}
+                  onChange={(e) => setSgkSearchCode(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+                {sgkSearchCode && (
+                  <button
+                    type="button"
+                    onClick={() => setSgkSearchCode("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* VIEW 1: ÖZLÜK EVRAKLARI TAKİP MATRİSİ */}
+          {sgkActiveTab === "checklist" && (() => {
+            const currentEmp =
+              employees.find((e) => e.id === selectedSgkEmployeeId) ||
+              employees[0] || {
+                id: "emp-demo",
+                fullName: "Personel Seçilmedi",
+                title: "—",
+                department: "—",
+                tckn: "—",
+                startDate: "",
+              };
+
+            const docItems = [
+              { key: "tckn_copy", label: "T.C. Kimlik Kartı Fotokopisi", required: true, legalRef: "4857 S.K. Md. 75" },
+              { key: "residence", label: "Yerleşim Yeri (İkametgah) Belgesi", required: true, legalRef: "E-Devlet Barkodlu" },
+              { key: "criminal_record", label: "Adli Sicil Kaydı Belgesi", required: true, legalRef: "E-Devlet Barkodlu (Son 6 Ay)" },
+              { key: "health_report", label: "Sağlık Raporu & İşe Giriş Muayenesi", required: true, legalRef: "6331 S.K. İSG Kanunu" },
+              { key: "diploma", label: "Diploma / Öğrenim / Mezuniyet Belgesi", required: false, legalRef: "Noter / E-Devlet Onaylı" },
+              { key: "sgk_statement", label: "SGK İşe Giriş Bildirgesi Sureti", required: true, legalRef: "5510 S.K. Md. 8" },
+              { key: "contract", label: "İmzalı Belirsiz Süreli İş Sözleşmesi", required: true, legalRef: "4857 S.K. Md. 8" },
+              { key: "kvkk", label: "KVKK Açık Rıza ve Aydınlatma Metni", required: true, legalRef: "6698 S.K. KVKK Kanunu" },
+              { key: "emergency", label: "Acil Durum İletişim Formu", required: false, legalRef: "Şirket İSG Prosedürü" },
+              { key: "overtime_consent", label: "Yıllık Fazla Çalışma Muvafakatnamesi", required: false, legalRef: "4857 S.K. Md. 41" },
+              { key: "bank_iban", label: "Banka Hesap Cüzdanı / IBAN Teyidi", required: true, legalRef: "Ücretin Bankadan Ödenmesi" },
+              { key: "family_status", label: "Aile Durumu Bildirimi Formu", required: false, legalRef: "Asgari Geçim / Yan Hak" },
+            ];
+
+            const completedCount = docItems.filter(
+              (doc) => employeeDocsStatus[currentEmp.id]?.[doc.key]
+            ).length;
+            const completionPercent = Math.round((completedCount / docItems.length) * 100);
+
+            return (
+              <div
+                className="rounded-2xl border shadow-2xs p-4 sm:p-5 space-y-5"
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+              >
+                {/* Employee Selector Bar */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase shrink-0">
+                      İncelenen Personel:
+                    </label>
+                    <select
+                      value={currentEmp.id}
+                      onChange={(e) => setSelectedSgkEmployeeId(e.target.value)}
+                      className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer min-w-[240px]"
+                    >
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.fullName} ({emp.department} · {emp.title})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormsModalEmployeeId(currentEmp.id);
+                        setFormsModalType("annual_leave");
+                        setIsFormsModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
+                      <span>Resmi Formlar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeForDetail(currentEmp as Employee);
+                      }}
+                      className="px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>Tam Özlük Dosyası</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress Overview */}
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-700/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 text-white font-extrabold flex items-center justify-center text-sm shadow-sm shrink-0">
+                      {currentEmp.fullName
+                        .split(" ")
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join("")}
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm">
+                        {currentEmp.fullName}
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {currentEmp.title} • {currentEmp.department} • TCKN: {currentEmp.tckn || "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="w-full md:w-72 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">Özlük Evrakı Doluluk Oranı:</span>
+                      <span className="font-black text-purple-700 dark:text-purple-300">
+                        {completedCount} / {docItems.length} (%{completionPercent})
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          completionPercent === 100
+                            ? "bg-emerald-500"
+                            : completionPercent >= 60
+                            ? "bg-purple-600"
+                            : "bg-amber-500"
+                        }`}
+                        style={{ width: `${completionPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Interactive Checklist Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {docItems.map((doc) => {
+                    const isChecked = Boolean(employeeDocsStatus[currentEmp.id]?.[doc.key]);
+                    return (
+                      <div
+                        key={doc.key}
+                        onClick={() => handleToggleEmployeeDoc(currentEmp.id, doc.key)}
+                        className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          isChecked
+                            ? "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200"
+                            : "bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-purple-300 text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}} // handled by parent div onClick
+                            className="w-4 h-4 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer pointer-events-none"
+                          />
+                          <div>
+                            <div className="text-xs font-bold flex items-center gap-2">
+                              <span>{doc.label}</span>
+                              {doc.required && (
+                                <span className="text-[10px] text-rose-500 font-extrabold uppercase tracking-wider">
+                                  Zorunlu
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{doc.legalRef}</div>
+                          </div>
+                        </div>
+
+                        <div>
+                          {isChecked ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Dosyada Mevcut
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                              Eksik Belge
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* VIEW 2: SGK İŞTEN ÇIKIŞ KODLARI REHBERİ */}
+          {sgkActiveTab === "codes" && (() => {
+            const searchLower = sgkSearchCode.toLowerCase().trim();
+            const filteredReasons = sgkTerminationReasons.filter(
+              (r) =>
+                !searchLower ||
+                r.code.toLowerCase().includes(searchLower) ||
+                r.reason.toLowerCase().includes(searchLower)
+            );
+
+            return (
+              <div
+                className="rounded-2xl border shadow-2xs p-4 sm:p-5 space-y-4"
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-slate-100">
+                      SGK İşten Ayrılış Bildirgesi Fesih Kodları ve Yasal Tazminat Tablosu
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      4857 Sayılı İş Kanunu ve 4447 Sayılı İşsizlik Sigortası Kanunu uyarınca hak kazanılan tazminatlar
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-3 py-1 rounded-xl">
+                    {filteredReasons.length} Kod Listelendi
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-3">SGK Kodu</th>
+                        <th className="py-3 px-4">Fesih / Çıkış Nedeni</th>
+                        <th className="py-3 px-3">Kıdem Tazminatı</th>
+                        <th className="py-3 px-3">İhbar Süresi / Tazminatı</th>
+                        <th className="py-3 px-3">İŞKUR İşsizlik Maaşı</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredReasons.map((item) => (
+                        <tr
+                          key={item.code}
+                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          <td className="py-3 px-3 font-mono font-black text-sm text-purple-700 dark:text-purple-300 whitespace-nowrap">
+                            Kod {item.code}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                            {item.reason}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {[
+                              "4", "5", "8", "9", "10", "11", "12", "13", "14", "15", "17", "18", "23", "24", "25", "27", "28", "31", "32", "33", "34",
+                            ].includes(item.code) ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Ödenir
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                Ödenmez
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {["4", "15", "17", "18", "27", "28", "31", "32", "34"].includes(item.code) ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="w-3 h-3 text-indigo-600" /> Uygulanır
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                Yok
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {[
+                              "4", "5", "15", "17", "18", "23", "24", "25", "27", "28", "31", "32", "33", "34",
+                            ].includes(item.code) ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="w-3 h-3 text-teal-600" /> Hak Kazanır
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                Alamaz
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredReasons.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-slate-400">
+                            Aranan kriterlere uygun SGK çıkış kodu bulunamadı.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* VIEW 3: SGK MESLEK KODLARI ARAMA */}
+          {sgkActiveTab === "occupations" && (() => {
+            const searchLower = sgkSearchCode.toLowerCase().trim();
+            const filteredOccupations = sgkOccupations.filter(
+              (o) =>
+                !searchLower ||
+                o.code.toLowerCase().includes(searchLower) ||
+                o.name.toLowerCase().includes(searchLower)
+            );
+
+            return (
+              <div
+                className="rounded-2xl border shadow-2xs p-4 sm:p-5 space-y-4"
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-slate-100">
+                      SGK Meslek Kodları Sözlüğü (ISCO-08 Standardı)
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      İşe giriş bildirgelerinde ve Muhtasar Prim Hizmet Beyannamelerinde zorunlu tutulan meslek kodları
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-3 py-1 rounded-xl">
+                    {filteredOccupations.length} Meslek Listelendi
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto custom-scrollbar w-full rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-4 w-36">Meslek Kodu</th>
+                        <th className="py-3 px-4">Meslek Ünvanı / Tanımı</th>
+                        <th className="py-3 px-4 text-right w-28">Kopyala</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredOccupations.map((occ) => (
+                        <tr
+                          key={occ.code}
+                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          <td className="py-3 px-4 font-mono font-bold text-xs text-purple-700 dark:text-purple-300">
+                            {occ.code}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                            {occ.name}
+                          </td>
+                          <td className="py-2.5 px-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(occ.code);
+                                showToast(`📋 Meslek kodu kopyalandı: ${occ.code} - ${occ.name}`);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 active:scale-95"
+                              title="Meslek Kodunu Kopyala"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>Kopyala</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredOccupations.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="py-8 text-center text-slate-400">
+                            Aranan kriterlere uygun meslek kodu bulunamadı.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -7451,24 +8521,27 @@ export const HRManagement: React.FC<HRManagementProps> = ({
       {activeSubTab === "allowances" && (
         <div className="space-y-6">
           {/* Main Card: Personel Yan Hakları & Ticari Ödenek Parametreleri */}
-          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-purple-200/60 shadow-2xs space-y-6 text-xs">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+          <div
+            className="rounded-2xl border shadow-2xs p-4 sm:p-6 space-y-6 text-xs"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
+                  <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 border border-amber-200 dark:border-amber-800">
                     <Utensils className="w-4 h-4" />
                   </span>
-                  <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200">
+                  <span className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 border border-blue-200 dark:border-blue-800">
                     <Bus className="w-4 h-4" />
                   </span>
-                  <span className="p-1.5 rounded-lg bg-purple-50 text-purple-600 border border-purple-200">
+                  <span className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-purple-600 border border-purple-200 dark:border-purple-800">
                     <Gift className="w-4 h-4" />
                   </span>
-                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100">
                     Personel Yan Hakları & Ticari Ödenek Parametreleri (Yol & Yemek Yardımı)
                   </h3>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
                   Şirket personellerinin bordro ve puantaj hesaplamalarında standart olarak kullanılacak yol ve yemek yardımı tutarları.
                 </p>
               </div>
@@ -7762,14 +8835,17 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           </div>
 
           {/* Section 2: Kadro Yan Hak Dağılımı ve Etki Önizlemesi */}
-          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-purple-200/60 shadow-2xs space-y-4">
+          <div
+            className="rounded-2xl border shadow-2xs p-4 sm:p-6 space-y-4"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                <h4 className="font-extrabold text-slate-900 dark:text-slate-100 text-xs sm:text-sm flex items-center gap-2">
                   <Users className="w-4 h-4 text-purple-600" />
                   <span>Kadro Yan Hak Dağılımı ve Etki Önizlemesi</span>
                 </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   Mevcut personellerin bordrolarına yansıyacak yol ve yemek yardımı tutarlarının canlı dökümü
                 </p>
               </div>

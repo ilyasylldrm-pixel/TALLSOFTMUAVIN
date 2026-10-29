@@ -46,6 +46,11 @@ import {
   UploadCloud,
   Globe,
   Terminal,
+  Receipt,
+  Calendar,
+  CreditCard,
+  Scale,
+  Gift,
 } from "lucide-react";
 import {
   CompanySettings,
@@ -88,6 +93,14 @@ export type NavItem =
   | "appliance_service"
   | "construction_costing"
   | "hr"
+  | "hr_employees"
+  | "hr_payroll"
+  | "hr_leaves"
+  | "hr_advances"
+  | "hr_sgk"
+  | "hr_severance"
+  | "hr_zimmet"
+  | "hr_allowances"
   | "files"
   | "reports"
   | "company"
@@ -154,6 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
   const [isConstructionExpanded, setIsConstructionExpanded] = useState(true);
+  const [isHrExpanded, setIsHrExpanded] = useState(true);
 
   const isAdmin = isAdminOrSysAdmin(currentUser);
 
@@ -176,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "accounts" as NavItem, label: "Finans Yönetimi", icon: Wallet, hasSubItems: true },
     { id: "products" as NavItem, label: "Stoklar", icon: PackageIcon },
     { id: "fixed_assets" as NavItem, label: "Demirbaşlar", icon: Boxes, badge: "VUK" },
-    { id: "hr" as NavItem, label: "İnsan Kaynakları", icon: UserCheck },
+    { id: "hr" as NavItem, label: "İnsan Kaynakları", icon: UserCheck, hasSubItems: true },
     { id: "files" as NavItem, label: "Bulut Dosya Deposu", icon: HardDrive },
     { id: "reports" as NavItem, label: "Vergilendirme", icon: BarChart3 },
     { id: "whatsapp" as NavItem, label: "WhatsApp Merkezi", icon: MessageSquare, badge: "Canlı" },
@@ -229,6 +243,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
   const financeSubModules = allFinanceSubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.moduleKey, "accounts", currentUser, activeCompany)
+  );
+
+  const allHrSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+    { id: "hr_employees", label: "Personel Listesi", icon: Users },
+    { id: "hr_payroll", label: "Bordro & Maaş Hesaplama", icon: Receipt },
+    { id: "hr_leaves", label: "İzin Yönetimi", icon: Calendar },
+    { id: "hr_advances", label: "Avans & Masraflar", icon: CreditCard },
+    { id: "hr_sgk", label: "SGK & Özlük Belgeleri", icon: ShieldCheck },
+    { id: "hr_severance", label: "Kıdem & İhbar Tazminatı", icon: Scale },
+    { id: "hr_zimmet", label: "Zimmet & Demirbaş Takibi", icon: Laptop },
+    { id: "hr_allowances", label: "Yan Haklar & Ödenekler", icon: Gift },
+  ];
+  const hrSubModules = allHrSubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.id, "hr", currentUser, activeCompany)
   );
 
   const handleSelectTabWithMobileClose = (tab: NavItem) => {
@@ -308,6 +336,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isCompanyItem = item.id === "company";
           const isProductItem = item.id === "products";
           const isConstructionItem = item.id === "construction_costing";
+          const isHrItem = item.id === "hr";
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
@@ -337,6 +366,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "company_logs",
                 "settings",
                 "company_e_services",
+              ].includes(currentTab)
+            : isHrItem
+            ? [
+                "hr",
+                "hr_employees",
+                "hr_payroll",
+                "hr_leaves",
+                "hr_advances",
+                "hr_sgk",
+                "hr_severance",
+                "hr_zimmet",
+                "hr_allowances",
               ].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
@@ -390,6 +431,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ) {
                       handleSelectTabWithMobileClose("company_profile");
                     }
+                  } else if (isHrItem) {
+                    setIsHrExpanded((prev) => !prev);
+                    if (
+                      ![
+                        "hr",
+                        "hr_employees",
+                        "hr_payroll",
+                        "hr_leaves",
+                        "hr_advances",
+                        "hr_sgk",
+                        "hr_severance",
+                        "hr_zimmet",
+                        "hr_allowances",
+                      ].includes(currentTab)
+                    ) {
+                      handleSelectTabWithMobileClose("hr_employees");
+                    }
                   } else if (isConstructionItem) {
                     setIsConstructionExpanded((prev) => !prev);
                     handleSelectTabWithMobileClose("construction_costing");
@@ -439,6 +497,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )
                 ) : isCompanyItem ? (
                   isCompanyExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )
+                ) : isHrItem ? (
+                  isHrExpanded ? (
                     <ChevronDown className="w-4 h-4 text-slate-400" />
                   ) : (
                     <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -647,6 +711,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
 
+              {/* Sub-modules for İnsan Kaynakları */}
+              {isHrItem && isHrExpanded && (
+                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                  {hrSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive =
+                      currentTab === sub.id ||
+                      (sub.id === "hr_employees" && currentTab === "hr");
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => handleSelectTabWithMobileClose(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item ${
+                          isSubActive
+                            ? "active shadow-2xs font-semibold"
+                            : ""
+                        }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
+                      >
+                        <SubIcon
+                          className="w-3.5 h-3.5 transition-transform"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
+                        />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
             </div>
           );
         })}
@@ -738,6 +837,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isCompanyItem = item.id === "company";
           const isProductItem = item.id === "products";
           const isConstructionItem = item.id === "construction_costing";
+          const isHrItem = item.id === "hr";
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
@@ -768,6 +868,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "settings",
                 "company_e_services",
               ].includes(currentTab)
+            : isHrItem
+            ? [
+                "hr",
+                "hr_employees",
+                "hr_payroll",
+                "hr_leaves",
+                "hr_advances",
+                "hr_sgk",
+                "hr_severance",
+                "hr_zimmet",
+                "hr_allowances",
+              ].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -781,6 +893,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onSelectTab("accounts");
             } else if (isCompanyItem) {
               onSelectTab("company_profile");
+            } else if (isHrItem) {
+              onSelectTab("hr_employees");
             } else {
               onSelectTab(item.id as NavItem);
             }
@@ -794,6 +908,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? financeSubModules
             : isCompanyItem
             ? companySubModules
+            : isHrItem
+            ? hrSubModules
             : isConstructionItem && constructionProjects && constructionProjects.length > 0
             ? constructionProjects.map((proj) => ({
                 id: proj.id as any,
@@ -850,6 +966,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           ? isActive && activeFinanceSubTab === sub.id
                           : isConstructionItem
                           ? currentTab === "construction_costing" && selectedConstructionProjectId === sub.id
+                          : isHrItem
+                          ? currentTab === sub.id || (sub.id === "hr_employees" && currentTab === "hr")
                           : currentTab === sub.id;
 
                       return (

@@ -4003,7 +4003,22 @@ export default function App() {
       case "construction_costing":
         return "İnşaat Maliyetlendirme";
       case "hr":
-        return "İnsan Kaynakları";
+      case "hr_employees":
+        return "İnsan Kaynakları - Personel Listesi";
+      case "hr_payroll":
+        return "İnsan Kaynakları - Bordro & Maaş Hesaplama";
+      case "hr_leaves":
+        return "İnsan Kaynakları - İzin Yönetimi";
+      case "hr_advances":
+        return "İnsan Kaynakları - Avans & Masraflar";
+      case "hr_sgk":
+        return "İnsan Kaynakları - SGK & Özlük Belgeleri";
+      case "hr_severance":
+        return "İnsan Kaynakları - Kıdem & İhbar Tazminatı";
+      case "hr_zimmet":
+        return "İnsan Kaynakları - Zimmet & Demirbaş Takibi";
+      case "hr_allowances":
+        return "İnsan Kaynakları - Yan Haklar & Ödenekler";
       case "reports":
         return "Vergilendirme";
       case "company":
@@ -4081,6 +4096,14 @@ export default function App() {
       appliance_service: { key: "appliance_service" },
       construction_costing: { key: "construction_costing" },
       hr: { key: "hr" },
+      hr_employees: { key: "hr_employees", parent: "hr" },
+      hr_payroll: { key: "hr_payroll", parent: "hr" },
+      hr_leaves: { key: "hr_leaves", parent: "hr" },
+      hr_advances: { key: "hr_advances", parent: "hr" },
+      hr_sgk: { key: "hr_sgk", parent: "hr" },
+      hr_severance: { key: "hr_severance", parent: "hr" },
+      hr_zimmet: { key: "hr_zimmet", parent: "hr" },
+      hr_allowances: { key: "hr_allowances", parent: "hr" },
       files: { key: "files" },
       reports: { key: "reports" },
       e_services: { key: "e_services" },
@@ -4620,7 +4643,17 @@ export default function App() {
             />
           )}
 
-          {currentTab === "hr" && (
+          {[
+            "hr",
+            "hr_employees",
+            "hr_payroll",
+            "hr_leaves",
+            "hr_advances",
+            "hr_sgk",
+            "hr_severance",
+            "hr_zimmet",
+            "hr_allowances",
+          ].includes(currentTab) && (
             <HRManagement
               employees={data.employees || []}
               leaveRequests={data.leaveRequests || []}
@@ -4648,6 +4681,33 @@ export default function App() {
               transactions={data.transactions || []}
               onAddTransaction={handleAddTransaction}
               onUpdateTransaction={handleUpdateTransaction}
+              activeSubTab={
+                currentTab === "hr_payroll"
+                  ? "payroll"
+                  : currentTab === "hr_leaves"
+                  ? "leaves"
+                  : currentTab === "hr_advances"
+                  ? "advances"
+                  : currentTab === "hr_sgk"
+                  ? "sgk"
+                  : currentTab === "hr_severance"
+                  ? "severance"
+                  : currentTab === "hr_zimmet"
+                  ? "zimmet"
+                  : currentTab === "hr_allowances"
+                  ? "allowances"
+                  : "employees"
+              }
+              onSelectSubTab={(subTab) => {
+                if (subTab === "payroll") setCurrentTab("hr_payroll");
+                else if (subTab === "leaves") setCurrentTab("hr_leaves");
+                else if (subTab === "advances") setCurrentTab("hr_advances");
+                else if (subTab === "sgk") setCurrentTab("hr_sgk");
+                else if (subTab === "severance") setCurrentTab("hr_severance");
+                else if (subTab === "zimmet") setCurrentTab("hr_zimmet");
+                else if (subTab === "allowances") setCurrentTab("hr_allowances");
+                else setCurrentTab("hr_employees");
+              }}
             />
           )}
 

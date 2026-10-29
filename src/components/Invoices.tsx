@@ -1415,7 +1415,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
               (c.vkn || c.tckn || c.taxNumber || "").replace(/\D/g, "").trim() ===
               targetVkn,
           )) ||
-        companies.find((c) => c.isActive) ||
+        (companies as any[]).find((c) => c?.isActive) ||
         companies[0];
       return matched || null;
     } catch {
@@ -2333,11 +2333,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
       description: "",
       quantity: 1,
       unit: "Adet",
-      unitPrice: 5000,
+      unitPrice: 0,
       vatRate: 20,
-      totalWithoutVat: 5000,
-      vatAmount: 1000,
-      totalWithVat: 6000,
+      totalWithoutVat: 0,
+      vatAmount: 0,
+      totalWithVat: 0,
     },
   ]);
 
@@ -2683,17 +2683,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
     setItems([
       {
         id: "item_1",
-        description:
-          targetType === "purchase"
-            ? "Ofis & Kırtasiye / Mal & Hizmet Alımı"
-            : "",
+        description: "",
         quantity: 1,
         unit: "Adet",
-        unitPrice: targetType === "purchase" ? 1500 : 5000,
+        unitPrice: 0,
         vatRate: 20,
-        totalWithoutVat: targetType === "purchase" ? 1500 : 5000,
-        vatAmount: targetType === "purchase" ? 300 : 1000,
-        totalWithVat: targetType === "purchase" ? 1800 : 6000,
+        totalWithoutVat: 0,
+        vatAmount: 0,
+        totalWithVat: 0,
       },
     ]);
     setIsCreateModalOpen(true);
@@ -2975,7 +2972,18 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
   // Recalculate invoice totals dynamically using central taxCalculationService
   const calculateTotals = () => {
-    return computeInvoiceTotals(items);
+    const normalizedItems = items.map((item) =>
+      !String(item.description || "").trim()
+        ? {
+            ...item,
+            unitPrice: 0,
+            totalWithoutVat: 0,
+            vatAmount: 0,
+            totalWithVat: 0,
+          }
+        : item,
+    );
+    return computeInvoiceTotals(normalizedItems);
   };
 
   const getDraftInvoice = (): Partial<Invoice> => {
@@ -3356,22 +3364,33 @@ export const Invoices: React.FC<InvoicesProps> = ({
       items.map((item) => {
         if (item.id === id) {
           const updated = { ...item, [field]: value };
-          if (field === "productId" && value) {
-            const prod = products.find((p) => p.id === value);
-            if (prod) {
-              let desc = prod.name;
-              if (prod.imeiOrSerialNo) {
-                desc += ` (SN/IMEI: ${prod.imeiOrSerialNo})`;
+          if (field === "productId") {
+            if (value) {
+              const prod = products.find((p) => p.id === value);
+              if (prod) {
+                let desc = prod.name;
+                if (prod.imeiOrSerialNo) {
+                  desc += ` (SN/IMEI: ${prod.imeiOrSerialNo})`;
+                }
+                updated.description = desc;
+                updated.unit = prod.unit;
+                updated.unitPrice = invType === "sales" ? prod.sellPrice : prod.buyPrice;
+                updated.vatRate = prod.vatRate;
               }
-              updated.description = desc;
-              updated.unit = prod.unit;
-              updated.unitPrice = invType === "sales" ? prod.sellPrice : prod.buyPrice;
-              updated.vatRate = prod.vatRate;
+            } else {
+              updated.productId = undefined;
+              updated.description = "";
+              updated.unitPrice = 0;
             }
+          } else if (field === "description" && !String(value || "").trim()) {
+            updated.productId = undefined;
+            updated.unitPrice = 0;
           }
 
+          const hasDescription = Boolean(String(updated.description || "").trim());
           const qty = Number(updated.quantity) || 0;
-          const price = Number(updated.unitPrice) || 0;
+          const price = hasDescription ? Number(updated.unitPrice) || 0 : 0;
+          updated.unitPrice = price;
           const gross = qty * price;
 
           if (field === "discountAmount") {
@@ -8015,7 +8034,12 @@ export const Invoices: React.FC<InvoicesProps> = ({
                             <input
                               type="number"
                               step="any"
-                              value={item.unitPrice}
+                              placeholder="0,00"
+                              value={
+                                !String(item.description || "").trim()
+                                  ? ""
+                                  : item.unitPrice || ""
+                              }
                               onChange={(e) =>
                                 handleItemChange(
                                   item.id,
@@ -8023,7 +8047,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                                   parseFloat(e.target.value) || 0
                                 )
                               }
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs text-right font-mono font-bold text-slate-900 placeholder:text-slate-300"
                             />
                           </td>
 
@@ -8089,7 +8113,10 @@ export const Invoices: React.FC<InvoicesProps> = ({
 
                           <td className="p-2 text-right font-extrabold font-mono text-slate-900">
                             {(() => {
-                              const singleTotals = computeInvoiceTotals([item]);
+                              const effectiveRowItem = !String(item.description || "").trim()
+                                ? { ...item, unitPrice: 0, totalWithoutVat: 0, vatAmount: 0, totalWithVat: 0 }
+                                : item;
+                              const singleTotals = computeInvoiceTotals([effectiveRowItem]);
                               return (
                                 <div>
                                   <div>
