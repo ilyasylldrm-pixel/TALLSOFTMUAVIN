@@ -34,6 +34,7 @@ import {
   getIndependentInvoiceCssConfig,
   saveCompanyInvoiceCssToFirestore,
 } from "../OfficialGIBInvoicePaper";
+import { IncomingGIBInvoiceView } from "../IncomingGIBInvoiceView";
 
 export const UniversalPrintModal: React.FC = () => {
   const [modalData, setModalData] = useState<PrintModalData | null>(null);
@@ -71,6 +72,9 @@ export const UniversalPrintModal: React.FC = () => {
     modalData?.isOpen &&
       modalData?.documentType === "invoice" &&
       modalData?.invoiceData?.invoice
+  );
+  const isIncomingInvoice = Boolean(
+    isInvoiceMode && modalData?.invoiceData?.invoice?.type === "purchase"
   );
 
   if (!modalData || !modalData.isOpen) return null;
@@ -211,7 +215,9 @@ export const UniversalPrintModal: React.FC = () => {
             </h2>
             <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
               <span>
-                {isInvoiceMode
+                {isIncomingInvoice
+                  ? "Gelen Orijinal e-Fatura Belgesi (Tedarikçi Görünümü)"
+                  : isInvoiceMode
                   ? `Resmi GİB ${activeDocMeta?.docTitle || "e-Belge"} XSLT Şablonu`
                   : "Evrensel Yazdırma Motoru"}
               </span>
@@ -225,7 +231,7 @@ export const UniversalPrintModal: React.FC = () => {
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {isInvoiceMode && (
+          {isInvoiceMode && !isIncomingInvoice && (
             <div className="flex flex-wrap items-center gap-1.5 mr-1">
               {/* Document Type Mode Switcher (Otomatik / e-Fatura / e-Arşiv) */}
               <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 flex items-center">
@@ -490,7 +496,13 @@ export const UniversalPrintModal: React.FC = () => {
         <div className="flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           <span>
-            {isInvoiceMode ? (
+            {isIncomingInvoice ? (
+              <>
+                Gelen e-fatura giden fatura şablonu kullanılmadan, doğrudan{" "}
+                <strong>tedarikçinin kendi orijinal e-Fatura belgesi / standart GİB UBL-TR</strong>{" "}
+                görünümüyle gösterilmektedir.
+              </>
+            ) : isInvoiceMode ? (
               <>
                 GİB UBL-TR 1.2 standartlarına uygun resmi <strong>e-Fatura</strong> ve{" "}
                 <strong>e-Arşiv Fatura</strong> XSLT şablonu hazır. Üst bardan belge türünü, şablon
@@ -526,18 +538,27 @@ export const UniversalPrintModal: React.FC = () => {
                 : "w-full max-w-[860px]"
             }
           >
-            <OfficialGIBInvoicePaper
-              invoice={modalData.invoiceData.invoice}
-              companySettings={{
-                ...modalData.invoiceData.companySettings,
-                ...(customLogoOverride ? { logoUrl: customLogoOverride } : {}),
-              }}
-              contact={modalData.invoiceData.contact}
-              isDraft={modalData.invoiceData.isDraft}
-              designOverride={design}
-              previewDocTypeOverride={previewDocType}
-              paperId="universal-print-preview-paper"
-            />
+            {isIncomingInvoice ? (
+              <IncomingGIBInvoiceView
+                invoice={modalData.invoiceData.invoice}
+                buyerCompany={modalData.invoiceData.companySettings}
+                supplierContact={modalData.invoiceData.contact}
+                paperId="universal-print-preview-paper"
+              />
+            ) : (
+              <OfficialGIBInvoicePaper
+                invoice={modalData.invoiceData.invoice}
+                companySettings={{
+                  ...modalData.invoiceData.companySettings,
+                  ...(customLogoOverride ? { logoUrl: customLogoOverride } : {}),
+                }}
+                contact={modalData.invoiceData.contact}
+                isDraft={modalData.invoiceData.isDraft}
+                designOverride={design}
+                previewDocTypeOverride={previewDocType}
+                paperId="universal-print-preview-paper"
+              />
+            )}
           </div>
         ) : (
           <div

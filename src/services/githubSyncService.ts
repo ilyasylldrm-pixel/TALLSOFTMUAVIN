@@ -599,11 +599,14 @@ export class GitHubSyncService {
   private async rebuildProductionBundles(cwd: string): Promise<boolean> {
     try {
       this.clearGitIndexLock(cwd);
-      await execPromise('NODE_OPTIONS="--max-old-space-size=2048" npm run build', {
-        cwd,
-        timeout: 180_000,
-        maxBuffer: 20 * 1024 * 1024,
-      });
+      await execPromise(
+        'NODE_OPTIONS="--max-old-space-size=2048" npx --no-install vite build && npx --no-install esbuild server.ts --bundle --platform=node --target=node22 --format=cjs --define:process.env.NODE_ENV=\\"production\\" --minify --outfile=dist/server.cjs',
+        {
+          cwd,
+          timeout: 180_000,
+          maxBuffer: 20 * 1024 * 1024,
+        },
+      );
       return true;
     } catch (err: any) {
       console.warn("[GitHubSync] Build warning during sync:", err?.message || err);
@@ -661,7 +664,7 @@ export class GitHubSyncService {
       const authArg = buildGitAuthArg(token);
       const syncedAt = new Date().toISOString();
 
-      const gitReady = await this.ensureGitInitialized(cleanUrl, branch);
+      const gitReady = await this.ensureGitInitialized(cleanUrl, branch, token);
       let publishedAfterPull = false;
 
       if (gitReady) {
@@ -819,7 +822,7 @@ export class GitHubSyncService {
         });
       }
 
-      const gitReady = await this.ensureGitInitialized(cleanUrl, branch);
+      const gitReady = await this.ensureGitInitialized(cleanUrl, branch, token);
       let committed = false;
       let sha = "";
       let pushedViaGit = false;
@@ -872,7 +875,7 @@ export class GitHubSyncService {
           }
         }
 
-        // 4. Rebuild dist/ and build/ if remote changes were merged or rebuild is requested
+        // 4. Rebuild dist/ if remote changes were merged or rebuild is requested
         if (remoteBehindCount > 0 || params?.rebuild === true) {
           await this.rebuildProductionBundles(cwd);
           await this.safeGitAddAll(cwd);

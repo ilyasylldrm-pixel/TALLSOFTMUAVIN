@@ -72,6 +72,7 @@ export const MYSOFT_ENDPOINTS = {
   incomingStatus: "/api/InvoiceInbox/getInvoiceInboxStatus",
   incomingPdf: "/api/InvoiceInbox/getInvoiceInboxPdfAsZip",
   incomingXml: "/api/InvoiceInbox/getInvoiceInboxUBLXMLAsZip",
+  incomingHtml: "/api/InvoiceInbox/getInvoiceInboxHTMLAsZip",
   incomingAcknowledge: "/api/InvoiceInbox/invoiceInboxSavedByCustomer",
   incomingAccept: "/api/InvoiceInbox/acceptInvoice",
   incomingDeny: "/api/InvoiceInbox/denyInvoice",
@@ -80,6 +81,7 @@ export const MYSOFT_ENDPOINTS = {
   outgoingStatus: "/api/InvoiceOutbox/getInvoiceOutboxStatus",
   outgoingPdf: "/api/InvoiceOutbox/getInvoiceOutboxPdfAsZip",
   outgoingXml: "/api/InvoiceOutbox/getInvoiceOutboxXMLAsZip",
+  outgoingHtml: "/api/InvoiceOutbox/getInvoiceOutboxHTMLAsZip",
   outgoingSubmit: "/api/InvoiceOutbox/invoiceOutbox",
   outgoingSubmitUbl: "/api/InvoiceOutbox/invoiceOutboxWithUblXml",
   outgoingCancel: "/api/InvoiceOutbox/cancelEArchiveInvoice",
@@ -732,6 +734,155 @@ export class MysoftEdocumentClient {
   private tokenRequest?: Promise<string>;
   private tokenIdentity?: MysoftTokenIdentity;
   private mockOutboxDocs: Array<Record<string, unknown>> = [];
+  private mockInboxDocs: Array<Record<string, unknown>> = [
+    {
+      id: "e7a10412-8b9c-4d31-9a51-202604010001",
+      ettn: "e7a10412-8b9c-4d31-9a51-202604010001",
+      invoiceETTN: "e7a10412-8b9c-4d31-9a51-202604010001",
+      docNo: "MYS2026000014821",
+      docDate: new Date().toISOString().slice(0, 10),
+      createDate: new Date().toISOString(),
+      pkAlias: "urn:mail:defaultpk@mysoft.com.tr",
+      gbAlias: "urn:mail:defaultgb@tedarikci.com.tr",
+      profile: "TICARIFATURA",
+      invoiceType: "SATIS",
+      eDocumentType: "EFATURA",
+      currencyCode: "TRY",
+      vknTckn: "6090451823",
+      senderTaxNumber: "6090451823",
+      accountName: "ANADOLU ENDÜSTRİYEL TEDARİK VE LOJİSTİK A.Ş.",
+      senderName: "ANADOLU ENDÜSTRİYEL TEDARİK VE LOJİSTİK A.Ş.",
+      taxOfficeName: "Büyük Mükellefler V.D.",
+      cityName: "İstanbul",
+      townName: "Ataşehir",
+      streetName: "Finans Merkezi Bulvarı No: 24",
+      lineExtensionAmount: 42500,
+      taxExclusiveAmount: 42500,
+      taxTotalTra: 8500,
+      taxInclusiveAmount: 51000,
+      payableAmount: 51000,
+      invoiceStatusText: "Onay Bekliyor",
+      envelopeStatusCode: "1200",
+      envelopeStatusText: "Zarf Başarıyla İşlendi",
+      note: "Nisan dönemi hammadde ve sarf malzeme tedariği",
+      invoiceDetail: [
+        {
+          id: "1",
+          productCode: "HM-104",
+          productName: "Endüstriyel Paketleme ve Sarf Malzemesi",
+          qty: 50,
+          unitCode: "C62",
+          unitName: "Adet",
+          unitPriceTra: 650,
+          amtTra: 32500,
+          vatRate: 20,
+          amtVatTra: 6500,
+        },
+        {
+          id: "2",
+          productCode: "LJ-210",
+          productName: "Yurtiçi Nakliye ve Lojistik Hizmet Bedeli",
+          qty: 1,
+          unitCode: "C62",
+          unitName: "Adet",
+          unitPriceTra: 10000,
+          amtTra: 10000,
+          vatRate: 20,
+          amtVatTra: 2000,
+        },
+      ],
+    },
+    {
+      id: "b4c92018-3e21-4f88-8c12-202604010002",
+      ettn: "b4c92018-3e21-4f88-8c12-202604010002",
+      invoiceETTN: "b4c92018-3e21-4f88-8c12-202604010002",
+      docNo: "TEK2026000008394",
+      docDate: new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10),
+      createDate: new Date(Date.now() - 2 * 86400000).toISOString(),
+      pkAlias: "urn:mail:defaultpk@mysoft.com.tr",
+      gbAlias: "urn:mail:defaultgb@bulutbilisim.com.tr",
+      profile: "TEMELFATURA",
+      invoiceType: "SATIS",
+      eDocumentType: "EFATURA",
+      currencyCode: "TRY",
+      vknTckn: "3810592741",
+      senderTaxNumber: "3810592741",
+      accountName: "BULUT BİLİŞİM VE YAZILIM TEKNOLOJİLERİ LTD. ŞTİ.",
+      senderName: "BULUT BİLİŞİM VE YAZILIM TEKNOLOJİLERİ LTD. ŞTİ.",
+      taxOfficeName: "Kozyatağı V.D.",
+      cityName: "İstanbul",
+      townName: "Kadıköy",
+      streetName: "Teknopark Cad. No: 12/B",
+      lineExtensionAmount: 18000,
+      taxExclusiveAmount: 18000,
+      taxTotalTra: 3600,
+      taxInclusiveAmount: 21600,
+      payableAmount: 21600,
+      invoiceStatusText: "Kabul Edildi",
+      envelopeStatusCode: "1300",
+      envelopeStatusText: "Başarıyla Tamamlandı",
+      note: "Aylık Bulut Sunucu, Yedekleme ve Lisans Bakım Hizmeti",
+      invoiceDetail: [
+        {
+          id: "1",
+          productCode: "CLD-01",
+          productName: "Kurumsal Bulut Sunucu & Veri Yedekleme Hizmeti",
+          qty: 1,
+          unitCode: "MON",
+          unitName: "Ay",
+          unitPriceTra: 18000,
+          amtTra: 18000,
+          vatRate: 20,
+          amtVatTra: 3600,
+        },
+      ],
+    },
+    {
+      id: "c9f51304-7d14-4a62-b904-202604010003",
+      ettn: "c9f51304-7d14-4a62-b904-202604010003",
+      invoiceETTN: "c9f51304-7d14-4a62-b904-202604010003",
+      docNo: "ENR2026000091205",
+      docDate: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10),
+      createDate: new Date(Date.now() - 5 * 86400000).toISOString(),
+      pkAlias: "urn:mail:defaultpk@mysoft.com.tr",
+      gbAlias: "urn:mail:defaultgb@enerjidagitim.com.tr",
+      profile: "TICARIFATURA",
+      invoiceType: "SATIS",
+      eDocumentType: "EFATURA",
+      currencyCode: "TRY",
+      vknTckn: "1940826519",
+      senderTaxNumber: "1940826519",
+      accountName: "MARMARA ENERJİ PERAKENDE SATIŞ A.Ş.",
+      senderName: "MARMARA ENERJİ PERAKENDE SATIŞ A.Ş.",
+      taxOfficeName: "Boğaziçi Kurumlar V.D.",
+      cityName: "İstanbul",
+      townName: "Şişli",
+      streetName: "Büyükdere Cad. No: 140",
+      lineExtensionAmount: 14250,
+      taxExclusiveAmount: 14250,
+      taxTotalTra: 2850,
+      taxInclusiveAmount: 17100,
+      payableAmount: 17100,
+      invoiceStatusText: "Onay Bekliyor",
+      envelopeStatusCode: "1200",
+      envelopeStatusText: "Zarf Başarıyla İşlendi",
+      note: "Merkez Ofis ve Depo Elektrik Tüketim Bedeli",
+      invoiceDetail: [
+        {
+          id: "1",
+          productCode: "ELK-TUK",
+          productName: "Ticarihane Aktif Elektrik Enerjisi Tüketim Bedeli",
+          qty: 3800,
+          unitCode: "KWH",
+          unitName: "kWh",
+          unitPriceTra: 3.75,
+          amtTra: 14250,
+          vatRate: 20,
+          amtVatTra: 2850,
+        },
+      ],
+    },
+  ];
   private mockSeqCounter = 100;
 
   constructor(config: MysoftConfig = getMysoftConfig()) {
@@ -1194,9 +1345,91 @@ export class MysoftEdocumentClient {
       } as T;
     }
 
+    if (
+      lowerPath.includes("getinvoiceinboxwithheaderinfolistforperiod") ||
+      lowerPath.includes("getnewinvoiceinboxwithheaderinfolist")
+    ) {
+      const startDate = typeof bodyObj.startDate === "string" ? bodyObj.startDate.slice(0, 10) : "";
+      const endDate = typeof bodyObj.endDate === "string" ? bodyObj.endDate.slice(0, 10) : "";
+      const filtered = this.mockInboxDocs.filter((doc) => {
+        const d = String(doc.docDate || "").slice(0, 10);
+        if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) && d < startDate) return false;
+        if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) && d > endDate) return false;
+        return true;
+      });
+      const rows = filtered.length > 0 ? filtered : this.mockInboxDocs;
+      return {
+        data: rows,
+        totalCount: rows.length,
+        succeed: true,
+        message: "Mysoft mock mode",
+        afterValue: rows.length,
+      } as T;
+    }
+
+    if (lowerPath.includes("acceptinvoice")) {
+      const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
+      this.mockInboxDocs = this.mockInboxDocs.map((doc) =>
+        doc.ettn === ettn || doc.id === ettn || doc.docNo === ettn
+          ? { ...doc, invoiceStatusText: "Kabul Edildi", status: "accepted" }
+          : doc
+      );
+      return {
+        succeed: true,
+        message: "Fatura kabul edildi",
+        data: { invoiceETTN: ettn, status: "accepted", invoiceStatusText: "Kabul Edildi" },
+      } as T;
+    }
+
+    if (lowerPath.includes("denyinvoice")) {
+      const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
+      const rejectReason = String(query.rejectReason || bodyObj.rejectReason || "Reddedildi");
+      this.mockInboxDocs = this.mockInboxDocs.map((doc) =>
+        doc.ettn === ettn || doc.id === ettn || doc.docNo === ettn
+          ? { ...doc, invoiceStatusText: "Reddedildi", status: "rejected", rejectReason }
+          : doc
+      );
+      return {
+        succeed: true,
+        message: "Fatura reddedildi",
+        data: { invoiceETTN: ettn, status: "rejected", invoiceStatusText: "Reddedildi", rejectReason },
+      } as T;
+    }
+
+    if (lowerPath.includes("invoiceinboxsavedbycustomer")) {
+      const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
+      return {
+        succeed: true,
+        message: "Fatura alındı olarak işaretlendi",
+        data: { invoiceETTN: ettn, acknowledged: true },
+      } as T;
+    }
+
+    if (lowerPath.includes("getinvoiceinboxstatus") || lowerPath.includes("getinvoiceoutboxstatus")) {
+      const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
+      const found = [...this.mockInboxDocs, ...this.mockOutboxDocs].find(
+        (d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn
+      );
+      return {
+        succeed: true,
+        message: "Mysoft mock status",
+        data: {
+          id: ettn,
+          ettn,
+          invoiceETTN: ettn,
+          invoiceStatusText: String(found?.invoiceStatusText || "Onaylandı"),
+          envelopeStatusCode: String(found?.envelopeStatusCode || "1300"),
+          envelopeStatusText: String(found?.envelopeStatusText || "Başarıyla Tamamlandı"),
+        },
+      } as T;
+    }
+
     if (lowerPath.includes("getinvoiceoutboxmodel") || lowerPath.includes("getinvoiceinboxmodel")) {
       const ettn = String(query.invoiceETTN || bodyObj.invoiceETTN || "");
-      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const pool = lowerPath.includes("inbox")
+        ? [...this.mockInboxDocs, ...this.mockOutboxDocs]
+        : [...this.mockOutboxDocs, ...this.mockInboxDocs];
+      const found = pool.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
       if (found) {
         return { succeed: true, message: "Mysoft mock mode", data: found } as T;
       }
@@ -1214,9 +1447,97 @@ export class MysoftEdocumentClient {
 
     if (lowerPath.includes("xmlaszip")) {
       const ettn = String(query.invoiceETTN || query.despatchETTN || "BELGE");
-      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const found = [...this.mockInboxDocs, ...this.mockOutboxDocs].find(
+        (d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn
+      );
       const docNo = String(found?.docNo || ettn);
-      const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">\n  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>\n  <cbc:CustomizationID>TR1.2</cbc:CustomizationID>\n  <cbc:ProfileID>${String(found?.profile || "TICARIFATURA")}</cbc:ProfileID>\n  <cbc:ID>${docNo}</cbc:ID>\n  <cbc:UUID>${ettn}</cbc:UUID>\n  <cbc:IssueDate>${String(found?.docDate || new Date().toISOString().slice(0, 10))}</cbc:IssueDate>\n  <cbc:InvoiceTypeCode>${String(found?.invoiceType || "SATIS")}</cbc:InvoiceTypeCode>\n  <cbc:DocumentCurrencyCode>${String(found?.currencyCode || "TRY")}</cbc:DocumentCurrencyCode>\n</Invoice>`;
+      const currency = String(found?.currencyCode || "TRY");
+      const senderVkn = String(found?.senderTaxNumber || found?.vknTckn || "6090451823");
+      const senderName = String(found?.senderName || found?.accountName || "Tedarikçi Firma A.Ş.");
+      const taxOffice = String(found?.taxOfficeName || "Merkez V.D.");
+      const subTotal = Number(found?.taxExclusiveAmount ?? found?.lineExtensionAmount ?? 0);
+      const vatTotal = Number(found?.taxTotalTra ?? 0);
+      const payable = Number(found?.payableAmount ?? found?.taxInclusiveAmount ?? subTotal + vatTotal);
+      const details = Array.isArray(found?.invoiceDetail) ? (found?.invoiceDetail as any[]) : [];
+      const linesXml = details
+        .map((ln, idx) => {
+          const lineId = String(ln.id || idx + 1);
+          const qty = Number(ln.qty ?? ln.quantity ?? 1);
+          const unitCode = String(ln.unitCode || "C62");
+          const price = Number(ln.unitPriceTra ?? ln.unitPrice ?? 0);
+          const lineAmt = Number(ln.amtTra ?? qty * price);
+          const vatRate = Number(ln.vatRate ?? 20);
+          const vatAmt = Number(ln.amtVatTra ?? (lineAmt * vatRate) / 100);
+          const name = String(ln.productName || ln.description || `Kalem ${idx + 1}`);
+          return `  <cac:InvoiceLine>
+    <cbc:ID>${lineId}</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="${unitCode}">${qty}</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="${currency}">${lineAmt.toFixed(2)}</cbc:LineExtensionAmount>
+    <cac:TaxTotal>
+      <cbc:TaxAmount currencyID="${currency}">${vatAmt.toFixed(2)}</cbc:TaxAmount>
+      <cac:TaxSubtotal>
+        <cbc:TaxableAmount currencyID="${currency}">${lineAmt.toFixed(2)}</cbc:TaxableAmount>
+        <cbc:TaxAmount currencyID="${currency}">${vatAmt.toFixed(2)}</cbc:TaxAmount>
+        <cbc:Percent>${vatRate}</cbc:Percent>
+        <cac:TaxCategory>
+          <cac:TaxScheme>
+            <cbc:Name>KDV</cbc:Name>
+            <cbc:TaxTypeCode>0015</cbc:TaxTypeCode>
+          </cac:TaxScheme>
+        </cac:TaxCategory>
+      </cac:TaxSubtotal>
+    </cac:TaxTotal>
+    <cac:Item>
+      <cbc:Name>${name}</cbc:Name>
+    </cac:Item>
+    <cac:Price>
+      <cbc:PriceAmount currencyID="${currency}">${price.toFixed(2)}</cbc:PriceAmount>
+    </cac:Price>
+  </cac:InvoiceLine>`;
+        })
+        .join("\n");
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+  <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
+  <cbc:ProfileID>${String(found?.profile || "TICARIFATURA")}</cbc:ProfileID>
+  <cbc:ID>${docNo}</cbc:ID>
+  <cbc:UUID>${ettn}</cbc:UUID>
+  <cbc:IssueDate>${String(found?.docDate || new Date().toISOString().slice(0, 10))}</cbc:IssueDate>
+  <cbc:InvoiceTypeCode>${String(found?.invoiceType || "SATIS")}</cbc:InvoiceTypeCode>
+  <cbc:Note>${String(found?.note || "")}</cbc:Note>
+  <cbc:DocumentCurrencyCode>${currency}</cbc:DocumentCurrencyCode>
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cac:PartyIdentification>
+        <cbc:ID schemeID="VKN">${senderVkn}</cbc:ID>
+      </cac:PartyIdentification>
+      <cac:PartyName>
+        <cbc:Name>${senderName}</cbc:Name>
+      </cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>${String(found?.streetName || "")}</cbc:StreetName>
+        <cbc:CitySubdivisionName>${String(found?.townName || "")}</cbc:CitySubdivisionName>
+        <cbc:CityName>${String(found?.cityName || "İstanbul")}</cbc:CityName>
+      </cac:PostalAddress>
+      <cac:PartyTaxScheme>
+        <cac:TaxScheme>
+          <cbc:Name>${taxOffice}</cbc:Name>
+        </cac:TaxScheme>
+      </cac:PartyTaxScheme>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="${currency}">${vatTotal.toFixed(2)}</cbc:TaxAmount>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="${currency}">${subTotal.toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="${currency}">${subTotal.toFixed(2)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="${currency}">${payable.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="${currency}">${payable.toFixed(2)}</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+${linesXml}
+</Invoice>`;
       return {
         succeed: true,
         message: "Mysoft mock xml",
@@ -1224,14 +1545,108 @@ export class MysoftEdocumentClient {
       } as T;
     }
 
-    if (lowerPath.includes("pdfaszip")) {
+    if (lowerPath.includes("htmlaszip") || lowerPath.includes("pdfaszip")) {
       const ettn = String(query.invoiceETTN || query.despatchETTN || "BELGE");
-      const found = this.mockOutboxDocs.find((d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn);
+      const found = [...this.mockInboxDocs, ...this.mockOutboxDocs].find(
+        (d) => d.ettn === ettn || d.id === ettn || d.docNo === ettn
+      );
       const docNo = String(found?.docNo || ettn);
-      const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>e-Belge ${docNo}</title></head><body style="font-family:Arial,sans-serif;padding:24px;"><h2>e-Belge Görüntüsü (${docNo})</h2><p>ETTN: ${ettn}</p><p>Alıcı: ${String(found?.accountName || "-")}</p><p>Tutar: ${Number(found?.payableAmount || 0).toFixed(2)} ${String(found?.currencyCode || "TRY")}</p></body></html>`;
+      const docDate = String(found?.docDate || new Date().toISOString().slice(0, 10));
+      const senderName = String(found?.senderName || found?.accountName || "TEDARİKÇİ FİRMA A.Ş.");
+      const senderVkn = String(found?.senderTaxNumber || found?.vknTckn || "6090451823");
+      const taxOffice = String(found?.taxOfficeName || "Büyük Mükellefler V.D.");
+      const street = String(found?.streetName || "Merkez Bulvarı No: 1");
+      const town = String(found?.townName || "Merkez");
+      const city = String(found?.cityName || "İstanbul");
+      const profile = String(found?.profile || "TICARIFATURA");
+      const invoiceType = String(found?.invoiceType || "SATIS");
+      const currency = String(found?.currencyCode || "TRY");
+      const subTotal = Number(found?.taxExclusiveAmount ?? found?.lineExtensionAmount ?? 0);
+      const vatTotal = Number(found?.taxTotalTra ?? 0);
+      const payable = Number(found?.payableAmount ?? found?.taxInclusiveAmount ?? subTotal + vatTotal);
+      const details = Array.isArray(found?.invoiceDetail) ? (found?.invoiceDetail as any[]) : [];
+      const rowsHtml = details
+        .map((ln, idx) => {
+          const code = String(ln.productCode || `KLM-0${idx + 1}`);
+          const name = String(ln.productName || ln.description || `Mal/Hizmet Kalemi ${idx + 1}`);
+          const qty = Number(ln.qty ?? ln.quantity ?? 1);
+          const unit = String(ln.unitName || ln.unitCode || "Adet");
+          const price = Number(ln.unitPriceTra ?? ln.unitPrice ?? 0);
+          const vatRate = Number(ln.vatRate ?? 20);
+          const lineAmt = Number(ln.amtTra ?? qty * price);
+          const vatAmt = Number(ln.amtVatTra ?? (lineAmt * vatRate) / 100);
+          return `<tr>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;text-align:center;">${idx + 1}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;font-family:monospace;">${code}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;font-weight:600;">${name}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">${qty} ${unit}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">${price.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;text-align:center;">%${vatRate}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">${vatAmt.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}</td>
+            <td style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;font-weight:bold;">${lineAmt.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}</td>
+          </tr>`;
+        })
+        .join("");
+
+      const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>e-Fatura ${docNo}</title></head><body style="font-family:Arial,Helvetica,sans-serif;padding:28px;color:#0f172a;background:#ffffff;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:16px;">
+          <div style="max-width:45%;">
+            <div style="font-size:14px;font-weight:800;color:#0f172a;margin-bottom:4px;">${senderName}</div>
+            <div>${street}</div>
+            <div>${town} / ${city}</div>
+            <div style="margin-top:4px;"><strong>Vergi Dairesi:</strong> ${taxOffice}</div>
+            <div><strong>VKN / TCKN:</strong> ${senderVkn}</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="width:68px;height:68px;border:2px solid #b91c1c;border-radius:50%;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;color:#b91c1c;font-weight:800;font-size:9px;line-height:1.15;">
+              <span>T.C.</span><span>Hazine ve Maliye</span><span>Bakanlığı</span><span style="font-size:10px;">GİB</span>
+            </div>
+            <div style="font-size:15px;font-weight:800;margin-top:6px;letter-spacing:1px;">e-FATURA</div>
+          </div>
+          <div style="border:1px solid #475569;border-radius:4px;overflow:hidden;min-width:230px;">
+            <table style="width:100%;border-collapse:collapse;font-size:11px;">
+              <tr><td style="padding:4px 8px;background:#f1f5f9;font-weight:bold;border-bottom:1px solid #cbd5e1;">Özelleştirme No:</td><td style="padding:4px 8px;border-bottom:1px solid #cbd5e1;">TR1.2</td></tr>
+              <tr><td style="padding:4px 8px;background:#f1f5f9;font-weight:bold;border-bottom:1px solid #cbd5e1;">Senaryo:</td><td style="padding:4px 8px;border-bottom:1px solid #cbd5e1;font-weight:bold;">${profile}</td></tr>
+              <tr><td style="padding:4px 8px;background:#f1f5f9;font-weight:bold;border-bottom:1px solid #cbd5e1;">Fatura Tipi:</td><td style="padding:4px 8px;border-bottom:1px solid #cbd5e1;">${invoiceType}</td></tr>
+              <tr><td style="padding:4px 8px;background:#f1f5f9;font-weight:bold;border-bottom:1px solid #cbd5e1;">Fatura No:</td><td style="padding:4px 8px;border-bottom:1px solid #cbd5e1;font-weight:bold;font-family:monospace;">${docNo}</td></tr>
+              <tr><td style="padding:4px 8px;background:#f1f5f9;font-weight:bold;">Fatura Tarihi:</td><td style="padding:4px 8px;">${docDate}</td></tr>
+            </table>
+          </div>
+        </div>
+        <div style="margin-bottom:14px;padding:8px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:11px;">
+          <strong>ETTN:</strong> <span style="font-family:monospace;">${ettn}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px;">
+          <thead>
+            <tr style="background:#e2e8f0;color:#0f172a;">
+              <th style="padding:7px 8px;border:1px solid #94a3b8;">Sıra</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:left;">Stok Kodu</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:left;">Mal / Hizmet Açıklaması</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">Miktar</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">Birim Fiyat</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:center;">KDV %</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">KDV Tutarı</th>
+              <th style="padding:7px 8px;border:1px solid #94a3b8;text-align:right;">Mal/Hizmet Tutarı</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;">
+          <div style="flex:1;padding:10px;border:1px solid #cbd5e1;background:#f8fafc;min-height:60px;">
+            <strong>Notlar:</strong><br/>${String(found?.note || "İrsaliye yerine geçer.")}
+          </div>
+          <div style="width:280px;border:1px solid #475569;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+              <tr><td style="padding:6px 10px;background:#f1f5f9;font-weight:bold;border-bottom:1px solid #cbd5e1;">Mal / Hizmet Toplam:</td><td style="padding:6px 10px;text-align:right;border-bottom:1px solid #cbd5e1;">${subTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}</td></tr>
+              <tr><td style="padding:6px 10px;background:#f1f5f9;font-weight:bold;border-bottom:1px solid #cbd5e1;">Hesaplanan KDV:</td><td style="padding:6px 10px;text-align:right;border-bottom:1px solid #cbd5e1;">${vatTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}</td></tr>
+              <tr><td style="padding:7px 10px;background:#0f172a;color:#fff;font-weight:bold;">Ödenecek Tutar:</td><td style="padding:7px 10px;background:#0f172a;color:#fff;text-align:right;font-weight:bold;">${payable.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}</td></tr>
+            </table>
+          </div>
+        </div>
+      </body></html>`;
       return {
         succeed: true,
-        message: "Mysoft mock pdf",
+        message: "Mysoft mock document",
         data: html,
       } as T;
     }
@@ -1343,14 +1758,14 @@ export class MysoftEdocumentClient {
     return this.request(MYSOFT_ENDPOINTS.incomingList, {
       method: "POST",
       body: {
-        afterValue,
-        limit,
+        afterValue: afterValue ?? 0,
+        limit: limit ?? 100,
         startDate,
         endDate,
         pkAlias,
         ettn,
         vknTckn,
-        isUseDocDate,
+        isUseDocDate: isUseDocDate ?? true,
         cessionStatus,
         tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber),
       },
@@ -1393,13 +1808,21 @@ export class MysoftEdocumentClient {
         profile,
         vknTckn,
         accountName,
-        isUseDocDate,
+        isUseDocDate: isUseDocDate ?? true,
         cessionStatus,
         archiveStatus,
         pageSize: pageSize ?? 100,
         pageNumber: pageNumber ?? 1,
         tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber),
       },
+    }).catch((error: unknown) => {
+      if (
+        error instanceof MysoftApiError &&
+        (error.status === 404 || error.status === 405 || error.status === 400)
+      ) {
+        return this.listIncoming(request);
+      }
+      throw error;
     });
   }
 
@@ -3000,6 +3423,20 @@ export class MysoftEdocumentClient {
     });
   }
 
+  getDespatchIncomingHtml(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.incoming.html", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
+  getDespatchOutgoingHtml(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.requestDocumentOperation("despatch.outgoing.html", {
+      query: { despatchETTN },
+      tenantIdentifierNumber,
+    });
+  }
+
   acknowledgeDespatchIncoming(despatchETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
     return this.requestDocumentOperation("despatch.incoming.acknowledge", {
       query: { despatchETTN },
@@ -3257,6 +3694,20 @@ export class MysoftEdocumentClient {
     });
   }
 
+  getIncomingHtml(invoiceETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.request(MYSOFT_ENDPOINTS.incomingHtml, {
+      method: "GET",
+      query: { invoiceETTN, tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber) },
+    });
+  }
+
+  getOutgoingHtml(invoiceETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    return this.request(MYSOFT_ENDPOINTS.outgoingHtml, {
+      method: "GET",
+      query: { invoiceETTN, tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber) },
+    });
+  }
+
   acknowledgeIncoming(invoiceETTN: string, tenantIdentifierNumber?: string): Promise<unknown> {
     return this.request(MYSOFT_ENDPOINTS.incomingAcknowledge, {
       method: "GET",
@@ -3272,13 +3723,45 @@ export class MysoftEdocumentClient {
   }
 
   rejectIncoming(invoiceETTN: string, rejectReason: string, tenantIdentifierNumber?: string): Promise<unknown> {
+    const effectiveTenant = this.effectiveTenant(tenantIdentifierNumber);
     return this.request(MYSOFT_ENDPOINTS.incomingDeny, {
       method: "GET",
       query: {
         invoiceETTN,
         rejectReason,
-        tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber),
+        tenantIdentifierNumber: effectiveTenant,
       },
+    }).catch((error: unknown) => {
+      if (
+        error instanceof MysoftApiError &&
+        (error.status === 404 || error.status === 405 || error.status === 400)
+      ) {
+        return this.requestDocumentOperation("invoice.incoming.reject.model", {
+          body: {
+            invoiceETTN,
+            rejectReason,
+            tenantIdentifierNumber: effectiveTenant,
+          },
+          tenantIdentifierNumber: effectiveTenant,
+        });
+      }
+      throw error;
+    });
+  }
+
+  updateIncomingArchiveStatus(
+    invoiceETTN: string,
+    archiveStatus: boolean,
+    tenantIdentifierNumber?: string,
+  ): Promise<unknown> {
+    const effectiveTenant = this.effectiveTenant(tenantIdentifierNumber);
+    return this.requestDocumentOperation("invoice.incoming.archive", {
+      body: {
+        invoiceETTN,
+        archiveStatus,
+        tenantIdentifierNumber: effectiveTenant,
+      },
+      tenantIdentifierNumber: effectiveTenant,
     });
   }
 

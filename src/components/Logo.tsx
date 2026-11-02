@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { getActiveCompanyId, getCompaniesList } from "../utils/storage";
-import { clampLogoScale } from "../utils/logoUpload";
+import { clampLogoScale, autoCropLogoSource } from "../utils/logoUpload";
 
 export interface LogoProps {
   className?: string;
@@ -23,7 +23,7 @@ export interface LogoProps {
  * Supports both:
  * 1. Image mode (passing `src` or `imageUrl`, e.g. custom logo image URL, /logo.svg, or uploaded branding)
  *    Automatically scales uploaded company logos up or down to match Muavin logo dimensions,
- *    with optional `scale` (0.5x – 2.0x) multiplier.
+ *    bounded by the white box container dimensions.
  * 2. High-precision vector SVG mode with contrast adaptability (default / light / dark)
  */
 export const Logo: React.FC<LogoProps> = ({
@@ -41,9 +41,8 @@ export const Logo: React.FC<LogoProps> = ({
   onClick,
 }) => {
   const [imageError, setImageError] = useState(false);
-  React.useEffect(() => {
-    setImageError(false);
-  }, [src, imageUrl]);
+  const [resolvedSrc, setResolvedSrc] = useState<string>("");
+
   const isLight = variant === "light";
   const mainColor = isLight ? "#FFFFFF" : "#0A192F";
   const barColor = "#EAA728";
@@ -74,10 +73,28 @@ export const Logo: React.FC<LogoProps> = ({
       ? "/logo-light.svg"
       : providedSrc || (asImage ? (isLight ? "/logo-light.svg" : "/logo.svg") : "/logo.svg");
 
-  const shouldRenderImage = Boolean(effectiveImgSrc) && !imageError;
-  const effectiveScale = isDefaultMuavinVector
+  useEffect(() => {
+    setImageError(false);
+    let active = true;
+    if (effectiveImgSrc && !isDefaultMuavinVector && effectiveImgSrc.startsWith("data:image/")) {
+      autoCropLogoSource(effectiveImgSrc).then((cropped) => {
+        if (active) setResolvedSrc(cropped);
+      });
+    } else {
+      setResolvedSrc(effectiveImgSrc || "");
+    }
+    return () => {
+      active = false;
+    };
+  }, [effectiveImgSrc, isDefaultMuavinVector]);
+
+  const displayImgSrc = resolvedSrc || effectiveImgSrc;
+  const shouldRenderImage = Boolean(displayImgSrc) && !imageError;
+  const rawScale = isDefaultMuavinVector
     ? clampLogoScale(scale ?? 1)
     : clampLogoScale(scale ?? activeCompLogoScale);
+  // Ensure scale never exceeds 1.0 of the white area container when bounded
+  const effectiveScale = Math.min(1, rawScale);
 
   // Size classes adhering to Haze header height (72px) and Muavin standard logo dimensions
   const emblemSizes = {
@@ -116,17 +133,17 @@ export const Logo: React.FC<LogoProps> = ({
   const altText = alt || (showText ? "E-MUAVİN Logo" : "E-MUAVİN Amblem");
 
   // Image rendering path
-  if (shouldRenderImage && effectiveImgSrc) {
+  if (shouldRenderImage && displayImgSrc) {
     if (!showText) {
       const baseEmblem = emblemPx[size] || 36;
-      const scaledEmblem = Math.round(baseEmblem * effectiveScale);
+      const scaledEmblem = Math.min(baseEmblem, Math.round(baseEmblem * effectiveScale));
       return (
         <div
           onClick={onClick}
           className={`inline-flex items-center justify-center shrink-0 overflow-hidden ${onClick ? "cursor-pointer" : ""} ${className}`}
         >
           <img
-            src={effectiveImgSrc}
+            src={displayImgSrc}
             alt={altText}
             loading="lazy"
             decoding="async"
@@ -135,8 +152,9 @@ export const Logo: React.FC<LogoProps> = ({
             style={{
               width: `${scaledEmblem}px`,
               height: `${scaledEmblem}px`,
+              maxWidth: `${baseEmblem}px`,
+              maxHeight: `${baseEmblem}px`,
               objectFit: "contain",
-              maxHeight: "100%",
               ...imageStyle,
             }}
             className={`${emblemSizes[size]} object-contain max-h-full shrink-0 ${
@@ -148,31 +166,36 @@ export const Logo: React.FC<LogoProps> = ({
     }
 
     const baseBox = muavinBoxPx[size] || muavinBoxPx.lg;
-    const scaledWidth = Math.round(baseBox.width * effectiveScale);
-    const scaledHeight = Math.round(baseBox.height * effectiveScale);
+    const maxW = Math.min(baseBox.width, Math.round(baseBox.width * effectiveScale));
+    const maxH = Math.min(baseBox.height, Math.round(baseBox.height * effectiveScale));
 
     return (
       <div
         onClick={onClick}
-        className={`inline-flex items-center shrink-0 ${onClick ? "cursor-pointer" : ""} ${className}`}
+        className={`inline-flex items-center shrink-0 w-fit h-fit max-w-full ${onClick ? "cursor-pointer" : ""} ${className}`}
       >
         <img
-          src={effectiveImgSrc}
+          src={displayImgSrc}
           alt={altText}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => setImageError(true)}
           style={{
-            width: `${scaledWidth}px`,
-            height: `${scaledHeight}px`,
+            width: "auto",
+            height: "auto",
+            maxWidth: `${maxW}px`,
+            maxHeight: `${maxH}px`,
             objectFit: "contain",
-            maxHeight: "100%",
             ...imageStyle,
           }}
-          className={`object-contain max-h-full object-center shrink-0 ${
-            isLight ? "bg-white/95 rounded-lg px-2.5 py-1 shadow-2xs border border-white/10" : ""
-          } transition-all duration-200 hover:scale-[1.02] ${imageClassName}`}
+          className={`w-auto h-auto object-contain object-center shrink-0 box-border ${
+            isLight
+              ? isDefaultMuavinVector
+                ? "bg-white/95 rounded-lg px-2.5 py-1 shadow-2xs border border-white/10"
+                : "bg-white/95 rounded-lg px-1.5 py-0.5 shadow-2xs border border-white/10"
+              : ""
+          } transition-all duration-200 ${imageClassName}`}
         />
       </div>
     );

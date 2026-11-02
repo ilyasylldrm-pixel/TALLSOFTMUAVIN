@@ -131,6 +131,7 @@ interface SidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onSaveSettings?: (settings: CompanySettings) => void;
+  onUpdateCompany?: (company: CompanyItem) => void;
   constructionProjects?: ConstructionProject[];
   selectedConstructionProjectId?: string | null;
   onSelectConstructionProject?: (projectId: string) => void;
@@ -151,6 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
   onSaveSettings,
+  onUpdateCompany,
   constructionProjects = [],
   selectedConstructionProjectId,
   onSelectConstructionProject,
@@ -161,6 +163,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = isCollapsed !== undefined ? isCollapsed : internalCollapsed;
   const handleToggleCollapse = onToggleCollapse || (() => setInternalCollapsed((prev) => !prev));
+
+  const currentLogoScale = Number(
+    Math.min(2.0, Math.max(0.5, Number(activeCompany?.logoScale ?? settings.logoScale ?? 1))).toFixed(2)
+  );
+
+  const handleLogoScaleChange = (newScaleRaw: number) => {
+    const clampedScale = Number(Math.min(2.0, Math.max(0.5, newScaleRaw)).toFixed(2));
+    if (activeCompany && onUpdateCompany) {
+      onUpdateCompany({
+        ...activeCompany,
+        logoScale: clampedScale,
+      });
+    } else if (onSaveSettings) {
+      onSaveSettings({
+        ...settings,
+        logoScale: clampedScale,
+      });
+    }
+  };
 
   const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
@@ -270,29 +291,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Brand Header */}
       <div
-        className="w-[280px] px-4 py-3.5 border-b flex items-center justify-between gap-2 min-h-[72px] md:h-[123px]"
-        style={{ borderColor: theme.sidebarBorder, width: "280px" }}
+        className="w-full px-3.5 py-3.5 border-b flex items-center justify-center gap-2 min-h-[72px] md:h-[123px] box-border shrink-0 relative"
+        style={{ borderColor: theme.sidebarBorder }}
       >
-        <div className="min-w-0 flex-1 flex flex-col justify-center">
+        <div className="min-w-0 flex-1 flex flex-col items-center justify-center text-center">
           <Logo
             size="lg"
             src={activeCompany?.logoUrl || settings.logoUrl || "/logo.svg"}
-            scale={activeCompany?.logoScale ?? settings.logoScale}
+            scale={activeCompany?.logoScale ?? settings.logoScale ?? 1}
             variant={theme.sidebarBg !== "#ffffff" ? "light" : "default"}
-            className="w-[200px] h-[50px] object-contain"
-            imageClassName="ml-[11px] mt-[11px]"
-            imageStyle={{ marginLeft: "11px", marginTop: "11px" }}
+            className="w-fit h-fit max-w-[200px] max-h-[50px] object-contain mx-auto justify-center"
+            imageClassName="mx-auto"
           />
           {settings.companyName && (
             <p
-              className="text-[11px] font-medium truncate opacity-75 ml-[21px]"
-              style={{ color: theme.sidebarText, marginLeft: "21px", marginTop: "25px" }}
+              className="w-full text-[11px] font-medium truncate opacity-75 text-center mt-3"
+              style={{ color: theme.sidebarText }}
             >
               {settings.companyName}
             </p>
           )}
           {activeCompany?.moduleRestrictionEnabled && (
-            <div className="ml-[21px] mt-1 inline-flex items-center gap-1">
+            <div className="mt-1 inline-flex items-center justify-center gap-1 mx-auto">
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30">
                 🔒 Modül Kısıtlaması ({activeCompany.allowedModules?.length || 0})
               </span>
@@ -303,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onCloseMobile}
-            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+            className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
             title="Kapat"
           >
             <X className="w-5 h-5" />
@@ -312,24 +332,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Quick Add Button */}
-      <div className="p-4">
+      <div className="w-full px-3 py-3 box-border shrink-0">
         <button
           onClick={() => {
             onOpenQuickAdd();
             if (onCloseMobile) onCloseMobile();
           }}
-          className="w-full active:scale-[0.98] text-white font-medium text-sm py-2.5 px-4 rounded-md flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer hover:opacity-90"
+          className="w-full active:scale-[0.98] text-white font-medium text-sm py-2.5 px-3.5 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer hover:opacity-90 box-border"
           style={{ backgroundColor: theme.primaryColor }}
         >
-          <Plus className="w-4 h-4 text-white" />
-          <span>Hızlı İşlem Ekle</span>
+          <Plus className="w-4 h-4 text-white shrink-0" />
+          <span className="truncate">Hızlı İşlem Ekle</span>
         </button>
       </div>
 
       {/* Navigation Links */}
       <nav
-        className="w-[280px] flex-1 px-3 py-2 space-y-1 overflow-y-auto custom-scrollbar"
-        style={{ width: "280px" }}
+        className="w-full flex-1 px-3 py-2 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar box-border"
       >
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -387,7 +406,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : currentTab === item.id;
 
           return (
-            <div key={item.id} className="space-y-1">
+            <div key={item.id} className="w-full space-y-1">
               <button
                 onClick={() => {
                   if (isOrderItem) {
@@ -458,7 +477,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     handleSelectTabWithMobileClose(item.id as NavItem);
                   }
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded text-sm font-medium cursor-pointer sidebar-nav-item ${
+                className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-sm font-medium cursor-pointer sidebar-nav-item box-border ${
                   isActive
                     ? "active shadow-2xs font-semibold"
                     : ""
@@ -469,61 +488,61 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : { color: theme.sidebarText }
                 }
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <Icon
                     className="w-4 h-4 shrink-0 transition-transform"
                     style={{ color: isActive ? theme.sidebarActiveText : undefined }}
                   />
-                  <span>{item.label}</span>
+                  <span className="truncate text-left">{item.label}</span>
                 </div>
                 {item.badge ? (
-                  <span className="text-[10px] font-medium bg-[#eaedff] text-[#0f6bae] px-1.5 py-0.5 rounded border border-[#c6cdff]">
+                  <span className="text-[10px] font-medium bg-[#eaedff] text-[#0f6bae] px-1.5 py-0.5 rounded border border-[#c6cdff] shrink-0">
                     {item.badge}
                   </span>
                 ) : isOrderItem ? (
                   isOrdersExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
                 ) : isInvoiceItem ? (
                   isInvoicesExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
                 ) : isFinanceItem ? (
                   isFinanceExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
                 ) : isCompanyItem ? (
                   isCompanyExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
                 ) : isHrItem ? (
                   isHrExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
                 ) : isConstructionItem ? (
                   isConstructionExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
                 ) : (
-                  isActive && <ChevronRight className="w-3.5 h-3.5 text-white/80" />
+                  isActive && <ChevronRight className="w-3.5 h-3.5 text-white/80 shrink-0" />
                 )}
               </button>
 
               {/* Sub-modules for Sipariş & Proforma */}
               {isOrderItem && isOrdersExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
                   {orderSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
@@ -532,7 +551,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <button
                         key={sub.id}
                         onClick={() => onSelectTab(sub.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item ${
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
                           isSubActive
                             ? "active shadow-2xs font-semibold"
                             : ""
@@ -544,10 +563,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }
                       >
                         <SubIcon
-                          className="w-3.5 h-3.5 transition-transform"
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
                           style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
                         />
-                        <span>{sub.label}</span>
+                        <span className="truncate text-left flex-1">{sub.label}</span>
                       </button>
                     );
                   })}
@@ -556,7 +575,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Faturalar & İrsaliyeler */}
               {isInvoiceItem && isInvoicesExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
                   {invoiceSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = currentTab === sub.id;
@@ -565,7 +584,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <button
                         key={sub.id}
                         onClick={() => onSelectTab(sub.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item ${
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
                           isSubActive
                             ? "active shadow-2xs font-semibold"
                             : ""
@@ -577,10 +596,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }
                       >
                         <SubIcon
-                          className="w-3.5 h-3.5 transition-transform"
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
                           style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
                         />
-                        <span>{sub.label}</span>
+                        <span className="truncate text-left flex-1">{sub.label}</span>
                       </button>
                     );
                   })}
@@ -589,7 +608,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Finans Yönetimi */}
               {isFinanceItem && isFinanceExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
                   {financeSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive = isActive && activeFinanceSubTab === sub.id;
@@ -603,7 +622,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onSelectFinanceSubTab(sub.id);
                           }
                         }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item ${
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
                           isSubActive
                             ? "active shadow-2xs font-semibold"
                             : ""
@@ -615,10 +634,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }
                       >
                         <SubIcon
-                          className="w-3.5 h-3.5 transition-transform"
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
                           style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
                         />
-                        <span>{sub.label}</span>
+                        <span className="truncate text-left flex-1">{sub.label}</span>
                       </button>
                     );
                   })}
@@ -627,7 +646,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for Firma Bilgileri */}
               {isCompanyItem && isCompanyExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
                   {companySubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive =
@@ -639,7 +658,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <button
                         key={sub.id}
                         onClick={() => onSelectTab(sub.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item ${
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
                           isSubActive
                             ? "active shadow-2xs font-semibold"
                             : ""
@@ -651,10 +670,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }
                       >
                         <SubIcon
-                          className="w-3.5 h-3.5 transition-transform"
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
                           style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
                         />
-                        <span>{sub.label}</span>
+                        <span className="truncate text-left flex-1">{sub.label}</span>
                       </button>
                     );
                   })}
@@ -663,7 +682,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for İnşaat Maliyetlendirme (Şantiyeler Alt Modülleri) */}
               {isConstructionItem && isConstructionExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
                   {constructionProjects && constructionProjects.length > 0 ? (
                     constructionProjects.map((proj) => {
                       const isProjActive =
@@ -681,7 +700,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               onSelectConstructionProject(proj.id);
                             }
                           }}
-                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item transition-all text-left ${
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item transition-all text-left box-border ${
                             isProjActive
                               ? "active shadow-2xs font-semibold"
                               : ""
@@ -716,7 +735,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Sub-modules for İnsan Kaynakları */}
               {isHrItem && isHrExpanded && (
-                <div className="pl-6 space-y-1 my-1 border-l-2 ml-5" style={{ borderColor: theme.sidebarBorder }}>
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
                   {hrSubModules.map((sub) => {
                     const SubIcon = sub.icon;
                     const isSubActive =
@@ -727,7 +746,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <button
                         key={sub.id}
                         onClick={() => handleSelectTabWithMobileClose(sub.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item ${
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
                           isSubActive
                             ? "active shadow-2xs font-semibold"
                             : ""
@@ -739,10 +758,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }
                       >
                         <SubIcon
-                          className="w-3.5 h-3.5 transition-transform"
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
                           style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
                         />
-                        <span>{sub.label}</span>
+                        <span className="truncate text-left flex-1">{sub.label}</span>
                       </button>
                     );
                   })}
@@ -756,7 +775,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Company Info Footer */}
       <div
-        className="p-4 border-t text-xs"
+        className="w-full px-3.5 py-3.5 border-t text-xs box-border shrink-0"
         style={{ borderColor: theme.sidebarBorder, color: theme.sidebarText }}
       >
         <div className="flex items-center gap-2.5 mb-1.5">
@@ -1015,7 +1034,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Quick Action: Yayınla & Senkronize Et */}
       {onOpenGitHubPublish && isAdmin && (
-        <div className="w-[280px] px-3 pt-2" style={{ width: "280px" }}>
+        <div className="w-full px-3 pt-2 box-border">
           <button
             type="button"
             onClick={onOpenGitHubPublish}
@@ -1031,8 +1050,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Company Info Footer (Collapsed) */}
       <div
-        className="w-[280px] p-3 border-t flex flex-col items-center justify-center relative group"
-        style={{ borderColor: theme.sidebarBorder, width: "280px" }}
+        className="w-full p-3 border-t flex flex-col items-center justify-center relative group box-border"
+        style={{ borderColor: theme.sidebarBorder }}
       >
         <button
           type="button"
@@ -1055,9 +1074,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop Sidebar - Sabit Genişlik (Kayma ve daralma kaldırıldı) */}
+      {/* Desktop Sidebar - Sabit Genişlik (280px Uyumlu) */}
       <aside
-        className="hidden md:flex flex-col shrink-0 w-[280px] h-screen sticky top-0 shadow-2xs z-20"
+        className="hidden md:flex flex-col shrink-0 w-[280px] min-w-[280px] max-w-[280px] h-screen sticky top-0 shadow-2xs z-20 box-border overflow-x-hidden"
         style={{
           width: "280px",
           backgroundColor: theme.sidebarBg,
@@ -1077,12 +1096,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Mobile Sidebar Slide-Over Drawer */}
+      {/* Mobile Sidebar Slide-Over Drawer (280px Uyumlu) */}
       <aside
-        className={`fixed inset-y-0 left-0 w-72 flex flex-col z-50 shadow-2xl md:hidden transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 w-[280px] min-w-[280px] max-w-[280px] flex flex-col z-50 shadow-2xl md:hidden transition-transform duration-300 ease-in-out box-border overflow-x-hidden ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{
+          width: "280px",
           backgroundColor: theme.sidebarBg,
           color: theme.sidebarText,
           borderColor: theme.sidebarBorder,

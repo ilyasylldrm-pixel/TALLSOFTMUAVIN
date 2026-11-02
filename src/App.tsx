@@ -1803,53 +1803,93 @@ export default function App() {
   };
 
   const handleImportMysoftInvoice = (document: MysoftEDocument) => {
+    const docRec = document as Record<string, any>;
+    const rawRec = (docRec.raw && typeof docRec.raw === "object" ? docRec.raw : {}) as Record<string, any>;
     const isIncoming =
       document.canonicalDirection === "incoming" ||
       document.direction === "inbox" ||
       document.direction === "incoming";
-    const taxNumber =
+    const taxNumber = String(
       document.taxNumber ||
-      (isIncoming ? document.senderTaxNumber : document.receiverTaxNumber) ||
-      "";
-    const contactName =
+        (isIncoming ? document.senderTaxNumber : document.receiverTaxNumber) ||
+        rawRec.vknTckn ||
+        ""
+    ).trim();
+    const contactName = String(
       document.accountName ||
-      (isIncoming ? document.senderName : document.receiverName) ||
-      "Mysoft e-Belge";
-    const invoiceNumber =
+        (isIncoming ? document.senderName : document.receiverName) ||
+        rawRec.accountName ||
+        "Mysoft e-Belge"
+    ).trim();
+    const invoiceNumber = String(
       document.documentNo ||
-      document.number ||
-      document.documentNumber ||
-      document.ettn ||
-      `MS-${Date.now()}`;
-    const issueDate = (document.issueDate || document.date || new Date().toISOString()).slice(0, 10);
-    const dueDate = (document.dueDate || issueDate).slice(0, 10);
-    const grandTotal = Number(document.grandTotal ?? document.amount) || 0;
-    const subtotal = Number(document.subtotal) || grandTotal;
-    const vatTotal = Number(document.vatTotal) || 0;
+        document.number ||
+        document.documentNumber ||
+        rawRec.docNo ||
+        document.ettn ||
+        `MS-${Date.now()}`
+    ).trim();
+    const issueDate = String(document.issueDate || document.date || rawRec.docDate || new Date().toISOString()).slice(0, 10);
+    const dueDate = String(document.dueDate || rawRec.dueDate || issueDate).slice(0, 10);
+    const grandTotal = Number(document.grandTotal ?? document.amount ?? rawRec.payableAmount) || 0;
+    const subtotal = Number(document.subtotal ?? rawRec.lineExtensionAmount) || grandTotal;
+    const vatTotal = Number(document.vatTotal ?? rawRec.taxTotalTra) || Math.max(0, Number((grandTotal - subtotal).toFixed(2)));
     const eDocumentType =
       document.documentType === "e_arsiv" ||
       document.documentType === "e_fatura" ||
       document.documentType === "paper"
         ? document.documentType
-        : "e_fatura";
+        : String(document.documentType || "").toLowerCase().includes("arsiv")
+          ? "e_arsiv"
+          : "e_fatura";
+
+    const rawLines: any[] =
+      Array.isArray(docRec.items) && docRec.items.length > 0
+        ? docRec.items
+        : Array.isArray(docRec.lines) && docRec.lines.length > 0
+          ? docRec.lines
+          : Array.isArray(docRec.invoiceDetail) && docRec.invoiceDetail.length > 0
+            ? docRec.invoiceDetail
+            : Array.isArray(rawRec.invoiceDetail) && rawRec.invoiceDetail.length > 0
+              ? rawRec.invoiceDetail
+              : Array.isArray(rawRec.items) && rawRec.items.length > 0
+                ? rawRec.items
+                : Array.isArray(docRec.invoiceLine) && docRec.invoiceLine.length > 0
+                  ? docRec.invoiceLine
+                  : [];
 
     setData((prev) => {
-      if (document.ettn && prev.invoices.some((invoice) => invoice.eDocumentEttn === document.ettn)) {
+      const cleanInvNo = invoiceNumber.toUpperCase();
+      if (
+        (document.ettn && prev.invoices.some((inv) => inv.eDocumentEttn === document.ettn)) ||
+        (cleanInvNo && prev.invoices.some((inv) => String(inv.invoiceNumber || "").trim().toUpperCase() === cleanInvNo))
+      ) {
         return prev;
       }
 
       let contacts = prev.contacts;
       let contact =
-        (taxNumber ? contacts.find((item) => item.taxNumber === taxNumber) : undefined) ||
-        contacts.find((item) => item.name === contactName);
+        (taxNumber ? contacts.find((item) => String(item.taxNumber || "").trim() === taxNumber) : undefined) ||
+        contacts.find((item) => item.name.trim().toLocaleLowerCase("tr-TR") === contactName.toLocaleLowerCase("tr-TR"));
+
+      const senderTaxOffice = String(docRec.senderTaxOffice || rawRec.senderTaxOffice || rawRec.taxOfficeName || "");
+      const senderAddress = String(docRec.senderAddress || rawRec.senderAddress || rawRec.address || "");
+      const senderCity = String(docRec.senderCity || rawRec.senderCity || rawRec.cityName || "");
+      const senderPhone = String(docRec.senderPhone || rawRec.senderPhone || rawRec.telephone || "");
+      const senderEmail = String(docRec.senderEmail || rawRec.senderEmail || rawRec.email || "");
 
       if (!contact) {
         const contactType = isIncoming ? "vendor" : "customer";
         contact = {
-          id: "ct_mysoft_" + Date.now(),
+          id: "ct_mysoft_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
           name: contactName,
           contactType,
           taxNumber: taxNumber || undefined,
+          taxOffice: senderTaxOffice || undefined,
+          address: senderAddress || undefined,
+          city: senderCity || undefined,
+          phone: senderPhone || undefined,
+          email: senderEmail || undefined,
           balance: 0,
           balanceType: "balanced",
           createdAt: new Date().toISOString(),
@@ -1858,44 +1898,99 @@ export default function App() {
         contacts = [contact, ...contacts];
       }
 
+      const mappedItems =
+        rawLines.length > 0
+          ? rawLines.map((ln: any, idx: number) => {
+              const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
+              const price = Number(ln.unitPrice ?? ln.unitPriceTra ?? ln.price ?? ln.amount ?? 0) || 0;
+              const vatRate = Number(ln.vatRate ?? ln.taxRate ?? ln.taxPercent ?? ln.kdvPercent ?? 20);
+              const totalWithoutVat = Number(ln.totalWithoutVat ?? ln.amtTra ?? ln.lineExtensionAmount ?? qty * price);
+              const vatAmount = Number(ln.vatAmount ?? ln.amtVatTra ?? ln.taxAmount ?? (totalWithoutVat * vatRate) / 100);
+              const codeStr = String(ln.productCode || ln.itemCode || "").trim();
+              const descStr = String(ln.description || ln.productName || ln.itemName || ln.note || "Mal / Hizmet Kalemi").trim();
+              const matchedProd = prev.products.find(
+                (p) =>
+                  (codeStr && p.code && p.code.trim().toUpperCase() === codeStr.toUpperCase()) ||
+                  p.name.trim().toLocaleLowerCase("tr-TR") === descStr.toLocaleLowerCase("tr-TR")
+              );
+              return {
+                id: String(ln.id || `it_mysoft_${Date.now()}_${idx}`),
+                productId: matchedProd?.id,
+                productCode: codeStr || matchedProd?.code || undefined,
+                description: descStr,
+                quantity: qty,
+                unit: String(ln.unit || ln.unitName || ln.unitCode || "Adet"),
+                unitPrice: price,
+                vatRate,
+                totalWithoutVat,
+                vatAmount,
+                totalWithVat: Number((totalWithoutVat + vatAmount).toFixed(2)),
+              };
+            })
+          : [
+              {
+                id: "it_mysoft_" + Date.now(),
+                description: `${String(document.documentType || "e-Belge")} - ${contactName} (${invoiceNumber})`,
+                quantity: 1,
+                unit: "Adet",
+                unitPrice: subtotal,
+                vatRate: subtotal > 0 ? Math.round((vatTotal / subtotal) * 100) : 20,
+                totalWithoutVat: subtotal,
+                vatAmount: vatTotal,
+                totalWithVat: grandTotal,
+              },
+            ];
+
       const invoice: Invoice = {
-        id: "inv_mysoft_" + Date.now(),
+        id: "inv_mysoft_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
         invoiceNumber,
         type: isIncoming ? "purchase" : "sales",
+        invoiceScenario: (document.profile as any) || (eDocumentType === "e_arsiv" ? "EARSIVFATURA" : "TICARIFATURA"),
+        invoiceProfileType: "SATIS",
         contactId: contact.id,
         contactName: contact.name,
         taxNumber: contact.taxNumber,
+        taxOffice: senderTaxOffice || contact.taxOffice,
+        customerAddress: senderAddress || contact.address,
         issueDate,
         dueDate,
-        items: [
-          {
-            id: "it_mysoft_" + Date.now(),
-            description: `${String(document.documentType || "e-Belge")} ${invoiceNumber}`,
-            quantity: 1,
-            unit: "Adet",
-            unitPrice: subtotal,
-            vatRate: subtotal > 0 ? Math.round((vatTotal / subtotal) * 100) : 0,
-            totalWithoutVat: subtotal,
-            vatAmount: vatTotal,
-            totalWithVat: grandTotal,
-          },
-        ],
+        items: mappedItems,
         subtotal,
         totalVat: vatTotal,
         grandTotal,
+        payableAmount: grandTotal,
         paidAmount: 0,
         remainingAmount: grandTotal,
         status: "sent",
         currency: document.currency === "₺" ? "TRY" : document.currency || "TRY",
-        notes: document.ettn ? `Mysoft ETTN: ${document.ettn}` : undefined,
+        notes: document.ettn ? `Mysoft Gelen e-Fatura (ETTN: ${document.ettn})` : undefined,
         createdAt: new Date().toISOString(),
         eDocumentType,
         eDocumentEttn: document.ettn,
       };
 
+      void saveInvoiceToDatabase(invoice, activeCompanyId);
+
+      // Update product stock quantities if any item matched an inventory product
+      const updatedProducts = prev.products.map((p) => {
+        const matchingItems = mappedItems.filter(
+          (item) =>
+            item.productId === p.id ||
+            (item.productCode && p.code && item.productCode.toUpperCase() === p.code.toUpperCase())
+        );
+        if (matchingItems.length === 0) return p;
+        const totalQty = matchingItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        const newStock =
+          invoice.type === "sales" ? p.stockQuantity - totalQty : p.stockQuantity + totalQty;
+        return {
+          ...p,
+          stockQuantity: Math.max(0, newStock),
+        };
+      });
+
       const delta = invoice.type === "sales" ? invoice.grandTotal : -invoice.grandTotal;
       const updatedContacts = contacts.map((item) => {
-        if (item.id !== contact.id) return item;
+        if (item.id !== contact!.id) return item;
         const newBal = item.balance + delta;
         return {
           ...item,
@@ -1907,6 +2002,7 @@ export default function App() {
       return {
         ...prev,
         contacts: updatedContacts,
+        products: updatedProducts,
         invoices: [invoice, ...prev.invoices],
       };
     });
@@ -4144,6 +4240,7 @@ export default function App() {
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         onSaveSettings={handleSaveSettings}
+        onUpdateCompany={handleUpdateCompany}
         constructionProjects={data.constructionProjects || []}
         selectedConstructionProjectId={selectedConstructionProjectId}
         onSelectConstructionProject={(projId) => {

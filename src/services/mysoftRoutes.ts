@@ -444,8 +444,8 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     runBinary(async (req) => {
       const invoiceETTN = ettnOrThrow(req);
       const format = (queryText(req, "format") || "pdf").toLowerCase();
-      if (format !== "pdf" && format !== "xml") {
-        throw new InvalidMysoftRequestError("format must be pdf or xml");
+      if (format !== "pdf" && format !== "xml" && format !== "html") {
+        throw new InvalidMysoftRequestError("format must be pdf, xml, or html");
       }
       const direction = (queryText(req, "direction") || "incoming").toLowerCase();
       const tenantIdentifierNumber = tenantFrom(req);
@@ -453,28 +453,38 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
         if (direction === "outgoing" || direction === "outbox") {
           return format === "xml"
             ? client.getDespatchOutgoingXml(invoiceETTN, tenantIdentifierNumber)
-            : client.getDespatchOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
+            : format === "html"
+              ? client.getDespatchOutgoingHtml(invoiceETTN, tenantIdentifierNumber)
+              : client.getDespatchOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
         }
         return format === "xml"
           ? client.getDespatchIncomingXml(invoiceETTN, tenantIdentifierNumber)
-          : client.getDespatchIncomingPdf(invoiceETTN, tenantIdentifierNumber);
+          : format === "html"
+            ? client.getDespatchIncomingHtml(invoiceETTN, tenantIdentifierNumber)
+            : client.getDespatchIncomingPdf(invoiceETTN, tenantIdentifierNumber);
       }
       if (direction === "outgoing" || direction === "outbox") {
         return format === "xml"
           ? client.getOutgoingXml(invoiceETTN, tenantIdentifierNumber)
-          : client.getOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
+          : format === "html"
+            ? client.getOutgoingHtml(invoiceETTN, tenantIdentifierNumber)
+            : client.getOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
       }
       // If direction is omitted, try the inbox first and then the outbox.  A
       // caller can avoid the second request by passing direction=outgoing.
       try {
         return format === "xml"
           ? await client.getIncomingXml(invoiceETTN, tenantIdentifierNumber)
-          : await client.getIncomingPdf(invoiceETTN, tenantIdentifierNumber);
+          : format === "html"
+            ? await client.getIncomingHtml(invoiceETTN, tenantIdentifierNumber)
+            : await client.getIncomingPdf(invoiceETTN, tenantIdentifierNumber);
       } catch (error) {
         if (!(error instanceof MysoftApiError) || error.status < 400 || error.status >= 500) throw error;
         return format === "xml"
           ? client.getOutgoingXml(invoiceETTN, tenantIdentifierNumber)
-          : client.getOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
+          : format === "html"
+            ? client.getOutgoingHtml(invoiceETTN, tenantIdentifierNumber)
+            : client.getOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
       }
     }),
   );
@@ -706,9 +716,37 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     "/outgoing/:invoiceETTN/xml",
     runBinary((req) => client.getOutgoingXml(ettnOrThrow(req), tenantFrom(req)))
   );
+  router.get(
+    "/incoming/:invoiceETTN/html",
+    runBinary((req) => client.getIncomingHtml(ettnOrThrow(req), tenantFrom(req)))
+  );
+  router.get(
+    "/outgoing/:invoiceETTN/html",
+    runBinary((req) => client.getOutgoingHtml(ettnOrThrow(req), tenantFrom(req)))
+  );
   router.post(
     "/incoming/:invoiceETTN/acknowledge",
     run((req) => client.acknowledgeIncoming(ettnOrThrow(req), tenantFrom(req)))
+  );
+  router.post(
+    "/incoming/:invoiceETTN/accept",
+    run((req) => client.acceptIncoming(ettnOrThrow(req), tenantFrom(req)))
+  );
+  router.post(
+    "/incoming/:invoiceETTN/deny",
+    run((req) => {
+      const reason = textParam((req.body as Record<string, unknown> | undefined)?.rejectReason);
+      if (!reason) throw new InvalidMysoftRequestError("rejectReason is required");
+      return client.rejectIncoming(ettnOrThrow(req), reason, tenantFrom(req));
+    })
+  );
+  router.post(
+    "/incoming/:invoiceETTN/archive",
+    run((req) => {
+      const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+      const archiveStatus = body.archiveStatus !== false;
+      return client.updateIncomingArchiveStatus(ettnOrThrow(req), archiveStatus, tenantFrom(req));
+    })
   );
   return router;
 }

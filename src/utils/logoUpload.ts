@@ -15,7 +15,7 @@ export function clampLogoScale(scale?: number): number {
 }
 
 /**
- * Şeffaf kenar boşluklarını (padding) tespit edip gerçek logo alanını bulur.
+ * Şeffaf veya beyaz kenar boşluklarını (padding) tespit edip gerçek logo alanını bulur.
  */
 function findContentBounds(
   ctx: CanvasRenderingContext2D,
@@ -25,40 +25,127 @@ function findContentBounds(
   try {
     const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
+
     let minX = width;
     let minY = height;
     let maxX = 0;
     let maxY = 0;
-    let found = false;
+    let foundNonWhite = false;
+
+    let alphaMinX = width;
+    let alphaMinY = height;
+    let alphaMaxX = 0;
+    let alphaMaxY = 0;
+    let foundAlpha = false;
 
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = (y * width + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
         const alpha = data[idx + 3];
-        if (alpha > 12) {
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-          found = true;
+
+        if (alpha > 15) {
+          if (x < alphaMinX) alphaMinX = x;
+          if (y < alphaMinY) alphaMinY = y;
+          if (x > alphaMaxX) alphaMaxX = x;
+          if (y > alphaMaxY) alphaMaxY = y;
+          foundAlpha = true;
+
+          const isNearWhite = r > 246 && g > 246 && b > 246;
+          if (!isNearWhite) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+            foundNonWhite = true;
+          }
         }
       }
     }
 
-    if (!found || maxX <= minX || maxY <= minY) {
+    const useMinX = foundNonWhite ? minX : alphaMinX;
+    const useMinY = foundNonWhite ? minY : alphaMinY;
+    const useMaxX = foundNonWhite ? maxX : alphaMaxX;
+    const useMaxY = foundNonWhite ? maxY : alphaMaxY;
+    const found = foundNonWhite || foundAlpha;
+
+    if (!found || useMaxX <= useMinX || useMaxY <= useMinY) {
       return { sx: 0, sy: 0, sw: width, sh: height };
     }
 
-    const padX = Math.max(2, Math.round((maxX - minX) * 0.02));
-    const padY = Math.max(2, Math.round((maxY - minY) * 0.02));
-    const sx = Math.max(0, minX - padX);
-    const sy = Math.max(0, minY - padY);
-    const sw = Math.min(width - sx, maxX - minX + 1 + padX * 2);
-    const sh = Math.min(height - sy, maxY - minY + 1 + padY * 2);
+    const padX = Math.max(1, Math.round((useMaxX - useMinX) * 0.015));
+    const padY = Math.max(1, Math.round((useMaxY - useMinY) * 0.015));
+    const sx = Math.max(0, useMinX - padX);
+    const sy = Math.max(0, useMinY - padY);
+    const sw = Math.min(width - sx, useMaxX - useMinX + 1 + padX * 2);
+    const sh = Math.min(height - sy, useMaxY - useMinY + 1 + padY * 2);
     return { sx, sy, sw, sh };
   } catch {
     return { sx: 0, sy: 0, sw: width, sh: height };
   }
+}
+
+const croppedLogoCache = new Map<string, string>();
+
+/**
+ * Mevcut yüklenmiş logo görselinin (Data URL) etrafındaki boş beyaz/şeffaf alanları
+ * otomatik kırparak logonun beyaz alana tam oturmasını sağlar.
+ */
+export function autoCropLogoSource(src: string): Promise<string> {
+  if (!src || !src.startsWith("data:image/") || src.startsWith("data:image/svg")) {
+    return Promise.resolve(src);
+  }
+  const cached = croppedLogoCache.get(src);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = Math.max(1, img.naturalWidth || img.width);
+        const h = Math.max(1, img.naturalHeight || img.height);
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext("2d");
+        if (!tempCtx) {
+          resolve(src);
+          return;
+        }
+        tempCtx.drawImage(img, 0, 0, w, h);
+        const { sx, sy, sw, sh } = findContentBounds(tempCtx, w, h);
+
+        if (sx <= 2 && sy <= 2 && sw >= w - 4 && sh >= h - 4) {
+          croppedLogoCache.set(src, src);
+          resolve(src);
+          return;
+        }
+
+        const outCanvas = document.createElement("canvas");
+        outCanvas.width = sw;
+        outCanvas.height = sh;
+        const outCtx = outCanvas.getContext("2d");
+        if (!outCtx) {
+          resolve(src);
+          return;
+        }
+        outCtx.imageSmoothingEnabled = true;
+        outCtx.imageSmoothingQuality = "high";
+        outCtx.drawImage(tempCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+        const croppedUrl = outCanvas.toDataURL("image/png");
+        croppedLogoCache.set(src, croppedUrl);
+        resolve(croppedUrl);
+      } catch {
+        resolve(src);
+      }
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
 }
 
 /**

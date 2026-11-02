@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Invoice, InvoiceItem, CompanySettings, Contact, InvoiceDesignSettings } from "../types";
 import { getCurrencySymbol, formatDate, exportElementToPDF, exportToExcel } from "../utils/exportUtils";
-import { openInvoicePrintModal, setActiveInvoicePrintContext } from "../utils/printEngine";
+import {
+  openInvoicePrintModal,
+  printHtmlElement,
+  setActiveInvoicePrintContext,
+} from "../utils/printEngine";
 import { formatInvoiceWhatsAppMessage } from "../utils/whatsappTemplates";
 import { computeInvoiceTotals } from "../utils/taxCalculationService";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
@@ -26,6 +30,7 @@ import {
   saveIndependentInvoiceCssConfig,
   saveCompanyInvoiceCssToFirestore,
 } from "./OfficialGIBInvoicePaper";
+import { IncomingGIBInvoiceView } from "./IncomingGIBInvoiceView";
 import { EArsivSignatureStudioModal } from "./EArsivSignatureStudioModal";
 
 export interface InvoicePreviewModalProps {
@@ -129,6 +134,8 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const handlePrint = () => {
     if (onPrint) {
       onPrint();
+    } else if (invType === "purchase") {
+      void printHtmlElement("invoice-preview-paper", `${invNumber}_Gelen_Fatura`);
     } else {
       openInvoicePrintModal(
         {
@@ -210,7 +217,11 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   return (
     <DetailPageLayout
       title={title || `${invNumber} - ${contactName}`}
-      subtitle={`Resmi GİB ${docMeta.docTitle} A4 XSLT Önizleme & Tasarım • Düzenleme: ${formatDate(issueDate)}`}
+      subtitle={
+        invType === "purchase"
+          ? `Gelen Orijinal ${docMeta.docTitle} Belgesi • Düzenleme: ${formatDate(issueDate)}`
+          : `Resmi GİB ${docMeta.docTitle} A4 XSLT Önizleme & Tasarım • Düzenleme: ${formatDate(issueDate)}`
+      }
       breadcrumbs={[
         { label: "Faturalar", onClick: onClose },
         { label: invNumber, active: true },
@@ -258,15 +269,17 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => setIsSignatureStudioOpen(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-            title="e-Arşiv Faturaya Canlı Islak İmza Çiz, İmza/Kaşe Yükle veya Yetkili İmzası Ekle"
-          >
-            <PenTool className="w-4 h-4 text-blue-100" />
-            <span>e-Arşiv İmza / Kaşe Ekle</span>
-          </button>
+          {invType !== "purchase" && (
+            <button
+              type="button"
+              onClick={() => setIsSignatureStudioOpen(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+              title="e-Arşiv Faturaya Canlı Islak İmza Çiz, İmza/Kaşe Yükle veya Yetkili İmzası Ekle"
+            >
+              <PenTool className="w-4 h-4 text-blue-100" />
+              <span>e-Arşiv İmza / Kaşe Ekle</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -301,10 +314,14 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
             type="button"
             onClick={handlePrint}
             className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
-            title="Logolu ve QR Kodlu Kurumsal PDF Şablonunu Aç & Yazdır"
+            title={
+              invType === "purchase"
+                ? "Gelen Faturayı Yazdır"
+                : "Logolu ve QR Kodlu Kurumsal PDF Şablonunu Aç & Yazdır"
+            }
           >
             <Printer className="w-4 h-4 text-purple-300" />
-            <span>PDF Şablonu & Yazdır</span>
+            <span>{invType === "purchase" ? "Faturayı Yazdır" : "PDF Şablonu & Yazdır"}</span>
           </button>
 
           <button
@@ -393,15 +410,31 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
 
         {/* Official GİB e-Fatura / e-Arşiv Paper Container */}
         <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center print:bg-white print:p-0 print:border-none print:shadow-none">
-          <OfficialGIBInvoicePaper
-            invoice={invoice}
-            companySettings={companySettings}
-            contact={contact}
-            isDraft={isDraft}
-            designOverride={localDesign}
-            previewDocTypeOverride={previewDocType}
-            paperId="invoice-preview-paper"
-          />
+          {invType === "purchase" ? (
+            <IncomingGIBInvoiceView
+              invoice={invoice}
+              buyerCompanySettings={companySettings}
+              supplierContact={contact}
+              tenantIdentifierNumber={
+                companySettings?.tenantIdentifierNumber ||
+                companySettings?.vkn ||
+                companySettings?.tckn ||
+                companySettings?.taxNumber
+              }
+              companyId={companySettings?.id}
+              paperId="invoice-preview-paper"
+            />
+          ) : (
+            <OfficialGIBInvoicePaper
+              invoice={invoice}
+              companySettings={companySettings}
+              contact={contact}
+              isDraft={isDraft}
+              designOverride={localDesign}
+              previewDocTypeOverride={previewDocType}
+              paperId="invoice-preview-paper"
+            />
+          )}
         </div>
       </div>
 
