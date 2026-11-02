@@ -1594,13 +1594,33 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   if (selectedDocument) {
     const docData = asRecord(selectedDocument);
     const docNo = String(documentNumber(selectedDocument) || "TASLAK");
-    const cleanDocNo = docNo.replace(/\s*\(TASLAK\)\s*$/i, "").trim();
-    const matchedLocalInvoice = (invoices || []).find(
-      (inv) =>
-        inv.invoiceNumber === docNo ||
-        inv.invoiceNumber === cleanDocNo ||
-        (docData.ettn && inv.eDocumentEttn === docData.ettn)
-    );
+    const cleanDocNo = docNo.replace(/\s*\(TASLAK\)\s*$/i, "").trim().toUpperCase();
+    const isIncoming = documentDirection(selectedDocument) === "inbox";
+    const docEttn = String(docData.ettn || docData.uuid || "").trim().toUpperCase();
+    const hasValidDocNo =
+      cleanDocNo.length >= 4 &&
+      cleanDocNo !== "-" &&
+      cleanDocNo !== "TASLAK" &&
+      cleanDocNo !== "BELGE";
+    const hasValidEttn =
+      docEttn.length > 8 &&
+      docEttn !== "-" &&
+      docEttn !== "UNDEFINED" &&
+      docEttn !== "NULL";
+
+    const matchedLocalInvoice = (invoices || []).find((inv) => {
+      // Must match document direction: purchase for inbox, sales for outbox
+      if (isIncoming && inv.type !== "purchase") return false;
+      if (!isIncoming && inv.type !== "sales") return false;
+
+      const invEttn = String(inv.eDocumentEttn || "").trim().toUpperCase();
+      if (hasValidEttn && invEttn === docEttn) return true;
+
+      const invNo = String(inv.invoiceNumber || "").trim().toUpperCase();
+      if (hasValidDocNo && invNo === cleanDocNo) return true;
+
+      return false;
+    });
 
     const rawPayloadObj = asRecord(docData.raw);
     const rawLines = Array.isArray(docData.items) && docData.items.length > 0
@@ -1618,9 +1638,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       : [];
 
     const mappedItems: InvoiceItem[] =
-      matchedLocalInvoice && matchedLocalInvoice.items?.length > 0
-        ? matchedLocalInvoice.items
-        : rawLines.length > 0
+      rawLines.length > 0
         ? rawLines.map((ln: any, idx: number) => {
             const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
             const price = Number(ln.unitPrice ?? ln.unitPriceTra ?? ln.price ?? ln.amount ?? 0) || 0;
@@ -1640,6 +1658,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               totalWithVat: totalWithoutVat + vatAmount,
             };
           })
+        : matchedLocalInvoice && matchedLocalInvoice.items && matchedLocalInvoice.items.length > 0
+        ? matchedLocalInvoice.items
         : [
             {
               id: "line_1",
@@ -1655,31 +1675,61 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           ];
 
     const isArchive = isArchiveDocument(selectedDocument);
-    const previewInvoice: Partial<Invoice> = matchedLocalInvoice || {
-      id: documentIdentity(selectedDocument),
-      invoiceNumber: docNo,
-      type: documentDirection(selectedDocument) === "inbox" ? "purchase" : "sales",
+    const previewInvoice: Partial<Invoice> = {
+      ...(matchedLocalInvoice || {}),
+      id: documentIdentity(selectedDocument) || matchedLocalInvoice?.id,
+      invoiceNumber:
+        docNo !== "-" && docNo !== "TASLAK"
+          ? docNo
+          : (matchedLocalInvoice?.invoiceNumber || docNo),
+      type: isIncoming ? "purchase" : "sales",
       invoiceScenario: isArchive
         ? "EARSIVFATURA"
-        : (docData.profile as any) || "TICARIFATURA",
-      invoiceProfileType: "SATIS",
+        : (docData.profile as any) || matchedLocalInvoice?.invoiceScenario || "TICARIFATURA",
+      invoiceProfileType: matchedLocalInvoice?.invoiceProfileType || "SATIS",
       eDocumentType: isArchive ? "e_arsiv" : "e_fatura",
-      eDocumentEttn: String(docData.ettn || docData.uuid || ""),
-      contactId: "edoc_party",
-      contactName: String(documentParty(selectedDocument)),
-      taxNumber: String(documentTaxNumber(selectedDocument)),
-      taxOffice: String(docData.taxOffice || docData.receiverTaxOffice || docData.senderTaxOffice || "-"),
-      customerAddress: String(docData.address || docData.receiverAddress || docData.senderAddress || ""),
-      issueDate: String(documentDate(selectedDocument) || new Date().toISOString().slice(0, 10)).slice(0, 10),
-      dueDate: String(docData.dueDate || documentDate(selectedDocument) || new Date().toISOString().slice(0, 10)).slice(0, 10),
+      eDocumentEttn: String(docData.ettn || docData.uuid || matchedLocalInvoice?.eDocumentEttn || ""),
+      contactId: matchedLocalInvoice?.contactId || "edoc_party",
+      contactName: String(documentParty(selectedDocument) || matchedLocalInvoice?.contactName || ""),
+      taxNumber: String(documentTaxNumber(selectedDocument) || matchedLocalInvoice?.taxNumber || ""),
+      taxOffice: String(
+        docData.taxOffice ||
+        docData.receiverTaxOffice ||
+        docData.senderTaxOffice ||
+        matchedLocalInvoice?.taxOffice ||
+        "-"
+      ),
+      customerAddress: String(
+        docData.address ||
+        docData.receiverAddress ||
+        docData.senderAddress ||
+        matchedLocalInvoice?.customerAddress ||
+        ""
+      ),
+      issueDate: String(
+        documentDate(selectedDocument) ||
+        matchedLocalInvoice?.issueDate ||
+        new Date().toISOString().slice(0, 10)
+      ).slice(0, 10),
+      dueDate: String(
+        docData.dueDate ||
+        matchedLocalInvoice?.dueDate ||
+        documentDate(selectedDocument) ||
+        new Date().toISOString().slice(0, 10)
+      ).slice(0, 10),
       items: mappedItems,
-      subtotal: Number(docData.subtotal ?? documentAmount(selectedDocument) ?? 0),
-      totalVat: Number(docData.vatTotal ?? 0),
-      grandTotal: Number(documentAmount(selectedDocument) ?? 0),
-      payableAmount: Number(documentAmount(selectedDocument) ?? 0),
-      paidAmount: 0,
-      remainingAmount: Number(documentAmount(selectedDocument) ?? 0),
-      currency: documentCurrency(selectedDocument),
+      subtotal: Number(
+        docData.subtotal ??
+        (documentAmount(selectedDocument) !== undefined && documentAmount(selectedDocument) !== null
+          ? documentAmount(selectedDocument)
+          : matchedLocalInvoice?.subtotal ?? 0)
+      ),
+      totalVat: Number(docData.vatTotal ?? matchedLocalInvoice?.totalVat ?? 0),
+      grandTotal: Number(documentAmount(selectedDocument) || matchedLocalInvoice?.grandTotal || 0),
+      payableAmount: Number(documentAmount(selectedDocument) || matchedLocalInvoice?.payableAmount || 0),
+      paidAmount: matchedLocalInvoice?.paidAmount || 0,
+      remainingAmount: Number(documentAmount(selectedDocument) || matchedLocalInvoice?.remainingAmount || 0),
+      currency: documentCurrency(selectedDocument) || matchedLocalInvoice?.currency || "TRY",
       status: "sent",
     };
 

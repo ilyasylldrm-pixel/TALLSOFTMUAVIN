@@ -514,6 +514,29 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     }),
   );
   router.get(
+    "/e-documents/:invoiceETTN/model",
+    run(async (req) => {
+      const invoiceETTN = ettnOrThrow(req);
+      const direction = (queryText(req, "direction") || "incoming").toLowerCase();
+      const tenantIdentifierNumber = tenantFrom(req);
+      if (familyFrom(req) === "despatch") {
+        return direction === "outgoing" || direction === "outbox"
+          ? client.getDespatchOutgoingStatus(invoiceETTN, tenantIdentifierNumber)
+          : client.getDespatchIncomingModel(invoiceETTN, tenantIdentifierNumber);
+      }
+      if (direction === "outgoing" || direction === "outbox") {
+        return client.getOutgoingModel(invoiceETTN, tenantIdentifierNumber);
+      }
+      try {
+        return await client.getIncomingModel(invoiceETTN, tenantIdentifierNumber);
+      } catch (error) {
+        if (!(error instanceof MysoftApiError) || error.status < 400 || error.status >= 500) throw error;
+        return client.getOutgoingModel(invoiceETTN, tenantIdentifierNumber);
+      }
+    }),
+  );
+
+  router.get(
     "/e-documents/:invoiceETTN",
     run(async (req) => {
       const invoiceETTN = ettnOrThrow(req);

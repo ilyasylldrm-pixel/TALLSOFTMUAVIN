@@ -544,6 +544,13 @@ export const UniversalPrintModal: React.FC = () => {
                 buyerCompanySettings={modalData.invoiceData.companySettings}
                 buyerCompany={modalData.invoiceData.companySettings}
                 supplierContact={modalData.invoiceData.contact}
+                tenantIdentifierNumber={
+                  modalData.invoiceData.companySettings?.tenantIdentifierNumber ||
+                  modalData.invoiceData.companySettings?.vkn ||
+                  modalData.invoiceData.companySettings?.tckn ||
+                  modalData.invoiceData.companySettings?.taxNumber
+                }
+                companyId={modalData.invoiceData.companySettings?.id}
                 paperId="universal-print-preview-paper"
               />
             ) : (

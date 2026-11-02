@@ -148,6 +148,7 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
     setOriginalHtml(null);
     setOriginalPdfUrl(null);
     setParsedUbl(null);
+    setViewMode("original");
 
     if (!ettn || ettn.startsWith("inv_") || ettn.startsWith("local_")) {
       return;
@@ -259,7 +260,7 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
         URL.revokeObjectURL(createdPdfBlobUrl);
       }
     };
-  }, [ettn, tenantIdentifierNumber, companyId, family]);
+  }, [ettn, invoice.id, invoice.invoiceNumber, tenantIdentifierNumber, companyId, family]);
 
   // Supplier (Issuer / Satıcı) Fields — strictly from the incoming invoice / supplier, NEVER from our companySettings
   const supplierName = useMemo(() => {
@@ -434,8 +435,45 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
         totalWithVat: ln.totalWithVat,
       }));
     }
-    return invoice.items || [];
-  }, [parsedUbl, invoice.items]);
+    if (Array.isArray(invoice.items) && invoice.items.length > 0) {
+      return invoice.items;
+    }
+    const rawLines = Array.isArray(rawDoc.items) && rawDoc.items.length > 0
+      ? rawDoc.items
+      : Array.isArray(rawDoc.lines) && rawDoc.lines.length > 0
+      ? rawDoc.lines
+      : Array.isArray(rawDoc.invoiceDetail) && rawDoc.invoiceDetail.length > 0
+      ? rawDoc.invoiceDetail
+      : Array.isArray(rawInner.invoiceDetail) && rawInner.invoiceDetail.length > 0
+      ? rawInner.invoiceDetail
+      : Array.isArray(rawInner.items) && rawInner.items.length > 0
+      ? rawInner.items
+      : Array.isArray(rawDoc.invoiceLine)
+      ? rawDoc.invoiceLine
+      : [];
+    if (rawLines.length > 0) {
+      return rawLines.map((ln: any, idx: number) => {
+        const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
+        const price = Number(ln.unitPrice ?? ln.unitPriceTra ?? ln.price ?? ln.amount ?? 0) || 0;
+        const vatRate = Number(ln.vatRate ?? ln.taxRate ?? ln.taxPercent ?? ln.kdvPercent ?? 20);
+        const totalWithoutVat = Number(ln.totalWithoutVat ?? ln.amtTra ?? ln.lineExtensionAmount ?? qty * price);
+        const vatAmount = Number(ln.vatAmount ?? ln.amtVatTra ?? ln.taxAmount ?? (totalWithoutVat * vatRate) / 100);
+        return {
+          id: String(ln.id || `line_${idx}`),
+          productCode: ln.productCode || ln.itemCode || undefined,
+          description: String(ln.description || ln.productName || ln.itemName || ln.note || "Mal / Hizmet Kalemi"),
+          quantity: qty,
+          unit: String(ln.unit || ln.unitName || ln.unitCode || "Adet"),
+          unitPrice: price,
+          vatRate,
+          totalWithoutVat,
+          vatAmount,
+          totalWithVat: totalWithoutVat + vatAmount,
+        };
+      });
+    }
+    return [];
+  }, [parsedUbl, invoice.items, rawDoc, rawInner]);
   const currency = invoice.currency || parsedUbl?.currency || String(rawDoc.currency || rawInner.currencyCode || "TRY");
   const currSymbol = getCurrencySymbol(currency);
 
@@ -766,7 +804,7 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {computedItems.map((item, idx) => {
+                {(computedItems.length > 0 ? computedItems : (payableAmount > 0 || docNo !== "BELGE" ? [{ id: "line_fallback", description: `${docTitle} - ${supplierName}`, quantity: 1, unit: "Adet", unitPrice: subtotal || grandTotal || payableAmount, vatRate: subtotal > 0 && totalVat > 0 ? Math.round((totalVat / subtotal) * 100) : 20, totalWithoutVat: subtotal || grandTotal || payableAmount, vatAmount: totalVat, totalWithVat: grandTotal || payableAmount }] : [])).map((item: any, idx) => {
                   const qty = Number(item.quantity ?? 1);
                   const unitPrice = Number(item.unitPrice ?? 0);
                   const discRate = Number(item.discountRate ?? 0);
