@@ -698,15 +698,27 @@ export class GitHubSyncService {
             await execPromise(`git branch --set-upstream-to=origin/${branch} ${branch}`, { cwd }).catch(() => {});
           }
 
-          await execPromise(
-            `git merge origin/${branch} --allow-unrelated-histories -X ours --no-edit`,
-            { cwd }
-          ).catch(async () => {
-            await execPromise("git merge --abort", { cwd }).catch(() => {});
+          let workingTreeDiffCount = 0;
+          try {
+            const { stdout: diffFiles } = await execPromise(
+              `git diff --name-only origin/${branch} -- src scripts public server.ts index.html package.json tsconfig.json vite.config.ts firestore.rules`,
+              { cwd }
+            );
+            workingTreeDiffCount = diffFiles.split("\n").filter((l) => l.trim().length > 0).length;
+          } catch {}
+
+          this.clearGitIndexLock(cwd);
+          await execPromise(`git reset --hard origin/${branch}`, { cwd }).catch(async () => {
+            await execPromise(
+              `git checkout origin/${branch} -- src scripts public server.ts index.html package.json tsconfig.json vite.config.ts firestore.rules`,
+              { cwd }
+            ).catch(() => {});
           });
 
-          const hadNewRemoteChanges = Boolean(remoteSha && beforeSha !== remoteSha);
-          if (params?.publishAfterPull === true || (params?.publishAfterPull !== false && hadNewRemoteChanges)) {
+          const hadNewRemoteChanges = Boolean(
+            (remoteSha && beforeSha !== remoteSha) || workingTreeDiffCount > 0
+          );
+          if (params?.publishAfterPull === true) {
             await this.rebuildProductionBundles(cwd);
             await this.safeGitAddAll(cwd);
             try {
