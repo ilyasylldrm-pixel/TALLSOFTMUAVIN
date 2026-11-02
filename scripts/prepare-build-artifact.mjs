@@ -6,7 +6,7 @@ import path from "node:path";
  * (< 32 MB Cloud Run HTTP/1.1 limit) build artifact without node_modules or .git bloat.
  */
 function cleanBloatDirs() {
-  for (const dir of ["build", ".git"]) {
+  for (const dir of ["build"]) {
     const full = path.resolve(process.cwd(), dir);
     if (fs.existsSync(full)) {
       try {

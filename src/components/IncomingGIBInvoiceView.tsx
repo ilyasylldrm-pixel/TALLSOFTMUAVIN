@@ -18,6 +18,7 @@ export interface IncomingGIBInvoiceViewProps {
   invoice: Partial<Invoice>;
   /** Buyer (our own company receiving the incoming invoice) */
   buyerCompanySettings?: CompanySettings;
+  buyerCompany?: CompanySettings;
   /** Supplier / Sender contact if available */
   supplierContact?: Contact;
   /** Raw Mysoft incoming e-document if opened from EDocuments */
@@ -104,6 +105,7 @@ function tryTransformUblXmlWithEmbeddedXslt(xmlText: string): string | null {
 export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
   invoice,
   buyerCompanySettings,
+  buyerCompany,
   supplierContact,
   rawEDocument,
   tenantIdentifierNumber,
@@ -111,6 +113,7 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
   family = "invoice",
   paperId = "invoice-preview-paper",
 }) => {
+  const effectiveBuyerCompanySettings = buyerCompanySettings || buyerCompany;
   const [originalHtml, setOriginalHtml] = useState<string | null>(null);
   const [originalPdfUrl, setOriginalPdfUrl] = useState<string | null>(null);
   const [parsedUbl, setParsedUbl] = useState<ParsedUblInvoiceDetails | null>(null);
@@ -344,22 +347,22 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
 
   // Buyer (Alıcı / SAYIN) Fields — our own company receiving the invoice
   const buyerTitle =
-    buyerCompanySettings?.companyTitle ||
-    buyerCompanySettings?.companyName ||
+    effectiveBuyerCompanySettings?.companyTitle ||
+    effectiveBuyerCompanySettings?.companyName ||
     parsedUbl?.receiverName ||
     String(rawDoc.receiverName || rawInner.receiverName || "Alıcı Firma");
   const buyerTaxNumber =
-    buyerCompanySettings?.vkn ||
-    buyerCompanySettings?.tckn ||
-    buyerCompanySettings?.taxNumber ||
-    buyerCompanySettings?.tenantIdentifierNumber ||
+    effectiveBuyerCompanySettings?.vkn ||
+    effectiveBuyerCompanySettings?.tckn ||
+    effectiveBuyerCompanySettings?.taxNumber ||
+    effectiveBuyerCompanySettings?.tenantIdentifierNumber ||
     parsedUbl?.receiverTaxNumber ||
     String(rawDoc.receiverTaxNumber || "-");
-  const buyerTaxOffice = buyerCompanySettings?.taxOffice || parsedUbl?.receiverTaxOffice || "-";
+  const buyerTaxOffice = effectiveBuyerCompanySettings?.taxOffice || parsedUbl?.receiverTaxOffice || "-";
   const buyerAddress =
     [
-      buyerCompanySettings?.address || parsedUbl?.receiverAddress,
-      [buyerCompanySettings?.district, buyerCompanySettings?.city].filter(Boolean).join(" / "),
+      effectiveBuyerCompanySettings?.address || parsedUbl?.receiverAddress,
+      [effectiveBuyerCompanySettings?.district, effectiveBuyerCompanySettings?.city].filter(Boolean).join(" / "),
     ]
       .filter(Boolean)
       .join(" ") || "Merkez";
@@ -447,13 +450,13 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
     computedItems,
   } = useMemo(() => computeInvoiceTotals(items), [items]);
 
-  const grossTotal = parsedUbl?.subtotal ?? invoice.grossTotal ?? computedGrossTotal;
-  const totalDiscount = parsedUbl?.discountTotal ?? invoice.totalDiscount ?? computedTotalDiscount;
-  const subtotal = parsedUbl?.subtotal ?? invoice.subtotal ?? computedSubtotal;
-  const totalVat = parsedUbl?.vatTotal ?? invoice.totalVat ?? computedVat;
-  const totalWithholding = invoice.totalWithholding ?? computedWithholding;
-  const grandTotal = parsedUbl?.grandTotal ?? invoice.grandTotal ?? computedGrandTotal;
-  const payableAmount = parsedUbl?.grandTotal ?? invoice.payableAmount ?? computedPayableAmount;
+  const grossTotal = Number(parsedUbl?.subtotal ?? invoice.grossTotal ?? computedGrossTotal) || 0;
+  const totalDiscount = Number(parsedUbl?.discountTotal ?? invoice.totalDiscount ?? computedTotalDiscount) || 0;
+  const subtotal = Number(parsedUbl?.subtotal ?? invoice.subtotal ?? computedSubtotal) || 0;
+  const totalVat = Number(parsedUbl?.vatTotal ?? invoice.totalVat ?? computedVat) || 0;
+  const totalWithholding = Number(invoice.totalWithholding ?? computedWithholding) || 0;
+  const grandTotal = Number(parsedUbl?.grandTotal ?? invoice.grandTotal ?? computedGrandTotal) || 0;
+  const payableAmount = Number(parsedUbl?.grandTotal ?? invoice.payableAmount ?? computedPayableAmount) || 0;
 
   const vatBreakdown = useMemo(() => {
     const groups = new Map<number, { rate: number; matrah: number; vat: number }>();
@@ -608,7 +611,7 @@ export const IncomingGIBInvoiceView: React.FC<IncomingGIBInvoiceViewProps> = ({
                 </p>
                 <p className="text-neutral-900">
                   <strong>
-                    {supplierTaxNumber.replace(/\D/g, "").length === 11 ? "TCKN:" : "VKN:"}
+                    {String(supplierTaxNumber || "").replace(/\D/g, "").length === 11 ? "TCKN:" : "VKN:"}
                   </strong>{" "}
                   <span className="font-mono font-bold">{supplierTaxNumber}</span>
                 </p>

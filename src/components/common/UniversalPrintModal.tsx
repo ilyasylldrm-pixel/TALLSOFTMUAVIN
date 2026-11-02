@@ -541,6 +541,7 @@ export const UniversalPrintModal: React.FC = () => {
             {isIncomingInvoice ? (
               <IncomingGIBInvoiceView
                 invoice={modalData.invoiceData.invoice}
+                buyerCompanySettings={modalData.invoiceData.companySettings}
                 buyerCompany={modalData.invoiceData.companySettings}
                 supplierContact={modalData.invoiceData.contact}
                 paperId="universal-print-preview-paper"

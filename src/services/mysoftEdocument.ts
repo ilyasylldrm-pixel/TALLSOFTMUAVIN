@@ -1816,10 +1816,7 @@ ${linesXml}
         tenantIdentifierNumber: this.effectiveTenant(tenantIdentifierNumber),
       },
     }).catch((error: unknown) => {
-      if (
-        error instanceof MysoftApiError &&
-        (error.status === 404 || error.status === 405 || error.status === 400)
-      ) {
+      if (error instanceof MysoftApiError) {
         return this.listIncoming(request);
       }
       throw error;
@@ -3356,6 +3353,11 @@ ${linesXml}
         pageNumber: pageNumber ?? 1,
       },
       tenantIdentifierNumber,
+    }).catch((error: unknown) => {
+      if (error instanceof MysoftApiError) {
+        return this.listDespatchIncoming(request);
+      }
+      throw error;
     });
   }
 
@@ -3736,7 +3738,7 @@ ${linesXml}
         error instanceof MysoftApiError &&
         (error.status === 404 || error.status === 405 || error.status === 400)
       ) {
-        return this.requestDocumentOperation("invoice.incoming.reject.model", {
+        return this.requestDocumentOperation("invoice.incoming.deny.model", {
           body: {
             invoiceETTN,
             rejectReason,
@@ -3756,10 +3758,9 @@ ${linesXml}
   ): Promise<unknown> {
     const effectiveTenant = this.effectiveTenant(tenantIdentifierNumber);
     return this.requestDocumentOperation("invoice.incoming.archive", {
-      body: {
+      query: {
         invoiceETTN,
-        archiveStatus,
-        tenantIdentifierNumber: effectiveTenant,
+        archiveStatus: String(archiveStatus),
       },
       tenantIdentifierNumber: effectiveTenant,
     });

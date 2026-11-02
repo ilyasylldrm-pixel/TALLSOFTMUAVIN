@@ -150,15 +150,28 @@ const parseDocYearMonth = (rawDate: unknown): { year: number | null; month: numb
   return { year: null, month: null };
 };
 
+const sanitizeCurrency = (curr?: unknown): string => {
+  const raw = String(curr || "").trim().toUpperCase();
+  if (!raw || raw === "TL" || raw === "₺" || raw === "?" || raw === "NULL" || raw.length !== 3) {
+    return "TRY";
+  }
+  return raw;
+};
+
 const formatMoney = (value: unknown, currency = "TRY") => {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "-";
-  return new Intl.NumberFormat("tr-TR", {
-    style: "currency",
-    currency: currency === "₺" ? "TRY" : currency || "TRY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  const validCurr = sanitizeCurrency(currency);
+  try {
+    return new Intl.NumberFormat("tr-TR", {
+      style: "currency",
+      currency: validCurr,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${validCurr}`;
+  }
 };
 
 const formatDate = (value: unknown) => {
@@ -281,7 +294,7 @@ const documentAmount = (document: MysoftEDocument) => {
 const documentCurrency = (document: MysoftEDocument) => {
   const value =
     asRecord(document).currency || asRecord(document).currencyCode || "TRY";
-  return value === "₺" ? "TRY" : String(value);
+  return sanitizeCurrency(value);
 };
 
 const statusTone = (status: string) => {
@@ -343,6 +356,14 @@ const getSyncRange = (period: SyncPeriod, selectedYear: string = "all") => {
       endDate: formatLocalIsoDate(mTo),
     };
   } else if (period === "three_months") {
+    if (selectedYear !== "all" && /^\d{4}$/.test(selectedYear) && targetYear !== now.getFullYear()) {
+      const yFrom = new Date(targetYear, 9, 1);
+      const yTo = new Date(targetYear, 12, 0);
+      return {
+        startDate: formatLocalIsoDate(yFrom),
+        endDate: formatLocalIsoDate(yTo),
+      };
+    }
     from.setMonth(from.getMonth() - 2, 1);
   } else {
     if (selectedYear !== "all" && /^\d{4}$/.test(selectedYear)) {
@@ -1155,13 +1176,26 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   const allDocuments = useMemo(() => {
     const mergedMap = new Map<string, MysoftEDocument>();
     const makeDedupeKey = (doc: MysoftEDocument): string => {
+      const rec = asRecord(doc);
+      const ettn = String(rec.ettn || "").trim().toUpperCase();
+      if (activeDirection === "inbox" && ettn && ettn !== "-" && ettn !== "UNDEFINED") {
+        return `ETTN:${ettn}`;
+      }
       const cleanNo = String(documentNumber(doc) || "")
         .replace(/\s*\(TASLAK\)\s*$/i, "")
         .trim()
         .toUpperCase();
-      if (cleanNo && cleanNo !== "-") return `NO:${cleanNo}`;
-      const idOrEttn = String(asRecord(doc).ettn || doc.id || "").trim().toUpperCase();
-      return `ID:${idOrEttn}`;
+      if (cleanNo && cleanNo !== "-" && cleanNo !== "TASLAK" && cleanNo !== "BELGE") {
+        return `NO:${cleanNo}`;
+      }
+      if (ettn && ettn !== "-" && ettn !== "UNDEFINED") {
+        return `ETTN:${ettn}`;
+      }
+      const id = String(doc.id || rec.id || "").trim().toUpperCase();
+      if (id && id !== "-" && id !== "UNDEFINED") {
+        return `ID:${id}`;
+      }
+      return `KEY:${Math.random()}`;
     };
 
     // 1. Add persisted e-documents matching direction & family
