@@ -326,6 +326,11 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "finance_virman", name: "↳ Hesaplar Arası Virman", description: "Kasa ve banka hesapları arası para transferi", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
   { id: "transactions", name: "↳ Gelir & Gider Fişleri", description: "Hızlı gelir/gider fişleri ve masraf hareketleri", category: "financial", parentId: "accounts", isSubModule: true, badge: "Alt Modül" },
 
+  // Ana Modül: Fiş Girişi & Alt Modülleri
+  { id: "fis_module", name: "Fiş Girişi & Muhasebe Fişleri", description: "Tahsilat, tediye, gider/masraf ve mahsup fiş işlemleri ana modülü", category: "financial" },
+  { id: "fis_girisi", name: "↳ Fiş Girişi", description: "Çoklu ve tekli yeni fiş girişi oluşturma ekranı", category: "financial", parentId: "fis_module", isSubModule: true, badge: "Alt Modül" },
+  { id: "fis_listesi", name: "↳ Fiş Listesi", description: "Kayıtlı fişler ve muhasebe fiş hareketleri listesi", category: "financial", parentId: "fis_module", isSubModule: true, badge: "Alt Modül" },
+
   // Ana Modül: Stoklar & Alt Modülleri
   { id: "products", name: "Stoklar & Envanter", description: "Ürün/hizmet kartları, stok seviyeleri ve hareketleri", category: "operations" },
   { id: "products_list", name: "↳ Ürün & Stok Kartları", description: "Stok ekleme, barkod, alış/satış fiyatı ve KDV tanımlama", category: "operations", parentId: "products", isSubModule: true, badge: "Alt Modül" },
@@ -608,6 +613,17 @@ export interface Transaction {
   items?: InvoiceItem[];
   subtotal?: number;
   totalVat?: number;
+  vatRate?: number;
+  vatIncluded?: boolean;
+  fisType?: "tahsilat" | "tediye" | "gider_fisi" | "mahsup";
+  paymentMethod?: string;
+  taxNumber?: string;
+  documentType?: string;
+  bta?: string;
+  dueDate?: string;
+  debit?: number;
+  credit?: number;
+  accountCode?: string;
   notes?: string;
 }
 

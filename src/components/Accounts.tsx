@@ -17,6 +17,7 @@ import {
   PromissoryNote,
   PromissoryNoteStatus,
   CompanySettings,
+  EXPENSE_CATEGORIES,
 } from "../types";
 import {
   fetchWhatsAppStatus,
@@ -64,6 +65,9 @@ import {
   Upload,
   Zap,
   MessageCircle,
+  Receipt,
+  Calculator,
+  Tag,
 } from "lucide-react";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
@@ -117,7 +121,7 @@ const NOTE_TABLE_COLUMNS: ColumnDef[] = [
   { id: "actions", label: "İşlemler", defaultVisible: true, lockVisible: true },
 ];
 
-export type FinanceSubModule = "kasa" | "banka" | "cek" | "senet" | "virman";
+export type FinanceSubModule = "kasa" | "banka" | "cek" | "senet" | "virman" | "fis";
 
 export const generateAccountShareText = (acc: Account): string => {
   let text = `🏦 *${acc.name.toUpperCase()}*\n`;
@@ -178,7 +182,7 @@ export interface ReceiptData {
   documentNo: string;
   date: string;
   time?: string;
-  moduleType: "kasa" | "banka" | "cek" | "senet" | "virman" | "account";
+  moduleType: "kasa" | "banka" | "cek" | "senet" | "virman" | "fis" | "account";
   accountName?: string;
   bankName?: string;
   iban?: string;
@@ -312,6 +316,8 @@ interface AccountsProps {
     targetContactName: string,
     endorseDate: string
   ) => void;
+  standaloneFisSubTab?: "fis_girisi" | "fis_listesi";
+  onSelectStandaloneFisSubTab?: (subTab: "fis_girisi" | "fis_listesi") => void;
 }
 
 export const Accounts: React.FC<AccountsProps> = ({
@@ -344,10 +350,21 @@ export const Accounts: React.FC<AccountsProps> = ({
   onDeletePromissoryNote,
   onBulkDeletePromissoryNotes,
   onEndorsePromissoryNote,
+  standaloneFisSubTab,
+  onSelectStandaloneFisSubTab,
 }) => {
   const { theme } = useTheme();
   const [internalSubModule, setInternalSubModule] = useState<FinanceSubModule>("kasa");
-  const activeSubModule = activeFinanceSubTab || internalSubModule;
+  const [internalFisViewMode, setInternalFisViewMode] = useState<"fis_girisi" | "fis_listesi">("fis_girisi");
+  const isStandaloneFis = Boolean(standaloneFisSubTab);
+  const activeFisViewMode = standaloneFisSubTab || internalFisViewMode;
+  const handleSelectFisViewMode = (mode: "fis_girisi" | "fis_listesi") => {
+    setInternalFisViewMode(mode);
+    if (onSelectStandaloneFisSubTab) {
+      onSelectStandaloneFisSubTab(mode);
+    }
+  };
+  const activeSubModule: FinanceSubModule = isStandaloneFis ? "fis" : (activeFinanceSubTab || internalSubModule);
 
   // Tablo Satır / İşlem Seçme (Multi-Select) Hook'ları
   const kasaSelection = useTableSelection();
@@ -355,6 +372,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   const chequeSelection = useTableSelection();
   const noteSelection = useTableSelection();
   const virmanSelection = useTableSelection();
+  const fisSelection = useTableSelection();
 
   // Hızlı İşlem Seçme Menüsü (Dropdown)
   const [isQuickActionMenuOpen, setIsQuickActionMenuOpen] = useState(false);
@@ -365,6 +383,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [chequeDisplayLimit, setChequeDisplayLimit] = useState<number>(100);
   const [noteDisplayLimit, setNoteDisplayLimit] = useState<number>(100);
   const [virmanDisplayLimit, setVirmanDisplayLimit] = useState<number>(100);
+  const [fisDisplayLimit, setFisDisplayLimit] = useState<number>(100);
 
   // Kolon Yönetimi (Show/Hide) - Kasa
   const {
@@ -705,6 +724,74 @@ export const Accounts: React.FC<AccountsProps> = ({
         { label: "Açıklama / Not", value: tx.description || "-" },
         { label: "Dekont / Referans No", value: tx.documentNo || tx.id.slice(0, 8) },
       ]
+    });
+  };
+
+  const handleShowFisReceipt = (tx: Transaction) => {
+    const matchedContact = findContactInfo(tx.contactId, tx.contactName);
+    const isIncome = tx.type === "income" || tx.type === "collection";
+    const resolvedFisType =
+      tx.fisType ||
+      ((tx.documentNo || "").startsWith("FIS-GDR") || (tx.totalVat && tx.totalVat > 0)
+        ? "gider_fisi"
+        : (tx.documentNo || "").startsWith("FIS-MHS") || (tx.category || "").toLowerCase().includes("mahsup")
+        ? "mahsup"
+        : isIncome
+        ? "tahsilat"
+        : "tediye");
+
+    const titleMap: Record<string, string> = {
+      tahsilat: "TAHSİLAT FİŞİ MAKBUZU / DEKONTU",
+      tediye: "TEDİYE (ÖDEME) FİŞİ MAKBUZU / DEKONTU",
+      gider_fisi: "PERAKENDE GİDER / MASRAF FİŞİ BELGESİ",
+      mahsup: "MUHASEBE MAHSUP FİŞİ BELGESİ",
+    };
+
+    const typeLabelMap: Record<string, string> = {
+      tahsilat: "Tahsilat Fişi (Giriş +)",
+      tediye: "Tediye / Ödeme Fişi (Çıkış -)",
+      gider_fisi: "Perakende Harcama / Masraf Fişi (Çıkış -)",
+      mahsup: `Mahsup Fişi (${isIncome ? "Alacak +" : "Borç -"})`,
+    };
+
+    setReceiptData({
+      documentTitle: titleMap[resolvedFisType] || "FİNANS FİŞİ BELGESİ",
+      subTitle: "Finans & Ön Muhasebe Fiş Kayıt Belgesi",
+      documentNo: tx.documentNo || `FIS-${tx.id.slice(0, 8).toUpperCase()}`,
+      date: formatDate(tx.date),
+      time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+      moduleType: "fis",
+      accountName: tx.accountName,
+      contactName: tx.contactName || (matchedContact ? matchedContact.companyTitle || matchedContact.name : undefined),
+      contactTaxNumber: tx.taxNumber || matchedContact?.taxNumber,
+      contactTaxOffice: matchedContact?.taxOffice,
+      contactPhone: matchedContact?.phone,
+      contactAddress: matchedContact?.address,
+      contactCity: matchedContact?.city,
+      amount: tx.amount,
+      currency: tx.currency || "TRY",
+      type: tx.type,
+      category: tx.category || "Fiş İşlemi",
+      description: tx.description,
+      details: [
+        { label: "Fiş Türü", value: typeLabelMap[resolvedFisType] || "Finans Fişi" },
+        { label: "Fiş / Belge No", value: tx.documentNo || tx.id.slice(0, 8) },
+        { label: "İşlem Tarihi", value: formatDate(tx.date) },
+        { label: "Kasa / Banka Hesabı", value: tx.accountName || "-" },
+        { label: "İlgili Cari / Firma Unvanı", value: tx.contactName || "-" },
+        ...(tx.taxNumber || matchedContact?.taxNumber
+          ? [{ label: "VKN / TCKN", value: String(tx.taxNumber || matchedContact?.taxNumber) }]
+          : []),
+        { label: "Kategori / Masraf Kalemi", value: tx.category || "-" },
+        ...(tx.paymentMethod ? [{ label: "Ödeme Yöntemi", value: tx.paymentMethod }] : []),
+        ...(typeof tx.subtotal === "number" && typeof tx.totalVat === "number" && tx.totalVat > 0
+          ? [
+              { label: "KDV Hariç Matrah", value: formatCurrency(tx.subtotal, tx.currency || "TRY") },
+              { label: `KDV Tutarı (%${tx.vatRate ?? 20})`, value: formatCurrency(tx.totalVat, tx.currency || "TRY") },
+            ]
+          : []),
+        { label: "Açıklama / Notlar", value: tx.description || "-" },
+      ],
     });
   };
 
@@ -1762,6 +1849,700 @@ export const Accounts: React.FC<AccountsProps> = ({
     return matchesType && matchesQuery && matchesDate;
   });
 
+  // =========================================================================
+  // FİŞ GİRİŞİ (SUB-MODULE 6) STATE & HANDLERS
+  // =========================================================================
+  const generateFisNumber = (type: "tahsilat" | "tediye" | "gider_fisi" | "mahsup") => {
+    const prefixMap = {
+      tahsilat: "FIS-THS",
+      tediye: "FIS-TDY",
+      gider_fisi: "FIS-GDR",
+      mahsup: "FIS-MHS",
+    };
+    return `${prefixMap[type]}-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+  };
+
+  const [fisEntryMode, setFisEntryMode] = useState<"multi" | "single">("multi");
+  const [isMultiFisFullPage, setIsMultiFisFullPage] = useState<boolean>(true);
+
+  React.useEffect(() => {
+    if (standaloneFisSubTab === "fis_girisi" && fisEntryMode === "multi") {
+      setIsMultiFisFullPage(true);
+    } else if (standaloneFisSubTab === "fis_listesi") {
+      setIsMultiFisFullPage(false);
+    }
+  }, [standaloneFisSubTab, fisEntryMode]);
+  const [fisType, setFisType] = useState<"tahsilat" | "tediye" | "gider_fisi" | "mahsup">("mahsup");
+  const [fisDirection, setFisDirection] = useState<"income" | "expense">("expense"); // Mahsup fişi yönü için
+  const [fisNo, setFisNo] = useState<string>(() => generateFisNumber("mahsup"));
+  const [fisDate, setFisDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [fisAccountId, setFisAccountId] = useState<string>(accounts[0]?.id || "");
+  const [fisContactId, setFisContactId] = useState<string>("");
+  const [fisCustomTitle, setFisCustomTitle] = useState<string>("");
+  const [fisTaxNumber, setFisTaxNumber] = useState<string>("");
+  const [fisCategory, setFisCategory] = useState<string>("Mahsup Fişi");
+  const [fisPaymentMethod, setFisPaymentMethod] = useState<string>("Cari Mahsup");
+  const [fisAmount, setFisAmount] = useState<number | "">("");
+  const [fisVatRate, setFisVatRate] = useState<number>(0);
+  const [fisVatIncluded, setFisVatIncluded] = useState<boolean>(true);
+  const [fisDescription, setFisDescription] = useState<string>("");
+  const [fisFilterType, setFisFilterType] = useState<"all" | "tahsilat" | "tediye" | "gider_fisi" | "mahsup">("all");
+  const [showFisColFilters, setShowFisColFilters] = useState<boolean>(false);
+  const [fisColFilters, setFisColFilters] = useState<{
+    date: string;
+    documentNo: string;
+    fisType: string;
+    accountName: string;
+    contact: string;
+    description: string;
+    amount: string;
+  }>({
+    date: "",
+    documentNo: "",
+    fisType: "",
+    accountName: "",
+    contact: "",
+    description: "",
+    amount: "",
+  });
+
+  // =========================================================================
+  // ÇOKLU FİŞ GİRİŞİ (TABLO / SPREADSHEET) STATE & HANDLERS
+  // =========================================================================
+  interface MultiFisRow {
+    id: string;
+    hesapKey: string; // "acc:<id>" | "cnt:<id>" | "exp:<name>" | "tdhp:<code>" | ""
+    hesapLabel: string;
+    belgeTarihi: string;
+    belgeNo: string;
+    belgeTuru: string;
+    bta: string;
+    vadeTarihi: string;
+    vknTckn: string;
+    aciklama: string;
+    borc: number | "";
+    alacak: number | "";
+    odemeTuru: string;
+  }
+
+  const createEmptyMultiFisRow = (index = 1, defaultDate?: string, defaultDocNo?: string): MultiFisRow => ({
+    id: `mf_row_${Date.now()}_${ index }_${Math.random().toString(36).slice(2, 7)}`,
+    hesapKey: "",
+    hesapLabel: "",
+    belgeTarihi: defaultDate || new Date().toISOString().split("T")[0],
+    belgeNo: defaultDocNo || "",
+    belgeTuru: "Fatura",
+    bta: "",
+    vadeTarihi: defaultDate || new Date().toISOString().split("T")[0],
+    vknTckn: "",
+    aciklama: "",
+    borc: "",
+    alacak: "",
+    odemeTuru: "Nakit",
+  });
+
+  const [multiFisRows, setMultiFisRows] = useState<MultiFisRow[]>(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return Array.from({ length: 12 }, (_, idx) =>
+      createEmptyMultiFisRow(idx + 1, today, "")
+    );
+  });
+  const [activeMultiFisRowId, setActiveMultiFisRowId] = useState<string>("");
+  const [openHesapDropdownRowId, setOpenHesapDropdownRowId] = useState<string | null>(null);
+  const [showMultiFisGridFilters, setShowMultiFisGridFilters] = useState<boolean>(false);
+  const [multiFisGridFilters, setMultiFisGridFilters] = useState<{
+    hesap: string;
+    belgeTarihi: string;
+    belgeNo: string;
+    belgeTuru: string;
+    bta: string;
+    vadeTarihi: string;
+    vknTckn: string;
+    aciklama: string;
+    borc: string;
+    alacak: string;
+    odemeTuru: string;
+  }>({
+    hesap: "",
+    belgeTarihi: "",
+    belgeNo: "",
+    belgeTuru: "",
+    bta: "",
+    vadeTarihi: "",
+    vknTckn: "",
+    aciklama: "",
+    borc: "",
+    alacak: "",
+    odemeTuru: "",
+  });
+
+  React.useEffect(() => {
+    if (!activeMultiFisRowId && multiFisRows.length > 0) {
+      setActiveMultiFisRowId(multiFisRows[0].id);
+    }
+  }, [multiFisRows, activeMultiFisRowId]);
+
+  // Çoklu Fiş Girişi Hesap Seçenekleri (Kasa, Banka, Cari, Gider & Tek Düzen Hesap Planı)
+  const multiFisAccountOptions = React.useMemo(() => {
+    const cashOpts = accounts
+      .filter((a) => a.type === "cash")
+      .map((a, idx) => ({
+        key: `acc:${a.id}`,
+        code: `100.0${idx + 1}`,
+        label: `100.0${idx + 1} - ${a.name}`,
+        group: "100 - Nakit Kasalar",
+        taxNumber: "",
+        accountId: a.id,
+      }));
+    const bankOpts = accounts
+      .filter((a) => a.type !== "cash")
+      .map((a, idx) => ({
+        key: `acc:${a.id}`,
+        code: a.type === "pos" || a.type === "credit_card" ? `108.0${idx + 1}` : `102.0${idx + 1}`,
+        label: `${a.type === "pos" || a.type === "credit_card" ? `108.0${idx + 1}` : `102.0${idx + 1}`} - ${a.name}`,
+        group: "102 / 108 - Banka & POS Hesapları",
+        taxNumber: "",
+        accountId: a.id,
+      }));
+    const contactOpts = contacts.map((c, idx) => {
+      const code = c.accountCode || (c.contactType === "vendor" || c.contactType === "supplier" ? `320.01.${String(idx + 1).padStart(3, "0")}` : `120.01.${String(idx + 1).padStart(3, "0")}`);
+      return {
+        key: `cnt:${c.id}`,
+        code,
+        label: `${code} - ${c.name}`,
+        group: "120 / 320 - Cari Hesaplar (Müşteri & Tedarikçi)",
+        taxNumber: c.taxNumber || "",
+        contactId: c.id,
+      };
+    });
+    const expenseAndTdhpOpts = [
+      { key: "tdhp:191.01", code: "191.01", label: "191.01 - İndirilecek KDV (%1)", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:191.10", code: "191.10", label: "191.10 - İndirilecek KDV (%10)", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:191.20", code: "191.20", label: "191.20 - İndirilecek KDV (%20)", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:391.20", code: "391.20", label: "391.20 - Hesaplanan KDV (%20)", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:600.01", code: "600.01", label: "600.01 - Yurtiçi Satışlar", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:335.01", code: "335.01", label: "335.01 - Personele Borçlar / Maaş & Avans", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:360.01", code: "360.01", label: "360.01 - Ödenecek Vergi ve Fonlar", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      { key: "tdhp:361.01", code: "361.01", label: "361.01 - Ödenecek Sosyal Güvenlik Kesintileri", group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları", taxNumber: "" },
+      ...EXPENSE_CATEGORIES.map((cat, idx) => ({
+        key: `exp:${cat}`,
+        code: `770.${String(idx + 1).padStart(2, "0")}`,
+        label: `770.${String(idx + 1).padStart(2, "0")} - ${cat}`,
+        group: "191 / 391 / 600 / 770 - Muhasebe & Gider Hesapları",
+        taxNumber: "",
+      })),
+    ];
+
+    let customTdhpOpts: { key: string; code: string; label: string; group: string; taxNumber: string }[] = [];
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("muavin_hesap_plani_custom_v1");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            customTdhpOpts = parsed.map((item: any) => ({
+              key: `tdhp:${item.code}`,
+              code: String(item.code || ""),
+              label: `${item.code} - ${item.name}`,
+              group: "Özel Tanımlı Hesap Planı (TDHP)",
+              taxNumber: String(item.taxNumber || ""),
+            }));
+          }
+        }
+      } catch {
+        // ignore storage parse error
+      }
+    }
+
+    return [...cashOpts, ...bankOpts, ...contactOpts, ...expenseAndTdhpOpts, ...customTdhpOpts];
+  }, [accounts, contacts]);
+
+  const updateMultiFisRow = (rowId: string, patch: Partial<MultiFisRow>) => {
+    setMultiFisRows((prev) =>
+      prev.map((r) => (r.id === rowId ? { ...r, ...patch } : r))
+    );
+  };
+
+  const handleSelectMultiFisHesap = (rowId: string, optionKey: string) => {
+    const found = multiFisAccountOptions.find((o) => o.key === optionKey);
+    if (!found) return;
+    setMultiFisRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          hesapKey: found.key,
+          hesapLabel: found.label,
+          vknTckn: found.taxNumber ? found.taxNumber : r.vknTckn,
+        };
+      })
+    );
+    setOpenHesapDropdownRowId(null);
+  };
+
+  const handleAddMultiFisRow = (afterRowId?: string) => {
+    setMultiFisRows((prev) => {
+      const refRow = afterRowId
+        ? prev.find((r) => r.id === afterRowId)
+        : prev[prev.length - 1];
+      const newRow: MultiFisRow = {
+        ...createEmptyMultiFisRow(prev.length + 1, refRow?.belgeTarihi || fisDate, refRow?.belgeNo || ""),
+        belgeTuru: refRow?.belgeTuru || "Fatura",
+        vadeTarihi: refRow?.vadeTarihi || refRow?.belgeTarihi || fisDate,
+        odemeTuru: refRow?.odemeTuru || "Nakit",
+      };
+      if (!afterRowId) {
+        setActiveMultiFisRowId(newRow.id);
+        return [...prev, newRow];
+      }
+      const idx = prev.findIndex((r) => r.id === afterRowId);
+      if (idx === -1) {
+        setActiveMultiFisRowId(newRow.id);
+        return [...prev, newRow];
+      }
+      const next = [...prev];
+      next.splice(idx + 1, 0, newRow);
+      setActiveMultiFisRowId(newRow.id);
+      return next;
+    });
+  };
+
+  const handleDuplicateMultiFisRow = (rowId: string) => {
+    setMultiFisRows((prev) => {
+      const idx = prev.findIndex((r) => r.id === rowId);
+      if (idx === -1) return prev;
+      const source = prev[idx];
+      const copy: MultiFisRow = {
+        ...source,
+        id: `mf_row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      setActiveMultiFisRowId(copy.id);
+      return next;
+    });
+  };
+
+  const handleRemoveMultiFisRow = (rowId: string) => {
+    setMultiFisRows((prev) => {
+      if (prev.length <= 1) {
+        const fresh = createEmptyMultiFisRow(1, fisDate, "");
+        setActiveMultiFisRowId(fresh.id);
+        return [fresh];
+      }
+      const filtered = prev.filter((r) => r.id !== rowId);
+      if (activeMultiFisRowId === rowId && filtered.length > 0) {
+        setActiveMultiFisRowId(filtered[filtered.length - 1].id);
+      }
+      return filtered;
+    });
+  };
+
+  const multiFisTotals = React.useMemo(() => {
+    let totalBorc = 0;
+    let totalAlacak = 0;
+    let filledRowCount = 0;
+    for (const r of multiFisRows) {
+      const b = Number(r.borc) || 0;
+      const a = Number(r.alacak) || 0;
+      totalBorc += b;
+      totalAlacak += a;
+      if (b > 0 || a > 0 || r.hesapLabel.trim() || r.aciklama.trim() || r.belgeNo.trim()) {
+        filledRowCount++;
+      }
+    }
+    const diff = Number((totalBorc - totalAlacak).toFixed(2));
+    return {
+      totalBorc: Number(totalBorc.toFixed(2)),
+      totalAlacak: Number(totalAlacak.toFixed(2)),
+      diff,
+      isBalanced: Math.abs(diff) < 0.01 && (totalBorc > 0 || totalAlacak > 0),
+      filledRowCount,
+    };
+  }, [multiFisRows]);
+
+  // Bakiye Eşitle / Karşı Hesap Satırı Oluştur
+  const handleBalanceMultiFisRows = () => {
+    const { diff } = multiFisTotals;
+    if (Math.abs(diff) < 0.01) return;
+
+    const defaultAcc = accounts.find((a) => a.id === fisAccountId) || accounts[0];
+    const defaultOpt = defaultAcc
+      ? multiFisAccountOptions.find((o) => o.key === `acc:${defaultAcc.id}`)
+      : undefined;
+
+    const lastFilled = [...multiFisRows].reverse().find((r) => Number(r.borc) > 0 || Number(r.alacak) > 0);
+
+    setMultiFisRows((prev) => {
+      // Boş bir satır varsa onu doldur, yoksa yeni satır ekle
+      const emptyIdx = prev.findIndex(
+        (r) => !r.hesapLabel.trim() && (Number(r.borc) || 0) === 0 && (Number(r.alacak) || 0) === 0
+      );
+      const balanceRowPatch: Partial<MultiFisRow> = {
+        hesapKey: defaultOpt?.key || (defaultAcc ? `acc:${defaultAcc.id}` : ""),
+        hesapLabel: defaultOpt?.label || (defaultAcc ? `100.01 - ${defaultAcc.name}` : "100.01 - Merkez Kasa"),
+        belgeTarihi: lastFilled?.belgeTarihi || fisDate,
+        belgeNo: lastFilled?.belgeNo || fisNo,
+        belgeTuru: lastFilled?.belgeTuru || "Makbuz",
+        bta: lastFilled?.bta || "Karşı Hesap Kapama",
+        vadeTarihi: lastFilled?.vadeTarihi || fisDate,
+        aciklama: lastFilled?.aciklama ? `${lastFilled.aciklama} (Karşı Hesap)` : "Fiş Bakiye Kapama Satırı",
+        borc: diff < 0 ? Number(Math.abs(diff).toFixed(2)) : "",
+        alacak: diff > 0 ? Number(Math.abs(diff).toFixed(2)) : "",
+        odemeTuru: lastFilled?.odemeTuru || "Nakit",
+      };
+
+      if (emptyIdx !== -1) {
+        const next = [...prev];
+        next[emptyIdx] = { ...next[emptyIdx], ...balanceRowPatch };
+        setActiveMultiFisRowId(next[emptyIdx].id);
+        return next;
+      } else {
+        const newRow: MultiFisRow = {
+          ...createEmptyMultiFisRow(prev.length + 1, fisDate, fisNo),
+          ...balanceRowPatch,
+        };
+        setActiveMultiFisRowId(newRow.id);
+        return [...prev, newRow];
+      }
+    });
+  };
+
+  const handleSaveMultiFis = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    const validRows = multiFisRows.filter(
+      (r) => (Number(r.borc) || 0) > 0 || (Number(r.alacak) || 0) > 0
+    );
+
+    if (validRows.length === 0) {
+      triggerFormErrorNotification(
+        "Kaydedilecek en az bir fiş satırında Borç veya Alacak tutarı girilmelidir.",
+        "Çoklu Fiş Girişi Uyarısı",
+        "Borç / Alacak"
+      );
+      return;
+    }
+
+    const fallbackAcc = accounts.find((a) => a.id === fisAccountId) || accounts[0];
+    if (!fallbackAcc) {
+      triggerFormErrorNotification(
+        "Fiş satırlarının işleneceği Kasa veya Banka hesabı bulunamadı.",
+        "Çoklu Fiş Girişi Uyarısı",
+        "Hesap"
+      );
+      return;
+    }
+
+    const effectiveFisType: "mahsup" = "mahsup";
+    const batchFisNo =
+      fisNo.trim() && fisNo.trim().startsWith("FIS-MHS")
+        ? fisNo.trim()
+        : generateFisNumber(effectiveFisType);
+
+    validRows.forEach((row, idx) => {
+      const borcVal = Number(row.borc) || 0;
+      const alacakVal = Number(row.alacak) || 0;
+      const amount = borcVal > 0 ? borcVal : alacakVal;
+
+      // Seçilen Hesap Kasa/Banka mı, Cari mi, Gider mi çöz
+      let resolvedAccount = fallbackAcc;
+      let resolvedContact: Contact | undefined;
+      let resolvedCategory = "Mahsup Fişi";
+
+      if (row.hesapKey.startsWith("acc:")) {
+        const accId = row.hesapKey.replace("acc:", "");
+        const foundAcc = accounts.find((a) => a.id === accId);
+        if (foundAcc) resolvedAccount = foundAcc;
+      } else if (row.hesapKey.startsWith("cnt:")) {
+        const cntId = row.hesapKey.replace("cnt:", "");
+        resolvedContact = contacts.find((c) => c.id === cntId);
+      } else if (row.hesapKey.startsWith("exp:")) {
+        resolvedCategory = row.hesapKey.replace("exp:", "");
+      } else if (row.hesapLabel.trim()) {
+        // Kullanıcının yazdığı metinden Cari veya Kasa/Banka eşleştirmeyi dene
+        const q = row.hesapLabel.toLowerCase().trim();
+        const matchedAcc = accounts.find((a) => q.includes(a.name.toLowerCase()));
+        if (matchedAcc) resolvedAccount = matchedAcc;
+        const matchedCnt = contacts.find(
+          (c) => q.includes(c.name.toLowerCase()) || (row.vknTckn && c.taxNumber === row.vknTckn.trim())
+        );
+        if (matchedCnt) resolvedContact = matchedCnt;
+      }
+
+      // Mahsup fişi satır yönü: Kasa/Banka satırı ise Borç = Giriş (income), Alacak = Çıkış (expense).
+      // Diğer hesaplarda Alacak > 0 ise income, Borç > 0 ise expense.
+      let txDirection: "income" | "expense" = "expense";
+      if (row.hesapKey.startsWith("acc:")) {
+        txDirection = borcVal > 0 ? "income" : "expense";
+      } else {
+        txDirection = alacakVal > 0 ? "income" : "expense";
+      }
+
+      const detailParts = [
+        row.aciklama.trim() || `${row.belgeTuru || "Mahsup Fişi"} Kaydı`,
+        row.hesapLabel.trim() ? `Hesap: ${row.hesapLabel.trim()}` : null,
+        row.belgeTuru ? `Belge Türü: ${row.belgeTuru}${row.bta ? ` (${row.bta})` : ""}` : null,
+        row.vadeTarihi && row.vadeTarihi !== row.belgeTarihi ? `Vade: ${formatDate(row.vadeTarihi)}` : null,
+        row.vknTckn ? `VKN/TCKN: ${row.vknTckn}` : null,
+        row.odemeTuru ? `Ödeme: ${row.odemeTuru}` : null,
+        borcVal > 0 ? `Borç: ₺${borcVal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : null,
+        alacakVal > 0 ? `Alacak: ₺${alacakVal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : null,
+      ].filter(Boolean);
+
+      const newTx: Transaction = {
+        id: `tx_mfis_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        date: row.belgeTarihi || fisDate || new Date().toISOString().split("T")[0],
+        type: txDirection,
+        amount: Number(amount.toFixed(2)),
+        currency: resolvedAccount.currency || "TRY",
+        accountId: resolvedAccount.id,
+        accountName: resolvedAccount.name,
+        contactId: resolvedContact?.id,
+        contactName: resolvedContact?.name || (row.hesapLabel.trim() ? row.hesapLabel.trim() : undefined),
+        category: resolvedCategory,
+        description: detailParts.join(" • "),
+        documentNo: row.belgeNo.trim() || `${batchFisNo}-${idx + 1}`,
+        fisType: effectiveFisType,
+        paymentMethod: row.odemeTuru || "Nakit",
+        taxNumber: row.vknTckn.trim() || resolvedContact?.taxNumber || undefined,
+        documentType: row.belgeTuru || "Fatura",
+        bta: row.bta.trim() || undefined,
+        dueDate: row.vadeTarihi || undefined,
+        debit: borcVal,
+        credit: alacakVal,
+        accountCode: row.hesapLabel.trim() || undefined,
+      };
+
+      if (onAddTransaction) {
+        onAddTransaction(newTx);
+      }
+    });
+
+    // Kayıt sonrası tabloyu yeni mahsup fişi için sıfırla
+    setFisType("mahsup");
+    const nextFisNo = generateFisNumber("mahsup");
+    setFisNo(nextFisNo);
+    const today = fisDate || new Date().toISOString().split("T")[0];
+    const freshRows = Array.from({ length: 12 }, (_, idx) =>
+      createEmptyMultiFisRow(idx + 1, today, "")
+    );
+    setMultiFisRows(freshRows);
+    setActiveMultiFisRowId(freshRows[0].id);
+  };
+
+  React.useEffect(() => {
+    if (!fisAccountId && accounts.length > 0) {
+      setFisAccountId(accounts[0].id);
+    }
+  }, [accounts, fisAccountId]);
+
+  const handleSelectFisType = (newType: "tahsilat" | "tediye" | "gider_fisi" | "mahsup") => {
+    setFisType(newType);
+    setFisNo(generateFisNumber(newType));
+    if (newType === "tahsilat") {
+      setFisDirection("income");
+      setFisVatRate(0);
+      setFisCategory("Tahsilat Fişi (Cari / Müşteri Tahsilatı)");
+      setFisPaymentMethod("Nakit");
+    } else if (newType === "tediye") {
+      setFisDirection("expense");
+      setFisVatRate(0);
+      setFisCategory("Tediye Fişi (Tedarikçi / Cari Ödemesi)");
+      setFisPaymentMethod("Nakit");
+    } else if (newType === "gider_fisi") {
+      setFisDirection("expense");
+      setFisVatRate(20);
+      setFisCategory(EXPENSE_CATEGORIES[1] || "Yemek ve ulaşım");
+      setFisPaymentMethod("Nakit");
+    } else if (newType === "mahsup") {
+      setFisDirection("expense");
+      setFisVatRate(0);
+      setFisCategory("Muhasebe Mahsup Fişi");
+      setFisPaymentMethod("Cari Mahsup");
+    }
+  };
+
+  // Fiş KDV & Matrah Hesaplaması
+  const parsedFisAmount = Number(fisAmount) || 0;
+  const fisCalculated = React.useMemo(() => {
+    if (parsedFisAmount <= 0) {
+      return { subtotal: 0, vatAmount: 0, grandTotal: 0 };
+    }
+    if (!fisVatRate || fisVatRate <= 0) {
+      return { subtotal: parsedFisAmount, vatAmount: 0, grandTotal: parsedFisAmount };
+    }
+    if (fisVatIncluded) {
+      const subtotal = parsedFisAmount / (1 + fisVatRate / 100);
+      const vatAmount = parsedFisAmount - subtotal;
+      return {
+        subtotal: Number(subtotal.toFixed(2)),
+        vatAmount: Number(vatAmount.toFixed(2)),
+        grandTotal: Number(parsedFisAmount.toFixed(2)),
+      };
+    } else {
+      const subtotal = parsedFisAmount;
+      const vatAmount = (parsedFisAmount * fisVatRate) / 100;
+      const grandTotal = subtotal + vatAmount;
+      return {
+        subtotal: Number(subtotal.toFixed(2)),
+        vatAmount: Number(vatAmount.toFixed(2)),
+        grandTotal: Number(grandTotal.toFixed(2)),
+      };
+    }
+  }, [parsedFisAmount, fisVatRate, fisVatIncluded]);
+
+  const handleSaveFis = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fisAccountId) {
+      triggerFormErrorNotification("Lütfen fişin işleneceği Kasa veya Banka hesabını seçin.", "Fiş Girişi Uyarısı", "Hesap");
+      return;
+    }
+    if (!fisAmount || Number(fisAmount) <= 0) {
+      triggerFormErrorNotification("Lütfen geçerli bir fiş tutarı girin.", "Fiş Girişi Uyarısı", "Tutar");
+      return;
+    }
+
+    const targetAcc = accounts.find((a) => a.id === fisAccountId);
+    if (!targetAcc) {
+      triggerFormErrorNotification("Seçilen hesap bulunamadı.", "Fiş Girişi Uyarısı", "Hesap");
+      return;
+    }
+
+    const selectedContact = contacts.find((c) => c.id === fisContactId);
+    const resolvedContactName =
+      selectedContact?.name ||
+      String(fisCustomTitle || "").trim() ||
+      undefined;
+    const resolvedTaxNo =
+      String(fisTaxNumber || "").trim() ||
+      selectedContact?.taxNumber ||
+      undefined;
+
+    const effectiveSingleFisType: "mahsup" = "mahsup";
+    const txDirection: "income" | "expense" = fisDirection;
+
+    const vatSummaryText =
+      fisVatRate > 0
+        ? ` • Matrah: ₺${fisCalculated.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} + KDV (%${fisVatRate}): ₺${fisCalculated.vatAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
+        : "";
+
+    const finalDescription = [
+      fisDescription.trim() || "Mahsup Fişi Kaydı",
+      resolvedTaxNo ? `VKN/TCKN: ${resolvedTaxNo}` : null,
+      fisPaymentMethod ? `Ödeme: ${fisPaymentMethod}` : null,
+    ]
+      .filter(Boolean)
+      .join(" • ") + vatSummaryText;
+
+    const newFisTx: Transaction = {
+      id: "tx_fis_" + Date.now(),
+      date: fisDate || new Date().toISOString().split("T")[0],
+      type: txDirection,
+      amount: fisCalculated.grandTotal,
+      currency: targetAcc.currency || "TRY",
+      accountId: targetAcc.id,
+      accountName: targetAcc.name,
+      contactId: selectedContact?.id,
+      contactName: resolvedContactName,
+      category: fisCategory.trim() || "Mahsup Fişi",
+      description: finalDescription,
+      documentNo: fisNo.trim() || generateFisNumber(effectiveSingleFisType),
+      fisType: effectiveSingleFisType,
+      vatRate: fisVatRate,
+      vatIncluded: fisVatIncluded,
+      subtotal: fisCalculated.subtotal,
+      totalVat: fisCalculated.vatAmount,
+      paymentMethod: fisPaymentMethod,
+      taxNumber: resolvedTaxNo,
+    };
+
+    if (onAddTransaction) {
+      onAddTransaction(newFisTx);
+    }
+
+    // Formu yeni fiş için sıfırla
+    setFisType("mahsup");
+    setFisAmount("");
+    setFisDescription("");
+    setFisCustomTitle("");
+    setFisTaxNumber("");
+    setFisNo(generateFisNumber("mahsup"));
+  };
+
+  const resolveTransactionFisType = (t: Transaction): "tahsilat" | "tediye" | "gider_fisi" | "mahsup" => {
+    if (t.fisType) return t.fisType;
+    const doc = (t.documentNo || "").toUpperCase();
+    const cat = (t.category || "").toLowerCase();
+    const desc = (t.description || "").toLowerCase();
+    if (doc.startsWith("FIS-GDR") || doc.startsWith("GDR-") || (t.totalVat && t.totalVat > 0) || cat.includes("masraf") || cat.includes("perakende") || desc.includes("kdv")) {
+      return "gider_fisi";
+    }
+    if (doc.startsWith("FIS-MHS") || doc.startsWith("MHS-") || cat.includes("mahsup") || desc.includes("mahsup")) {
+      return "mahsup";
+    }
+    if (t.type === "income" || t.type === "collection") {
+      return "tahsilat";
+    }
+    return "tediye";
+  };
+
+  const fisTransactions = transactions
+    .filter((t) => {
+      // Virman satırlarını hariç tut, diğer tüm fiş/makbuz ve kasa-banka fiş kayıtlarını göster
+      const isVirman =
+        t.category === "Virman / Transfer" ||
+        t.category === "Virman" ||
+        t.category === "Transfer" ||
+        (t.description || "").toLowerCase().includes("virman");
+      if (isVirman) return false;
+
+      const resolvedType = resolveTransactionFisType(t);
+      if (fisFilterType !== "all" && resolvedType !== fisFilterType) return false;
+      if (startDate && t.date < startDate) return false;
+      if (endDate && t.date > endDate) return false;
+
+      if (activeSearchQuery) {
+        const match =
+          (t.description || "").toLowerCase().includes(activeSearchQuery) ||
+          (t.contactName || "").toLowerCase().includes(activeSearchQuery) ||
+          (t.documentNo || "").toLowerCase().includes(activeSearchQuery) ||
+          (t.category || "").toLowerCase().includes(activeSearchQuery) ||
+          (t.accountName || "").toLowerCase().includes(activeSearchQuery);
+        if (!match) return false;
+      }
+
+      if (fisColFilters.date && !(t.date || "").toLowerCase().includes(fisColFilters.date.toLowerCase().trim())) return false;
+      if (fisColFilters.documentNo && !(t.documentNo || "").toLowerCase().includes(fisColFilters.documentNo.toLowerCase().trim())) return false;
+      if (fisColFilters.accountName && !(t.accountName || "").toLowerCase().includes(fisColFilters.accountName.toLowerCase().trim())) return false;
+      if (fisColFilters.contact) {
+        const q = fisColFilters.contact.toLowerCase().trim();
+        const match = (t.contactName || "").toLowerCase().includes(q) || (t.category || "").toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      if (fisColFilters.description && !(t.description || "").toLowerCase().includes(fisColFilters.description.toLowerCase().trim())) return false;
+      if (fisColFilters.amount) {
+        const q = fisColFilters.amount.toLowerCase().trim();
+        const amtStr = (t.amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+        if (!amtStr.includes(q) && !String(t.amount).includes(q)) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const activeFisColFilterCount = (Object.values(fisColFilters) as string[]).filter((v) => Boolean(v && v.trim() !== "")).length;
+  const clearAllFisColFilters = () =>
+    setFisColFilters({
+      date: "",
+      documentNo: "",
+      fisType: "",
+      accountName: "",
+      contact: "",
+      description: "",
+      amount: "",
+    });
+
   const virmanTransactions = transactions
     .filter((t) => {
       const isVirman =
@@ -1782,12 +2563,14 @@ export const Accounts: React.FC<AccountsProps> = ({
   const displayedCheques = filteredCheques.slice(0, chequeDisplayLimit);
   const displayedNotes = filteredNotes.slice(0, noteDisplayLimit);
   const displayedVirmanTransactions = virmanTransactions.slice(0, virmanDisplayLimit);
+  const displayedFisTransactions = fisTransactions.slice(0, fisDisplayLimit);
 
   const displayedKasaIds = displayedKasaTransactions.map((t) => t.id);
   const displayedBankIds = displayedBankTransactions.map((t) => t.id);
   const displayedChequeIds = displayedCheques.map((c) => c.id);
   const displayedNoteIds = displayedNotes.map((n) => n.id);
   const displayedVirmanIds = displayedVirmanTransactions.map((t) => t.id);
+  const displayedFisIds = displayedFisTransactions.map((t) => t.id);
 
   // Direct Excel (.xlsx) & PDF (.pdf) Export Data Getters and Handlers
   const getKasaExportData = (list: Transaction[] = kasaTransactions): ExportData => {
@@ -2141,6 +2924,81 @@ export const Accounts: React.FC<AccountsProps> = ({
   const handleBulkExportVirmanPDF = () => {
     const selectedList = virmanTransactions.filter((t) => virmanSelection.isSelected(t.id));
     if (selectedList.length > 0) exportToPDF(getVirmanExportData(selectedList));
+  };
+
+  const getFisExportData = (list: Transaction[] = fisTransactions): ExportData => {
+    const headers = [
+      "Sıra",
+      "Tarih",
+      "Fiş / Belge No",
+      "Fiş Türü",
+      "Kasa / Banka Hesabı",
+      "Cari / Ünvan",
+      "Kategori",
+      "Açıklama",
+      "KDV Hariç",
+      "KDV Tutarı",
+      "Genel Toplam",
+      "Para Birimi",
+    ];
+
+    const typeLabelMap: Record<string, string> = {
+      tahsilat: "Tahsilat Fişi (+)",
+      tediye: "Tediye Fişi (-)",
+      gider_fisi: "Gider / Masraf Fişi (-)",
+      mahsup: "Mahsup Fişi",
+    };
+
+    const rows = list.map((tx, idx) => {
+      const fType = resolveTransactionFisType(tx);
+      return [
+        idx + 1,
+        tx.date || "-",
+        tx.documentNo || "-",
+        typeLabelMap[fType] || "Fiş",
+        tx.accountName || "-",
+        tx.contactName || "-",
+        tx.category || "-",
+        tx.description || "-",
+        tx.subtotal ?? tx.amount ?? 0,
+        tx.totalVat ?? 0,
+        tx.amount || 0,
+        tx.currency || "TRY",
+      ];
+    });
+
+    return {
+      filename: `Finans_Fis_Listesi_${new Date().toISOString().split("T")[0]}`,
+      sheetName: "Fiş Listesi",
+      title: "FİNANS & MUHASEBE FİŞ HAREKETLERİ LİSTESİ",
+      subtitle: `Toplam ${list.length} Adet Fiş Kaydı`,
+      headers,
+      rows,
+    };
+  };
+
+  const handleExportFisExcel = () => exportToExcel(getFisExportData());
+  const handleExportFisPDF = () => exportToPDF(getFisExportData());
+
+  const handleBulkDeleteFis = () => {
+    const ids = Array.from(fisSelection.selectedIds);
+    if (ids.length === 0) return;
+    if (onBulkDeleteTransactions) {
+      onBulkDeleteTransactions(ids);
+    } else if (onDeleteTransaction) {
+      ids.forEach((id) => onDeleteTransaction(id));
+    }
+    fisSelection.clearSelection();
+  };
+
+  const handleBulkExportFisExcel = () => {
+    const selectedList = fisTransactions.filter((t) => fisSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToExcel(getFisExportData(selectedList));
+  };
+
+  const handleBulkExportFisPDF = () => {
+    const selectedList = fisTransactions.filter((t) => fisSelection.isSelected(t.id));
+    if (selectedList.length > 0) exportToPDF(getFisExportData(selectedList));
   };
 
   const renderDateFilterBar = (subModuleName: string) => {
@@ -5295,232 +6153,256 @@ export const Accounts: React.FC<AccountsProps> = ({
 
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 sm:space-y-7 max-w-7xl mx-auto">
+    <div
+      className={`p-4 sm:p-6 space-y-6 sm:space-y-7 mx-auto ${
+        activeSubModule === "fis" ? "w-full max-w-none" : "max-w-7xl"
+      }`}
+    >
       {/* 1. Modern Clean Header With Editorial Background */}
       <ModuleEntranceHeader
-        badge="Finans & Nakit Akışı"
-        badgeIcon={<Wallet className="w-2.5 h-2.5 text-[#0f6bae]" />}
-        title="Finans & Nakit Yönetimi"
-        description="Nakit Kasa, Banka Hesapları, Çek, Senet ve Hesaplar Arası Virman Yönetimi."
+        badge={isStandaloneFis ? "Muhasebe & Fiş Yönetimi" : "Finans & Nakit Akışı"}
+        badgeIcon={
+          isStandaloneFis ? (
+            <Receipt className="w-2.5 h-2.5 text-[#0f6bae]" />
+          ) : (
+            <Wallet className="w-2.5 h-2.5 text-[#0f6bae]" />
+          )
+        }
+        title={
+          isStandaloneFis
+            ? activeFisViewMode === "fis_listesi"
+              ? "Fiş Listesi"
+              : "Fiş Girişi"
+            : "Finans & Nakit Yönetimi"
+        }
+        description={
+          isStandaloneFis
+            ? activeFisViewMode === "fis_listesi"
+              ? "Kayıtlı Tahsilat, Tediye, Perakende Gider/Masraf ve Mahsup Fişleri Listesi ve Raporlama."
+              : "Tahsilat Fişi, Tediye Fişi, Perakende Harcama/Masraf Fişi ve Muhasebe Mahsup Fişi Girişi (Çoklu & Tekli)."
+            : "Nakit Kasa, Banka Hesapları, Çek, Senet ve Hesaplar Arası Virman Yönetimi."
+        }
         actions={
           <>
-            {/* Hızlı İşlem Seçme Menüsü (Dropdown) */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsQuickActionMenuOpen((prev) => !prev)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs shrink-0"
-                title="Finansal işlem türü seçerek hızlı kayıt oluşturun"
-              >
-                <CheckCircle2 className="w-4 h-4 text-indigo-100" />
-                <span>İşlem Seç</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isQuickActionMenuOpen ? "rotate-180" : ""}`} />
-              </button>
+            {!isStandaloneFis && (
+              /* Hızlı İşlem Seçme Menüsü (Dropdown) */
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickActionMenuOpen((prev) => !prev)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-xs shrink-0"
+                  title="Finansal işlem türü seçerek hızlı kayıt oluşturun"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-indigo-100" />
+                  <span>İşlem Seç</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isQuickActionMenuOpen ? "rotate-180" : ""}`} />
+                </button>
 
-              {isQuickActionMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setIsQuickActionMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 text-xs max-h-[80vh] overflow-y-auto">
-                    <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-50/70">
-                      💵 Nakit Kasa İşlemleri
+                {isQuickActionMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsQuickActionMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 text-xs max-h-[80vh] overflow-y-auto">
+                      <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-50/70">
+                        💵 Nakit Kasa İşlemleri
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("kasa");
+                          handleOpenAddTxModal("kasa");
+                          setTxType("income");
+                          setTxCategory("Kasa Tahsilat / Nakit Gelir");
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Nakit Kasa Tahsilatı (Giriş +)</span>
+                        <span className="text-[10px] font-bold text-emerald-600">+ Tahsilat</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("kasa");
+                          handleOpenAddTxModal("kasa");
+                          setTxType("expense");
+                          setTxCategory("Kasa Tediye / Nakit Ödeme");
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Nakit Kasa Tediyesi (Çıkış -)</span>
+                        <span className="text-[10px] font-bold text-rose-600">- Ödeme</span>
+                      </button>
+
+                      <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50/70">
+                        🏦 Banka & POS İşlemleri
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("banka");
+                          handleOpenAddTxModal("banka");
+                          setTxType("income");
+                          setTxCategory("Banka Gelen Havale / EFT");
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Gelen Havale / EFT Tahsilatı (+)</span>
+                        <span className="text-[10px] font-bold text-emerald-600">+ Gelen</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("banka");
+                          handleOpenAddTxModal("banka");
+                          setTxType("expense");
+                          setTxCategory("Banka Giden Havale / EFT");
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Giden Havale / EFT Ödemesi (-)</span>
+                        <span className="text-[10px] font-bold text-rose-600">- Giden</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("banka");
+                          handleOpenAddTxModal("pos");
+                          setTxType("income");
+                          setTxCategory("POS Tahsilatı (Kredi Kartı)");
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Kredi Kartı POS Slip Tahsilatı</span>
+                        <span className="text-[10px] font-bold text-emerald-600">POS</span>
+                      </button>
+
+                      <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50/70">
+                        📑 Çek & Senet İşlemleri
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("cek");
+                          setChqType("received");
+                          setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                          setIsChequeModalOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Müşteri Çeki Girişi (Alınan Çek)</span>
+                        <span className="text-[10px] font-bold text-indigo-600">Çek Al</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("cek");
+                          setChqType("issued");
+                          setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                          setIsChequeModalOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Firma Borç Çeki Çıkışı (Verilen)</span>
+                        <span className="text-[10px] font-bold text-amber-600">Çek Ver</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("cek");
+                          handleOpenEndorseModal("cheque");
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Portföyden Çek Ciro Et</span>
+                        <span className="text-[10px] font-bold text-purple-600">Ciro</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("senet");
+                          setNtType("received");
+                          setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                          setIsNoteModalOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Müşteri Senedi Girişi (Alınan)</span>
+                        <span className="text-[10px] font-bold text-purple-600">Senet Al</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setActiveSubModule("senet");
+                          setNtType("issued");
+                          setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                          setIsNoteModalOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Borç Senedi Çıkışı (Verilen)</span>
+                        <span className="text-[10px] font-bold text-amber-600">Senet Ver</span>
+                      </button>
+
+                      <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50/70">
+                        🔄 Virman & Hesap Tanımları
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setIsTransferModalOpen(true);
+                          detailNav.openTransfer();
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Hesaplar Arası Virman / Transfer</span>
+                        <span className="text-[10px] font-bold text-emerald-600">Virman</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setAccType("cash");
+                          setIsAccountModalOpen(true);
+                          detailNav.openCreate();
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Yeni Nakit Kasa Hesabı Aç</span>
+                        <span className="text-[10px] font-bold text-slate-500">Kasa</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsQuickActionMenuOpen(false);
+                          setAccType("bank");
+                          setIsAccountModalOpen(true);
+                          detailNav.openCreate();
+                        }}
+                        className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <span>Yeni Banka Hesabı Aç</span>
+                        <span className="text-[10px] font-bold text-slate-500">Banka</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("kasa");
-                        handleOpenAddTxModal("kasa");
-                        setTxType("income");
-                        setTxCategory("Kasa Tahsilat / Nakit Gelir");
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Nakit Kasa Tahsilatı (Giriş +)</span>
-                      <span className="text-[10px] font-bold text-emerald-600">+ Tahsilat</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("kasa");
-                        handleOpenAddTxModal("kasa");
-                        setTxType("expense");
-                        setTxCategory("Kasa Tediye / Nakit Ödeme");
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Nakit Kasa Tediyesi (Çıkış -)</span>
-                      <span className="text-[10px] font-bold text-rose-600">- Ödeme</span>
-                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
-                    <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50/70">
-                      🏦 Banka & POS İşlemleri
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("banka");
-                        handleOpenAddTxModal("banka");
-                        setTxType("income");
-                        setTxCategory("Banka Gelen Havale / EFT");
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Gelen Havale / EFT Tahsilatı (+)</span>
-                      <span className="text-[10px] font-bold text-emerald-600">+ Gelen</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("banka");
-                        handleOpenAddTxModal("banka");
-                        setTxType("expense");
-                        setTxCategory("Banka Giden Havale / EFT");
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Giden Havale / EFT Ödemesi (-)</span>
-                      <span className="text-[10px] font-bold text-rose-600">- Giden</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("banka");
-                        handleOpenAddTxModal("pos");
-                        setTxType("income");
-                        setTxCategory("POS Tahsilatı (Kredi Kartı)");
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Kredi Kartı POS Slip Tahsilatı</span>
-                      <span className="text-[10px] font-bold text-emerald-600">POS</span>
-                    </button>
-
-                    <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50/70">
-                      📑 Çek & Senet İşlemleri
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("cek");
-                        setChqType("received");
-                        setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
-                        setIsChequeModalOpen(true);
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Müşteri Çeki Girişi (Alınan Çek)</span>
-                      <span className="text-[10px] font-bold text-indigo-600">Çek Al</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("cek");
-                        setChqType("issued");
-                        setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
-                        setIsChequeModalOpen(true);
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Firma Borç Çeki Çıkışı (Verilen)</span>
-                      <span className="text-[10px] font-bold text-amber-600">Çek Ver</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("cek");
-                        handleOpenEndorseModal("cheque");
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Portföyden Çek Ciro Et</span>
-                      <span className="text-[10px] font-bold text-purple-600">Ciro</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("senet");
-                        setNtType("received");
-                        setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
-                        setIsNoteModalOpen(true);
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Müşteri Senedi Girişi (Alınan)</span>
-                      <span className="text-[10px] font-bold text-purple-600">Senet Al</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setActiveSubModule("senet");
-                        setNtType("issued");
-                        setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
-                        setIsNoteModalOpen(true);
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Borç Senedi Çıkışı (Verilen)</span>
-                      <span className="text-[10px] font-bold text-amber-600">Senet Ver</span>
-                    </button>
-
-                    <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50/70">
-                      🔄 Virman & Hesap Tanımları
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setIsTransferModalOpen(true);
-                        detailNav.openTransfer();
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Hesaplar Arası Virman / Transfer</span>
-                      <span className="text-[10px] font-bold text-emerald-600">Virman</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setAccType("cash");
-                        setIsAccountModalOpen(true);
-                        detailNav.openCreate();
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Yeni Nakit Kasa Hesabı Aç</span>
-                      <span className="text-[10px] font-bold text-slate-500">Kasa</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuickActionMenuOpen(false);
-                        setAccType("bank");
-                        setIsAccountModalOpen(true);
-                        detailNav.openCreate();
-                      }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <span>Yeni Banka Hesabı Aç</span>
-                      <span className="text-[10px] font-bold text-slate-500">Banka</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {activeSubModule !== "virman" && (
+            {!isStandaloneFis && activeSubModule !== "virman" && (
               <button
                 onClick={() => {
                   setIsTransferModalOpen(true);
@@ -5665,198 +6547,240 @@ export const Accounts: React.FC<AccountsProps> = ({
                 <span>Yeni Virman Kaydı Ekle</span>
               </button>
             )}
+
+            {activeSubModule === "fis" && (
+              <>
+                <button
+                  onClick={() => {
+                    handleSelectFisViewMode("fis_girisi");
+                    handleSelectFisType("tahsilat");
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Yeni Tahsilat Fişi (Giriş +) Oluştur"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tahsilat Fişi</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleSelectFisViewMode("fis_girisi");
+                    handleSelectFisType("tediye");
+                  }}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Yeni Tediye / Ödeme Fişi (Çıkış -) Oluştur"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tediye Fişi</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handleSelectFisViewMode("fis_girisi");
+                    handleSelectFisType("gider_fisi");
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all shrink-0"
+                  title="Yeni Perakende Harcama / Masraf Fişi (KDV'li) Oluştur"
+                >
+                  <Receipt className="w-4 h-4" />
+                  <span>Masraf / Gider Fişi</span>
+                </button>
+              </>
+            )}
           </>
         }
       />
 
-      {/* 2. Top 4 KPI Summary Cards Grid (Reference Design) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Nakit Kasalar */}
-        <div
-          onClick={() => {
-            setActiveSubModule("kasa");
-            setSelectedCashAccountId(null);
-          }}
-          className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
-            activeSubModule === "kasa" ? "ring-2 ring-amber-500/50" : ""
-          }`}
-          style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "kasa" ? "#f59e0b" : theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-slate-400">Nakit Kasa Bakiyesi</p>
-              <p className="text-2xl font-bold font-mono tracking-tight text-amber-600 mt-2">
-                ₺{totalCashBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </p>
+      {!isStandaloneFis && (
+        <>
+          {/* 2. Top 4 KPI Summary Cards Grid (Reference Design) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Nakit Kasalar */}
+            <div
+              onClick={() => {
+                setActiveSubModule("kasa");
+                setSelectedCashAccountId(null);
+              }}
+              className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
+                activeSubModule === "kasa" ? "ring-2 ring-amber-500/50" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "kasa" ? "#f59e0b" : theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-400">Nakit Kasa Bakiyesi</p>
+                  <p className="text-2xl font-bold font-mono tracking-tight text-amber-600 mt-2">
+                    ₺{totalCashBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
+                  <img src={ASSET_ICONS.nakit} alt="Nakit" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-semibold text-amber-600">
+                  {accounts.filter((a) => a.type === "cash").length}
+                </span>
+                <span>aktif nakit kasa</span>
+              </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
-              <img src={ASSET_ICONS.nakit} alt="Nakit" className="w-6 h-6 object-contain" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="font-semibold text-amber-600">
-              {accounts.filter((a) => a.type === "cash").length}
-            </span>
-            <span>aktif nakit kasa</span>
-          </div>
-        </div>
 
-        {/* Card 2: Banka Bakiyeleri */}
-        <div
-          onClick={() => {
-            setActiveSubModule("banka");
-            setSelectedBankAccountId(null);
-          }}
-          className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
-            activeSubModule === "banka" ? "ring-2 ring-blue-500/50" : ""
-          }`}
-          style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "banka" ? "#3b82f6" : theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-slate-400">Banka & POS Bakiyesi</p>
-              <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
-                ₺{totalBankBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </p>
+            {/* Card 2: Banka Bakiyeleri */}
+            <div
+              onClick={() => {
+                setActiveSubModule("banka");
+                setSelectedBankAccountId(null);
+              }}
+              className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
+                activeSubModule === "banka" ? "ring-2 ring-blue-500/50" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "banka" ? "#3b82f6" : theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-400">Banka & POS Bakiyesi</p>
+                  <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
+                    ₺{totalBankBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <img src={ASSET_ICONS.nakit} alt="Banka" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-semibold text-blue-600">
+                  {accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length}
+                </span>
+                <span>banka hesabı</span>
+              </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
-              <img src={ASSET_ICONS.nakit} alt="Banka" className="w-6 h-6 object-contain" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="font-semibold text-blue-600">
-              {accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length}
-            </span>
-            <span>banka hesabı</span>
-          </div>
-        </div>
 
-        {/* Card 3: Çek & Senet Portföyü */}
-        <div
-          onClick={() => setActiveSubModule("cek")}
-          className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
-            activeSubModule === "cek" || activeSubModule === "senet" ? "ring-2 ring-indigo-500/50" : ""
-          }`}
-          style={{ backgroundColor: theme.cardBg, borderColor: (activeSubModule === "cek" || activeSubModule === "senet") ? (theme.primaryColor || "#005289") : theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-slate-400">Çek / Senet Portföyü</p>
-              <p className="text-2xl font-bold font-mono tracking-tight text-indigo-600 mt-2">
-                ₺{(portfolioChequesTotal + portfolioNotesTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </p>
+            {/* Card 3: Çek & Senet Portföyü */}
+            <div
+              onClick={() => setActiveSubModule("cek")}
+              className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
+                activeSubModule === "cek" || activeSubModule === "senet" ? "ring-2 ring-indigo-500/50" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: (activeSubModule === "cek" || activeSubModule === "senet") ? (theme.primaryColor || "#005289") : theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-400">Çek / Senet Portföyü</p>
+                  <p className="text-2xl font-bold font-mono tracking-tight text-indigo-600 mt-2">
+                    ₺{(portfolioChequesTotal + portfolioNotesTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                  <img src={ASSET_ICONS.toplamAlacak} alt="Portföy" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="font-semibold text-indigo-600">
+                  {cheques.filter((c) => c.status === "portfolio").length} çek
+                </span>
+                <span>•</span>
+                <span className="font-semibold text-indigo-600">
+                  {promissoryNotes.filter((n) => n.status === "portfolio").length} senet
+                </span>
+              </div>
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-              <img src={ASSET_ICONS.toplamAlacak} alt="Portföy" className="w-6 h-6 object-contain" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="font-semibold text-indigo-600">
-              {cheques.filter((c) => c.status === "portfolio").length} çek
-            </span>
-            <span>•</span>
-            <span className="font-semibold text-indigo-600">
-              {promissoryNotes.filter((n) => n.status === "portfolio").length} senet
-            </span>
-          </div>
-        </div>
 
-        {/* Card 4: Toplam Net Likidite */}
-        <div
-          className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
-          style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-slate-400">Kullanılabilir Net Likidite</p>
-              <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
-                ₺{(totalCashBalance + totalBankBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
-              <img src={ASSET_ICONS.ciro} alt="Likidite" className="w-6 h-6 object-contain" />
+            {/* Card 4: Toplam Net Likidite */}
+            <div
+              className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
+              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium text-slate-400">Kullanılabilir Net Likidite</p>
+                  <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
+                    ₺{(totalCashBalance + totalBankBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+                  <img src={ASSET_ICONS.ciro} alt="Likidite" className="w-6 h-6 object-contain" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Kasa + Banka toplam fon</span>
+              </div>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Kasa + Banka toplam fon</span>
-          </div>
-        </div>
-      </div>
 
-      {/* 3. Sub-Module Navigation Toolbar */}
-      <div
-        className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-wrap items-center justify-between gap-3"
-        style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-      >
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-          <button
-            onClick={() => {
-              setActiveSubModule("kasa");
-              setSelectedCashAccountId(null);
-            }}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-              activeSubModule === "kasa"
-                ? "bg-amber-600 text-white font-bold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
+          {/* 3. Sub-Module Navigation Toolbar */}
+          <div
+            className="rounded-2xl p-3 sm:p-4 border shadow-2xs flex flex-wrap items-center justify-between gap-3"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
           >
-            <Banknote className="w-4 h-4" />
-            <span>Nakit Kasalar ({accounts.filter((a) => a.type === "cash").length})</span>
-          </button>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+              <button
+                onClick={() => {
+                  setActiveSubModule("kasa");
+                  setSelectedCashAccountId(null);
+                }}
+                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeSubModule === "kasa"
+                    ? "bg-amber-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Banknote className="w-4 h-4" />
+                <span>Nakit Kasalar ({accounts.filter((a) => a.type === "cash").length})</span>
+              </button>
 
-          <button
-            onClick={() => {
-              setActiveSubModule("banka");
-              setSelectedBankAccountId(null);
-            }}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-              activeSubModule === "banka"
-                ? "bg-blue-600 text-white font-bold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <Building className="w-4 h-4" />
-            <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos").length})</span>
-          </button>
+              <button
+                onClick={() => {
+                  setActiveSubModule("banka");
+                  setSelectedBankAccountId(null);
+                }}
+                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeSubModule === "banka"
+                    ? "bg-blue-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Building className="w-4 h-4" />
+                <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos").length})</span>
+              </button>
 
-          <button
-            onClick={() => setActiveSubModule("cek")}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-              activeSubModule === "cek"
-                ? "bg-indigo-600 text-white font-bold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <FileCheck2 className="w-4 h-4" />
-            <span>Çek Portföyü ({cheques.filter((c) => c.status === "portfolio").length})</span>
-          </button>
+              <button
+                onClick={() => setActiveSubModule("cek")}
+                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeSubModule === "cek"
+                    ? "bg-indigo-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <FileCheck2 className="w-4 h-4" />
+                <span>Çek Portföyü ({cheques.filter((c) => c.status === "portfolio").length})</span>
+              </button>
 
-          <button
-            onClick={() => setActiveSubModule("senet")}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-              activeSubModule === "senet"
-                ? "bg-fuchsia-600 text-white font-bold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <Stamp className="w-4 h-4" />
-            <span>Senet Portföyü ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
-          </button>
+              <button
+                onClick={() => setActiveSubModule("senet")}
+                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeSubModule === "senet"
+                    ? "bg-fuchsia-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Stamp className="w-4 h-4" />
+                <span>Senet Portföyü ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
+              </button>
 
-          <button
-            onClick={() => setActiveSubModule("virman")}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-              activeSubModule === "virman"
-                ? "bg-emerald-600 text-white font-bold shadow-2xs"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <ArrowRightLeft className="w-4 h-4" />
-            <span>Virman / Transfer ({virmanTransactions.length})</span>
-          </button>
-        </div>
-      </div>
+              <button
+                onClick={() => setActiveSubModule("virman")}
+                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                  activeSubModule === "virman"
+                    ? "bg-emerald-600 text-white font-bold shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+                <span>Virman / Transfer ({virmanTransactions.length})</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* SUB-MODULE 1: KASA */}
       {activeSubModule === "kasa" && (
@@ -6729,32 +7653,6 @@ export const Accounts: React.FC<AccountsProps> = ({
                   onResetToDefaults={resetBankaCols}
                   hiddenCount={hiddenBankaColCount}
                 />
-                <button
-                  type="button"
-                  onClick={() => setIsBankStatementModalOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="CSV veya Excel banka ekstresini yükleyip cari eşleştirin"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
-                  <span>Banka Ekstresi Yükle</span>
-                </button>
-
-                <button
-                  onClick={() => handleOpenAddTxModal("banka")}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Yeni Banka Havale / EFT İşlemi Ekle"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Banka Hareketi Ekle</span>
-                </button>
-                <button
-                  onClick={() => handleOpenAddTxModal("pos")}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Kredi kartı POS tahsilatı, komisyon oranı ve slip kaydı ekleyin"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Banka POS Hareketi Ekle</span>
-                </button>
               </div>
             </div>
 
@@ -8552,6 +9450,1734 @@ export const Accounts: React.FC<AccountsProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* SUB-MODULE 6: FİŞ GİRİŞİ & FİŞ LİSTESİ (TAHSİLAT, TEDİYE, PERAKENDE GİDER/MASRAF & MAHSUP FİŞLERİ) */}
+      {activeSubModule === "fis" && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Alt Modül Sekme Seçici: Fiş Girişi | Fiş Listesi */}
+          <div
+            className="rounded-2xl border p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleSelectFisViewMode("fis_girisi");
+                  if (fisEntryMode === "multi") {
+                    setIsMultiFisFullPage(true);
+                  }
+                }}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
+                  activeFisViewMode === "fis_girisi"
+                    ? "bg-teal-600 text-white border-teal-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+                <span>Fiş Girişi (Yeni Fiş Oluştur)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMultiFisFullPage(false);
+                  handleSelectFisViewMode("fis_listesi");
+                }}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
+                  activeFisViewMode === "fis_listesi"
+                    ? "bg-teal-600 text-white border-teal-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                }`}
+              >
+                <Receipt className="w-4 h-4" />
+                <span>Fiş Listesi</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    activeFisViewMode === "fis_listesi"
+                      ? "bg-white/20 text-white"
+                      : "bg-teal-100 text-teal-800"
+                  }`}
+                >
+                  {fisTransactions.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              {activeFisViewMode === "fis_girisi" ? (
+                <span>Çoklu Fiş Girişi Sayfası veya Tekli Fiş Girişi ile yeni muhasebe fişi oluşturun</span>
+              ) : (
+                <span>Kayıtlı tahsilat, tediye, gider/masraf ve mahsup fişlerini görüntüleyin</span>
+              )}
+            </div>
+          </div>
+
+          {activeFisViewMode === "fis_listesi" && renderDateFilterBar("Fiş Listesi & Muhasebe Fiş Hareketleri")}
+
+          {/* Fiş Girişi KPI Özet Şeridi (Sadece Fiş Listesi ekranında gösterilir) */}
+          {activeFisViewMode === "fis_listesi" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div
+              onClick={() => {
+                setFisFilterType(fisFilterType === "tahsilat" ? "all" : "tahsilat");
+                if (activeFisViewMode !== "fis_listesi") handleSelectFisViewMode("fis_listesi");
+              }}
+              className={`rounded-2xl p-4 border shadow-2xs cursor-pointer transition-all flex items-center justify-between ${
+                fisFilterType === "tahsilat" ? "ring-2 ring-emerald-500/60 bg-emerald-50/30" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: fisFilterType === "tahsilat" ? "#10b981" : theme.cardBorder }}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block">
+                  Tahsilat Fişleri (+)
+                </span>
+                <p className="text-xl font-black font-mono text-emerald-600 mt-1">
+                  ₺
+                  {fisTransactions
+                    .filter((t) => resolveTransactionFisType(t) === "tahsilat")
+                    .reduce((s, t) => s + (t.amount || 0), 0)
+                    .toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  {fisTransactions.filter((t) => resolveTransactionFisType(t) === "tahsilat").length} adet fiş
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <ArrowDownLeft className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                setFisFilterType(fisFilterType === "tediye" ? "all" : "tediye");
+                if (activeFisViewMode !== "fis_listesi") handleSelectFisViewMode("fis_listesi");
+              }}
+              className={`rounded-2xl p-4 border shadow-2xs cursor-pointer transition-all flex items-center justify-between ${
+                fisFilterType === "tediye" ? "ring-2 ring-rose-500/60 bg-rose-50/30" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: fisFilterType === "tediye" ? "#f43f5e" : theme.cardBorder }}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700 block">
+                  Tediye / Ödeme Fişleri (-)
+                </span>
+                <p className="text-xl font-black font-mono text-rose-600 mt-1">
+                  ₺
+                  {fisTransactions
+                    .filter((t) => resolveTransactionFisType(t) === "tediye")
+                    .reduce((s, t) => s + (t.amount || 0), 0)
+                    .toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  {fisTransactions.filter((t) => resolveTransactionFisType(t) === "tediye").length} adet fiş
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <ArrowUpRight className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                setFisFilterType(fisFilterType === "gider_fisi" ? "all" : "gider_fisi");
+                if (activeFisViewMode !== "fis_listesi") handleSelectFisViewMode("fis_listesi");
+              }}
+              className={`rounded-2xl p-4 border shadow-2xs cursor-pointer transition-all flex items-center justify-between ${
+                fisFilterType === "gider_fisi" ? "ring-2 ring-amber-500/60 bg-amber-50/30" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: fisFilterType === "gider_fisi" ? "#f59e0b" : theme.cardBorder }}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 block">
+                  Perakende Gider / Masraf Fişi
+                </span>
+                <p className="text-xl font-black font-mono text-amber-600 mt-1">
+                  ₺
+                  {fisTransactions
+                    .filter((t) => resolveTransactionFisType(t) === "gider_fisi")
+                    .reduce((s, t) => s + (t.amount || 0), 0)
+                    .toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  {fisTransactions.filter((t) => resolveTransactionFisType(t) === "gider_fisi").length} adet masraf fişi
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Receipt className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                setFisFilterType(fisFilterType === "mahsup" ? "all" : "mahsup");
+                if (activeFisViewMode !== "fis_listesi") handleSelectFisViewMode("fis_listesi");
+              }}
+              className={`rounded-2xl p-4 border shadow-2xs cursor-pointer transition-all flex items-center justify-between ${
+                fisFilterType === "mahsup" ? "ring-2 ring-indigo-500/60 bg-indigo-50/30" : ""
+              }`}
+              style={{ backgroundColor: theme.cardBg, borderColor: fisFilterType === "mahsup" ? "#6366f1" : theme.cardBorder }}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 block">
+                  Mahsup Fişleri & Toplam KDV
+                </span>
+                <p className="text-xl font-black font-mono text-indigo-600 mt-1">
+                  ₺
+                  {fisTransactions
+                    .reduce((s, t) => s + (t.totalVat || 0), 0)
+                    .toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </p>
+                <span className="text-[11px] text-slate-400">
+                  {fisTransactions.filter((t) => resolveTransactionFisType(t) === "mahsup").length} mahsup • İndirilecek KDV
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Calculator className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* ALT MODÜL 1: YENİ FİŞ GİRİŞİ FORMU & ÇOKLU FİŞ GİRİŞİ SAYFASI KARTI */}
+          {activeFisViewMode === "fis_girisi" && (
+          <div
+            className={
+              isMultiFisFullPage && fisEntryMode === "multi"
+                ? "fixed inset-0 z-50 w-full h-[100dvh] overflow-y-auto md:overflow-hidden bg-white flex flex-col"
+                : "w-full"
+            }
+          >
+            <div
+              className={`w-full ${
+                isMultiFisFullPage && fisEntryMode === "multi"
+                  ? "flex-1 flex flex-col min-h-0 p-2.5 sm:p-4 lg:px-5 lg:py-3.5 overflow-y-auto md:overflow-hidden"
+                  : "rounded-2xl border p-4 sm:p-6 shadow-2xs"
+              }`}
+              style={{
+                backgroundColor: theme.cardBg,
+                borderColor: isMultiFisFullPage && fisEntryMode === "multi" ? "transparent" : theme.cardBorder,
+              }}
+            >
+              <div className="shrink-0 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pb-3 mb-3 border-b border-slate-200">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                    <Receipt className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-bold truncate" style={{ color: theme.pageText }}>
+                        {fisEntryMode === "multi"
+                          ? "Yeni Fiş Girişi Oluştur — Çoklu Fiş Girişi Sayfası"
+                          : "Yeni Fiş Girişi Oluştur — Tekli Fiş Formu"}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                        {fisEntryMode === "multi" ? "Tam Ekran Responsive Tablo" : "Tekli Kayıt"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs mt-0.5 line-clamp-1" style={{ color: theme.pageTextMuted }}>
+                      Tahsilat fişi, tediye (ödeme) fişi, perakende harcama/masraf fişi veya muhasebe mahsup fişlerini çoklu tablo satırlarıyla hızlıca kaydedin.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-extrabold">
+                    <Calculator className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Kayıt Türü: Mahsup Fişi</span>
+                  </div>
+                </div>
+              </div>
+
+              {fisEntryMode === "multi" ? (
+                /* ==============================================================
+                   ÇOKLU FİŞ GİRİŞİ SAYFASI (RESPONSIVE TAM EKRAN TABLO TASARIMI)
+                   ============================================================== */
+                <div className="flex-1 flex flex-col min-h-0 justify-between gap-2.5">
+                  {/* ÇOKLU FİŞ GİRİŞİ TABLOSU (RESPONSIVE TAM EKRAN TABLO) */}
+                  <div className="flex-1 min-h-0 border border-slate-300 bg-white shadow-xs flex flex-col overflow-hidden rounded-lg">
+                    <div className="overflow-auto flex-1 custom-scrollbar">
+                      <table className="w-full border-collapse table-fixed min-w-[1020px] xl:min-w-0 text-left select-none">
+                        <thead className="sticky top-0 z-20 bg-[#f8f9fa] shadow-2xs">
+                          <tr className="bg-[#f8f9fa] border-b border-slate-300 text-xs 2xl:text-[13px] font-bold text-slate-900">
+                            {/* 1. Hesap */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[17%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Hesap</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                  title="Sütun filtresini aç/kapat"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 2. Belge Tarihi */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[8.5%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Belge Tarihi</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 3. Belge No */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[8%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Belge No</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 4. Belge Türü */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[9.5%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Belge Türü</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 5. B.T.A. */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[6%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate" title="Belge Türü Açıklaması">B.T.A.</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 6. Vade Tarihi */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[8.5%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Vade Tarihi</span>
+                              </div>
+                            </th>
+                            {/* 7. VKN/TCKN */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[8%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">VKN/TCKN</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 8. Açıklama */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[13%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Açıklama</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 9. Borç */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[7%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Borç</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 10. Alacak */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[7%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Alacak</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 11. Ödeme Türü */}
+                            <th className="py-2 px-2 border-r border-slate-300 w-[7.5%]">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="truncate">Ödeme Türü</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMultiFisGridFilters((p) => !p)}
+                                  className="text-slate-400 hover:text-blue-600 cursor-pointer shrink-0"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1 3H11M3 6H9M5 9H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </th>
+                            {/* 12. Sağ Boşluk / Satır İşlem Sütunu */}
+                            <th className="py-2 px-1.5 w-[72px]"></th>
+                          </tr>
+
+                          {/* Sütun İçi Arama / Filtreleme Satırı (Başlıktaki ≡ ikonuna tıklanınca açılır) */}
+                          {showMultiFisGridFilters && (
+                            <tr className="bg-slate-100/90 border-b border-slate-300 text-[11px]">
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.hesap}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, hesap: e.target.value }))}
+                                  placeholder="Hesap filtrele..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.belgeTarihi}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, belgeTarihi: e.target.value }))}
+                                  placeholder="Tarih..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.belgeNo}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, belgeNo: e.target.value }))}
+                                  placeholder="Belge no..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.belgeTuru}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, belgeTuru: e.target.value }))}
+                                  placeholder="Tür..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.bta}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, bta: e.target.value }))}
+                                  placeholder="B.T.A..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.vadeTarihi}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, vadeTarihi: e.target.value }))}
+                                  placeholder="Vade..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.vknTckn}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, vknTckn: e.target.value }))}
+                                  placeholder="VKN/TCKN..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.aciklama}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, aciklama: e.target.value }))}
+                                  placeholder="Açıklama..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.borc}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, borc: e.target.value }))}
+                                  placeholder="Borç..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.alacak}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, alacak: e.target.value }))}
+                                  placeholder="Alacak..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 border-r border-slate-300">
+                                <input
+                                  type="text"
+                                  value={multiFisGridFilters.odemeTuru}
+                                  onChange={(e) => setMultiFisGridFilters((p) => ({ ...p, odemeTuru: e.target.value }))}
+                                  placeholder="Ödeme..."
+                                  className="w-full bg-white border border-slate-300 px-1.5 py-1 text-[11px] font-normal outline-none focus:border-blue-600"
+                                />
+                              </th>
+                              <th className="p-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setMultiFisGridFilters({
+                                      hesap: "",
+                                      belgeTarihi: "",
+                                      belgeNo: "",
+                                      belgeTuru: "",
+                                      bta: "",
+                                      vadeTarihi: "",
+                                      vknTckn: "",
+                                      aciklama: "",
+                                      borc: "",
+                                      alacak: "",
+                                      odemeTuru: "",
+                                    })
+                                  }
+                                  className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                                >
+                                  Temizle
+                                </button>
+                              </th>
+                            </tr>
+                          )}
+                        </thead>
+
+                        <tbody>
+                          {multiFisRows
+                            .filter((row) => {
+                              if (multiFisGridFilters.hesap && !row.hesapLabel.toLowerCase().includes(multiFisGridFilters.hesap.toLowerCase())) return false;
+                              if (multiFisGridFilters.belgeTarihi && !row.belgeTarihi.includes(multiFisGridFilters.belgeTarihi)) return false;
+                              if (multiFisGridFilters.belgeNo && !row.belgeNo.toLowerCase().includes(multiFisGridFilters.belgeNo.toLowerCase())) return false;
+                              if (multiFisGridFilters.belgeTuru && !row.belgeTuru.toLowerCase().includes(multiFisGridFilters.belgeTuru.toLowerCase())) return false;
+                              if (multiFisGridFilters.bta && !row.bta.toLowerCase().includes(multiFisGridFilters.bta.toLowerCase())) return false;
+                              if (multiFisGridFilters.vadeTarihi && !row.vadeTarihi.includes(multiFisGridFilters.vadeTarihi)) return false;
+                              if (multiFisGridFilters.vknTckn && !row.vknTckn.includes(multiFisGridFilters.vknTckn)) return false;
+                              if (multiFisGridFilters.aciklama && !row.aciklama.toLowerCase().includes(multiFisGridFilters.aciklama.toLowerCase())) return false;
+                              if (multiFisGridFilters.borc && !String(row.borc).includes(multiFisGridFilters.borc)) return false;
+                              if (multiFisGridFilters.alacak && !String(row.alacak).includes(multiFisGridFilters.alacak)) return false;
+                              if (multiFisGridFilters.odemeTuru && !row.odemeTuru.toLowerCase().includes(multiFisGridFilters.odemeTuru.toLowerCase())) return false;
+                              return true;
+                            })
+                            .map((row) => {
+                              const isActiveRow = activeMultiFisRowId === row.id;
+                              const isDropdownOpen = openHesapDropdownRowId === row.id;
+                              const searchQ = row.hesapLabel.toLowerCase().trim();
+                              const filteredAccountOptions = multiFisAccountOptions.filter((opt) =>
+                                !searchQ ||
+                                opt.label.toLowerCase().includes(searchQ) ||
+                                opt.code.toLowerCase().includes(searchQ) ||
+                                (opt.taxNumber && opt.taxNumber.includes(searchQ))
+                              );
+
+                              return (
+                                <tr
+                                  key={row.id}
+                                  onClick={() => setActiveMultiFisRowId(row.id)}
+                                  className={`bg-white transition-none ${
+                                    isActiveRow
+                                      ? "outline-2 outline-[#1d5ef4] -outline-offset-2 relative z-10"
+                                      : "border-b border-slate-200 hover:bg-blue-50/20"
+                                  }`}
+                                >
+                                  {/* 1. Hesap Hücresi (Sağ kenarında mavi yukarı-aşağı ok butonu ile) */}
+                                  <td className="p-0 border-r border-slate-200 relative align-middle h-9">
+                                    <div className="flex items-stretch h-9 w-full">
+                                      <input
+                                        type="text"
+                                        value={row.hesapLabel}
+                                        onFocus={() => setActiveMultiFisRowId(row.id)}
+                                        onChange={(e) => {
+                                          updateMultiFisRow(row.id, {
+                                            hesapLabel: e.target.value,
+                                            hesapKey: "",
+                                          });
+                                          setOpenHesapDropdownRowId(row.id);
+                                        }}
+                                        placeholder="Hesap kodu veya cari seçin..."
+                                        className="w-full h-full px-1.5 text-xs font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300 min-w-0"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveMultiFisRowId(row.id);
+                                          setOpenHesapDropdownRowId((prev) =>
+                                            prev === row.id ? null : row.id
+                                          );
+                                        }}
+                                        className="w-6 h-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                                        title="Hesap / Cari Listesini Aç"
+                                      >
+                                        <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                                          <path
+                                            d="M5 6L8 3L11 6"
+                                            stroke="currentColor"
+                                            strokeWidth="1.8"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          />
+                                          <path
+                                            d="M5 10L8 13L11 10"
+                                            stroke="currentColor"
+                                            strokeWidth="1.8"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          />
+                                        </svg>
+                                      </button>
+                                    </div>
+
+                                    {/* Açılır Hesap / Cari Seçim Listesi */}
+                                    {isDropdownOpen && (
+                                      <div
+                                        className="absolute left-0 top-full mt-0.5 w-[min(380px,85vw)] max-h-64 overflow-y-auto bg-white border-2 border-[#2563eb] rounded-lg shadow-xl z-50 text-xs"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <div className="sticky top-0 bg-slate-100 px-2.5 py-1.5 border-b border-slate-200 flex items-center justify-between">
+                                          <span className="text-[10px] font-extrabold uppercase text-slate-600">
+                                            Hesap Planı / Cari Seçimi ({filteredAccountOptions.length})
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => setOpenHesapDropdownRowId(null)}
+                                            className="text-slate-500 hover:text-slate-900 font-bold text-[11px] cursor-pointer"
+                                          >
+                                            Kapat ✕
+                                          </button>
+                                        </div>
+                                        {filteredAccountOptions.length === 0 ? (
+                                          <div className="p-3 text-slate-500 text-xs">
+                                            Eşleşen hesap bulunamadı. Yazdığınız metin özel hesap olarak kaydedilecektir.
+                                          </div>
+                                        ) : (
+                                          filteredAccountOptions.map((opt) => (
+                                            <button
+                                              key={opt.key}
+                                              type="button"
+                                              onClick={() => handleSelectMultiFisHesap(row.id, opt.key)}
+                                              className="w-full text-left px-3 py-1.5 hover:bg-blue-50 border-b border-slate-100 flex items-center justify-between gap-2 cursor-pointer"
+                                            >
+                                              <span className="font-semibold text-slate-800 truncate">
+                                                {opt.label}
+                                              </span>
+                                              {opt.taxNumber && (
+                                                <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                                                  {opt.taxNumber}
+                                                </span>
+                                              )}
+                                            </button>
+                                          ))
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* 2. Belge Tarihi */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="date"
+                                      value={row.belgeTarihi}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { belgeTarihi: e.target.value })
+                                      }
+                                      className="w-full h-9 px-1.5 text-[11px] xl:text-xs font-medium text-slate-900 bg-transparent outline-none"
+                                    />
+                                  </td>
+
+                                  {/* 3. Belge No */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="text"
+                                      value={row.belgeNo}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { belgeNo: e.target.value })
+                                      }
+                                      placeholder="Belge No"
+                                      className="w-full h-9 px-1.5 text-xs font-mono font-semibold text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                                    />
+                                  </td>
+
+                                  {/* 4. Belge Türü */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <select
+                                      value={row.belgeTuru}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { belgeTuru: e.target.value })
+                                      }
+                                      className="w-full h-9 px-1 text-xs font-medium text-slate-900 bg-transparent outline-none cursor-pointer truncate"
+                                    >
+                                      <option value="Fatura">Fatura</option>
+                                      <option value="Perakende Satış Fişi">Perakende Satış Fişi</option>
+                                      <option value="Tahsilat Makbuzu">Tahsilat Makbuzu</option>
+                                      <option value="Tediye Makbuzu">Tediye Makbuzu</option>
+                                      <option value="Banka Dekontu">Banka Dekontu</option>
+                                      <option value="Çek">Çek</option>
+                                      <option value="Senet">Senet</option>
+                                      <option value="Gider Pusulası">Gider Pusulası</option>
+                                      <option value="Serbest Meslek Makbuzu">Serbest Meslek Makbuzu</option>
+                                      <option value="Diğer">Diğer</option>
+                                    </select>
+                                  </td>
+
+                                  {/* 5. B.T.A. (Belge Türü Açıklaması) */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="text"
+                                      value={row.bta}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { bta: e.target.value })
+                                      }
+                                      placeholder="B.T.A."
+                                      className="w-full h-9 px-1.5 text-xs text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                                    />
+                                  </td>
+
+                                  {/* 6. Vade Tarihi */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="date"
+                                      value={row.vadeTarihi}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { vadeTarihi: e.target.value })
+                                      }
+                                      className="w-full h-9 px-1.5 text-[11px] xl:text-xs font-medium text-slate-900 bg-transparent outline-none"
+                                    />
+                                  </td>
+
+                                  {/* 7. VKN/TCKN */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="text"
+                                      maxLength={11}
+                                      value={row.vknTckn}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { vknTckn: e.target.value })
+                                      }
+                                      placeholder="VKN / TCKN"
+                                      className="w-full h-9 px-1.5 text-xs font-mono text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                                    />
+                                  </td>
+
+                                  {/* 8. Açıklama */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="text"
+                                      value={row.aciklama}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { aciklama: e.target.value })
+                                      }
+                                      placeholder="Satır açıklaması..."
+                                      className="w-full h-9 px-1.5 text-xs text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                                    />
+                                  </td>
+
+                                  {/* 9. Borç */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={row.borc}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) => {
+                                        const val = e.target.value === "" ? "" : Number(e.target.value);
+                                        updateMultiFisRow(row.id, {
+                                          borc: val,
+                                          alacak: val !== "" && Number(val) > 0 ? "" : row.alacak,
+                                        });
+                                      }}
+                                      placeholder="0,00"
+                                      className="w-full h-9 px-1.5 text-xs font-mono font-bold text-right text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                                    />
+                                  </td>
+
+                                  {/* 10. Alacak */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={row.alacak}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) => {
+                                        const val = e.target.value === "" ? "" : Number(e.target.value);
+                                        updateMultiFisRow(row.id, {
+                                          alacak: val,
+                                          borc: val !== "" && Number(val) > 0 ? "" : row.borc,
+                                        });
+                                      }}
+                                      placeholder="0,00"
+                                      className="w-full h-9 px-1.5 text-xs font-mono font-bold text-right text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                                    />
+                                  </td>
+
+                                  {/* 11. Ödeme Türü */}
+                                  <td className="p-0 border-r border-slate-200 align-middle h-9">
+                                    <select
+                                      value={row.odemeTuru}
+                                      onFocus={() => setActiveMultiFisRowId(row.id)}
+                                      onChange={(e) =>
+                                        updateMultiFisRow(row.id, { odemeTuru: e.target.value })
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          handleAddMultiFisRow(row.id);
+                                        }
+                                      }}
+                                      className="w-full h-9 px-1 text-xs font-medium text-slate-900 bg-transparent outline-none cursor-pointer truncate"
+                                    >
+                                      <option value="Nakit">Nakit</option>
+                                      <option value="Banka">Banka</option>
+                                      <option value="Kredi Kartı">Kredi Kartı</option>
+                                      <option value="Çek / Senet">Çek / Senet</option>
+                                      <option value="Cari Mahsup">Cari Mahsup</option>
+                                      <option value="Açık Hesap">Açık Hesap</option>
+                                    </select>
+                                  </td>
+
+                                  {/* 12. Satır İşlemleri (Ekle / Kopyala / Sil) */}
+                                  <td className="p-0 align-middle h-9 px-1">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleAddMultiFisRow(row.id);
+                                        }}
+                                        className="p-1 rounded text-blue-600 hover:bg-blue-50 cursor-pointer"
+                                        title="Altına yeni satır ekle"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDuplicateMultiFisRow(row.id);
+                                        }}
+                                        className="p-1 rounded text-slate-500 hover:bg-slate-100 cursor-pointer"
+                                        title="Satırı çoğalt"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRemoveMultiFisRow(row.id);
+                                        }}
+                                        className="p-1 rounded text-rose-500 hover:bg-rose-50 cursor-pointer"
+                                        title="Satırı sil"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Alt Özet & Çoklu Fiş Kaydet Çubuğu */}
+                  <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-2 border-t border-slate-200 bg-white">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold">
+                        Satır: {multiFisRows.length} (Dolu: {multiFisTotals.filledRowCount})
+                      </span>
+                      <div className="px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 font-bold flex items-center gap-1.5">
+                        <span>Toplam Borç:</span>
+                        <span className="font-mono text-xs sm:text-sm">
+                          ₺{multiFisTotals.totalBorc.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold flex items-center gap-1.5">
+                        <span>Toplam Alacak:</span>
+                        <span className="font-mono text-xs sm:text-sm">
+                          ₺{multiFisTotals.totalAlacak.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div
+                        className={`px-2.5 py-1.5 rounded-lg border font-bold flex items-center gap-1.5 ${
+                          Math.abs(multiFisTotals.diff) < 0.01
+                            ? "bg-slate-50 border-slate-200 text-slate-600"
+                            : "bg-amber-50 border-amber-200 text-amber-800"
+                        }`}
+                      >
+                        <span>Fark:</span>
+                        <span className="font-mono text-xs sm:text-sm">
+                          ₺{Math.abs(multiFisTotals.diff).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          {multiFisTotals.diff > 0
+                            ? " (Borç)"
+                            : multiFisTotals.diff < 0
+                            ? " (Alacak)"
+                            : " (Dengeli)"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleAddMultiFisRow()}
+                        className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Plus className="w-4 h-4 text-blue-600" />
+                        <span>Satır Ekle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveMultiFis()}
+                        className="px-5 py-2 rounded-xl bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-2"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Fişi Kaydet</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsMultiFisFullPage((prev) => !prev)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                          isMultiFisFullPage
+                            ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                            : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                        }`}
+                        title={
+                          isMultiFisFullPage
+                            ? "Sol menüyü göster / Tam ekrandan çık"
+                            : "Çoklu fiş girişini tam ekran olarak aç"
+                        }
+                      >
+                        {isMultiFisFullPage ? (
+                          <>
+                            <X className="w-4 h-4" />
+                            <span>Tam Ekrandan Çık</span>
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="w-4 h-4" />
+                            <span>Tam Ekran Aç</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* ==============================================================
+                   TEKLİ FİŞ GİRİŞİ FORMU
+                   ============================================================== */
+                <form onSubmit={handleSaveFis} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* 1. Fiş / Evrak No */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Fiş / Belge Numarası *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setFisNo(generateFisNumber(fisType))}
+                          className="text-[10px] font-bold text-teal-600 hover:text-teal-800 cursor-pointer"
+                        >
+                          Yeni No Üret
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={fisNo}
+                        onChange={(e) => setFisNo(e.target.value)}
+                        placeholder="Örn: FIS-THS-2026-1024"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                    </div>
+
+                    {/* 2. Fiş Tarihi */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Fiş Tarihi *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={fisDate}
+                        onChange={(e) => setFisDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                    </div>
+
+                    {/* 3. Kasa / Banka Hesabı */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        İşlenecek Kasa / Banka Hesabı *
+                      </label>
+                      <select
+                        value={fisAccountId}
+                        onChange={(e) => setFisAccountId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      >
+                        <optgroup label="💵 Nakit Kasalar">
+                          {accounts
+                            .filter((a) => a.type === "cash")
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} ({formatCurrency(a.balance, a.currency)})
+                              </option>
+                            ))}
+                        </optgroup>
+                        <optgroup label="🏦 Banka & POS Hesapları">
+                          {accounts
+                            .filter((a) => a.type !== "cash")
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} ({formatCurrency(a.balance, a.currency)})
+                              </option>
+                            ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* 4. Ödeme Yöntemi veya Mahsup Yönü */}
+                    {fisType === "mahsup" ? (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Mahsup İşlem Yönü *
+                        </label>
+                        <select
+                          value={fisDirection}
+                          onChange={(e) => setFisDirection(e.target.value as "income" | "expense")}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        >
+                          <option value="expense">Borç / Çıkış (-)</option>
+                          <option value="income">Alacak / Giriş (+)</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Ödeme / Tahsilat Şekli
+                        </label>
+                        <select
+                          value={fisPaymentMethod}
+                          onChange={(e) => setFisPaymentMethod(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        >
+                          <option value="Nakit">Nakit (Kasa)</option>
+                          <option value="Kredi Kartı / POS">Kredi Kartı / POS Slip</option>
+                          <option value="Banka Havale / EFT">Banka Havale / EFT / FAST</option>
+                          <option value="Cari Mahsup">Cari Hesap Mahsubu</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* 5. İlgili Cari Hesap Seçimi */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        İlgili Cari Hesap (Müşteri / Tedarikçi)
+                      </label>
+                      <select
+                        value={fisContactId}
+                        onChange={(e) => {
+                          const cId = e.target.value;
+                          setFisContactId(cId);
+                          const found = contacts.find((c) => c.id === cId);
+                          if (found?.taxNumber) {
+                            setFisTaxNumber(found.taxNumber);
+                          }
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      >
+                        <option value="">-- Cari Seçin veya Manuel Ünvan Girin --</option>
+                        {contacts.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.taxNumber ? `(${c.taxNumber})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 6. Manuel Firma / Kişi Ünvanı & VKN (Özellikle Perakende Gider Fişi için) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        {fisContactId ? "Vergi No / TCKN" : "Firma / Kişi Adı (Cari Dışı Fiş)"}
+                      </label>
+                      {fisContactId ? (
+                        <input
+                          type="text"
+                          value={fisTaxNumber}
+                          onChange={(e) => setFisTaxNumber(e.target.value)}
+                          placeholder="VKN / TCKN"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                      ) : (
+                        <div className="grid grid-cols-5 gap-1.5">
+                          <input
+                            type="text"
+                            value={fisCustomTitle}
+                            onChange={(e) => setFisCustomTitle(e.target.value)}
+                            placeholder="Örn: Opet Akaryakıt / Market"
+                            className="col-span-3 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={fisTaxNumber}
+                            onChange={(e) => setFisTaxNumber(e.target.value)}
+                            placeholder="VKN/TCKN"
+                            maxLength={11}
+                            className="col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 7. Kategori / Masraf Kalemi */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Fiş Kategorisi / Masraf Kalemi
+                      </label>
+                      <select
+                        value={fisCategory}
+                        onChange={(e) => setFisCategory(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-900 cursor-pointer focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      >
+                        <optgroup label="📌 Fiş İşlem Türleri">
+                          <option value="Tahsilat Fişi (Cari / Müşteri Tahsilatı)">Tahsilat Fişi (Cari / Müşteri Tahsilatı)</option>
+                          <option value="Kasa Nakit Tahsilat Fişi">Kasa Nakit Tahsilat Fişi</option>
+                          <option value="Tediye Fişi (Tedarikçi / Cari Ödemesi)">Tediye Fişi (Tedarikçi / Cari Ödemesi)</option>
+                          <option value="Personel Avans / Maaş Ödeme Fişi">Personel Avans / Maaş Ödeme Fişi</option>
+                          <option value="Vergi / SGK / Resmi Kurum Ödeme Fişi">Vergi / SGK / Resmi Kurum Ödeme Fişi</option>
+                          <option value="Muhasebe Mahsup Fişi">Muhasebe Mahsup Fişi</option>
+                        </optgroup>
+                        <optgroup label="🧾 Perakende Gider & Masraf Kalemleri">
+                          {EXPENSE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* 8. Tutar & KDV Ayarları */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Fiş Tutarı (₺) *
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-slate-500">KDV:</span>
+                          {[0, 1, 10, 20].map((rate) => (
+                            <button
+                              key={rate}
+                              type="button"
+                              onClick={() => setFisVatRate(rate)}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
+                                fisVatRate === rate
+                                  ? "bg-teal-600 text-white"
+                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              }`}
+                            >
+                              %{rate}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required
+                          value={fisAmount}
+                          onChange={(e) => setFisAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                          placeholder="0,00"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold font-mono text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                        {fisVatRate > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setFisVatIncluded((prev) => !prev)}
+                            className={`px-2.5 py-2.5 rounded-xl text-[10px] font-extrabold border shrink-0 cursor-pointer transition-colors ${
+                              fisVatIncluded
+                                ? "bg-teal-50 text-teal-800 border-teal-200"
+                                : "bg-amber-50 text-amber-800 border-amber-200"
+                            }`}
+                            title="Tutarın KDV Dahil mi yoksa KDV Hariç mi olduğunu değiştirin"
+                          >
+                            {fisVatIncluded ? "KDV Dahil" : "KDV Hariç"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Açıklama + KDV Hesaplama Özeti + Kaydet Butonu */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end pt-1">
+                    <div className="lg:col-span-6">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Fiş Açıklaması / Detay Notu
+                      </label>
+                      <input
+                        type="text"
+                        value={fisDescription}
+                        onChange={(e) => setFisDescription(e.target.value)}
+                        placeholder={
+                          fisType === "tahsilat"
+                            ? "Örn: Nisan ayı cari hesap nakit tahsilatı..."
+                            : fisType === "tediye"
+                            ? "Örn: Tedarikçi cari hesap ödeme makbuzu..."
+                            : fisType === "gider_fisi"
+                            ? "Örn: Şirket aracı yakıt alımı ÖKC yazar kasa fişi..."
+                            : "Örn: Dönem içi cari hesap mahsup fişi kaydı..."
+                        }
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-900 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="lg:col-span-4">
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                            Matrah / KDV (%{fisVatRate})
+                          </span>
+                          <span className="font-mono font-semibold text-slate-700">
+                            ₺{fisCalculated.subtotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                            {fisVatRate > 0 && (
+                              <span className="text-amber-600 ml-1">
+                                + ₺{fisCalculated.vatAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                            Net Fiş Toplamı
+                          </span>
+                          <span
+                            className={`font-mono text-sm font-black ${
+                              fisType === "tahsilat" || (fisType === "mahsup" && fisDirection === "income")
+                                ? "text-emerald-600"
+                                : "text-rose-600"
+                            }`}
+                          >
+                            {fisType === "tahsilat" || (fisType === "mahsup" && fisDirection === "income") ? "+" : "-"}₺
+                            {fisCalculated.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-2">
+                      <button
+                        type="submit"
+                        className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 text-xs"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Fişi Kaydet</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* ALT MODÜL 2: FİŞ HAREKETLERİ LİSTESİ TABLOSU */}
+          {activeFisViewMode === "fis_listesi" && (
+          <div
+            className="rounded-2xl border p-6 shadow-2xs space-y-4"
+            style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: theme.pageText }}>
+                  <Receipt className="w-4 h-4 text-teal-600" />
+                  <span>Kayıtlı Fişler & Muhasebe Fiş Hareketleri ({fisTransactions.length})</span>
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: theme.pageTextMuted }}>
+                  Girilen tahsilat, tediye, gider/masraf ve mahsup fişlerini filtreleyin, yazdırın veya dışa aktarın.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectFisViewMode("fis_girisi")}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Yeni Fiş Girişi</span>
+                </button>
+                {/* Fiş Türü Filtre Butonları */}
+                <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                  {[
+                    { id: "all", label: "Tümü" },
+                    { id: "tahsilat", label: "Tahsilat" },
+                    { id: "tediye", label: "Tediye" },
+                    { id: "gider_fisi", label: "Gider Fişi" },
+                    { id: "mahsup", label: "Mahsup" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setFisFilterType(tab.id as any)}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        fisFilterType === tab.id
+                          ? "bg-white text-teal-700 shadow-2xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowFisColFilters((prev) => !prev)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    showFisColFilters || activeFisColFilterCount > 0
+                      ? "bg-teal-50 text-teal-700 border-teal-200"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Sütun Filtresi</span>
+                  {activeFisColFilterCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-teal-600 text-white text-[10px]">
+                      {activeFisColFilterCount}
+                    </span>
+                  )}
+                </button>
+
+                <ExportButtons
+                  onExportExcel={handleExportFisExcel}
+                  onExportPDF={handleExportFisPDF}
+                />
+              </div>
+            </div>
+
+            {fisSelection.selectedCount > 0 && (
+              <BulkActionBar
+                selectedCount={fisSelection.selectedCount}
+                totalCount={displayedFisTransactions.length}
+                allSelected={fisSelection.isAllSelected(displayedFisIds)}
+                onToggleSelectAll={() => fisSelection.toggleSelectAll(displayedFisIds)}
+                onClearSelection={fisSelection.clearSelection}
+                onDeleteSelected={onDeleteTransaction || onBulkDeleteTransactions ? handleBulkDeleteFis : undefined}
+                onExportExcelSelected={handleBulkExportFisExcel}
+                onExportPDFSelected={handleBulkExportFisPDF}
+                entityLabel="fiş kaydı"
+              />
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-separate border-spacing-y-2">
+                <thead>
+                  <tr
+                    style={{
+                      backgroundColor: theme.tableHeaderBg || "#005289",
+                      color: theme.tableHeaderText || "#ffffff",
+                    }}
+                    className="text-xs font-semibold uppercase tracking-wider shadow-2xs"
+                  >
+                    <th className="py-2.5 px-3 rounded-l-xl w-9 text-center">
+                      <TableCheckbox
+                        checked={fisSelection.isAllSelected(displayedFisIds)}
+                        indeterminate={fisSelection.isIndeterminate(displayedFisIds)}
+                        onChange={() => fisSelection.toggleSelectAll(displayedFisIds)}
+                        ariaLabel="Tüm fişleri seç"
+                      />
+                    </th>
+                    <th className="py-2.5 px-3">Tarih</th>
+                    <th className="py-2.5 px-3">Fiş No & Türü</th>
+                    <th className="py-2.5 px-3">Hesap (Kasa/Banka)</th>
+                    <th className="py-2.5 px-3">Cari / Kategori</th>
+                    <th className="py-2.5 px-3">Açıklama</th>
+                    <th className="py-2.5 px-3 text-right">Tutar</th>
+                    <th className="py-2.5 px-3 text-center rounded-r-xl">İşlemler</th>
+                  </tr>
+
+                  {showFisColFilters && (
+                    <tr className="bg-slate-50/90">
+                      <th className="p-1.5 text-center">
+                        {activeFisColFilterCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearAllFisColFilters}
+                            className="p-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 cursor-pointer"
+                            title="Sütun filtrelerini temizle"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </th>
+                      <th className="p-1.5">
+                        <TableColumnFilterInput
+                          value={fisColFilters.date}
+                          onChange={(val) => setFisColFilters((p) => ({ ...p, date: val }))}
+                          placeholder="Tarih..."
+                        />
+                      </th>
+                      <th className="p-1.5">
+                        <TableColumnFilterInput
+                          value={fisColFilters.documentNo}
+                          onChange={(val) => setFisColFilters((p) => ({ ...p, documentNo: val }))}
+                          placeholder="Fiş No..."
+                        />
+                      </th>
+                      <th className="p-1.5">
+                        <TableColumnFilterInput
+                          value={fisColFilters.accountName}
+                          onChange={(val) => setFisColFilters((p) => ({ ...p, accountName: val }))}
+                          placeholder="Kasa/Banka..."
+                        />
+                      </th>
+                      <th className="p-1.5">
+                        <TableColumnFilterInput
+                          value={fisColFilters.contact}
+                          onChange={(val) => setFisColFilters((p) => ({ ...p, contact: val }))}
+                          placeholder="Cari / Kategori..."
+                        />
+                      </th>
+                      <th className="p-1.5">
+                        <TableColumnFilterInput
+                          value={fisColFilters.description}
+                          onChange={(val) => setFisColFilters((p) => ({ ...p, description: val }))}
+                          placeholder="Açıklama..."
+                        />
+                      </th>
+                      <th className="p-1.5">
+                        <TableColumnFilterInput
+                          value={fisColFilters.amount}
+                          onChange={(val) => setFisColFilters((p) => ({ ...p, amount: val }))}
+                          placeholder="Tutar..."
+                        />
+                      </th>
+                      <th className="p-1.5" />
+                    </tr>
+                  )}
+                </thead>
+                <tbody className="text-xs">
+                  {fisTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        Seçili kriterlere uygun fiş kaydı bulunmuyor. Yukarıdaki formdan yeni fiş girişi yapabilirsiniz.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedFisTransactions.map((tx, idx) => {
+                      const isExpanded = !!expandedRows[tx.id];
+                      const isSelected = fisSelection.isSelected(tx.id);
+                      const resolvedType = resolveTransactionFisType(tx);
+                      const isIncome = tx.type === "income" || tx.type === "collection";
+
+                      const badgeMap: Record<
+                        "tahsilat" | "tediye" | "gider_fisi" | "mahsup",
+                        { label: string; cls: string }
+                      > = {
+                        tahsilat: {
+                          label: "Tahsilat Fişi",
+                          cls: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                        },
+                        tediye: {
+                          label: "Tediye Fişi",
+                          cls: "bg-rose-50 text-rose-700 border-rose-200",
+                        },
+                        gider_fisi: {
+                          label: "Gider / Masraf Fişi",
+                          cls: "bg-amber-50 text-amber-700 border-amber-200",
+                        },
+                        mahsup: {
+                          label: "Mahsup Fişi",
+                          cls: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                        },
+                      };
+                      const badge = badgeMap[resolvedType];
+
+                      return (
+                        <React.Fragment key={tx.id}>
+                          <tr
+                            onClick={() => handleShowFisReceipt(tx)}
+                            className={`${
+                              isSelected
+                                ? "bg-teal-50/90 ring-1 ring-teal-300"
+                                : idx % 2 === 0
+                                ? "bg-white"
+                                : "bg-[#f8f9ff]"
+                            } hover:bg-teal-50/70 transition-all group cursor-pointer shadow-2xs`}
+                          >
+                            <td
+                              className="py-3 px-3 text-center w-9 rounded-l-xl border-y border-l border-slate-200/80"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <TableCheckbox
+                                checked={isSelected}
+                                onChange={() => fisSelection.toggleSelect(tx.id)}
+                                ariaLabel={`${tx.documentNo || tx.description} fişini seç`}
+                              />
+                            </td>
+                            <td className="py-3 px-3 font-medium text-slate-600 border-y border-slate-200/80 whitespace-nowrap">
+                              {formatDate(tx.date)}
+                            </td>
+                            <td className="py-3 px-3 border-y border-slate-200/80">
+                              <div className="flex flex-col gap-1">
+                                <span className="font-mono font-bold text-slate-900">
+                                  {tx.documentNo || `FIS-${tx.id.slice(0, 6).toUpperCase()}`}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit ${badge.cls}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 font-bold text-slate-800 border-y border-slate-200/80">
+                              {tx.accountName}
+                            </td>
+                            <td className="py-3 px-3 border-y border-slate-200/80">
+                              <div className="font-bold text-slate-900">
+                                {tx.contactName || "-"}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                {tx.category}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-slate-700 border-y border-slate-200/80 max-w-xs truncate" title={tx.description}>
+                              {tx.description}
+                            </td>
+                            <td
+                              className={`py-3 px-3 text-right font-bold font-mono border-y border-slate-200/80 whitespace-nowrap ${
+                                isIncome ? "text-emerald-600" : "text-rose-600"
+                              }`}
+                            >
+                              <div>
+                                {isIncome ? "+" : "-"}₺
+                                {tx.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                              </div>
+                              {typeof tx.totalVat === "number" && tx.totalVat > 0 && (
+                                <div className="text-[10px] font-normal text-amber-600">
+                                  KDV: ₺{tx.totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                </div>
+                              )}
+                            </td>
+                            <td
+                              className="py-3 px-3 text-center rounded-r-xl border-y border-r border-slate-200/80"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRowExpand(tx.id)}
+                                  title={isExpanded ? "Detayları Gizle" : "Fiş Detayını Aç"}
+                                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                    isExpanded
+                                      ? "bg-teal-50 text-teal-700 border-teal-200"
+                                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                                  }`}
+                                >
+                                  <ChevronDown
+                                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                      isExpanded ? "rotate-180 text-teal-600" : "text-slate-600"
+                                    }`}
+                                  />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingTransaction(tx);
+                                    setIsEditTxModalOpen(true);
+                                  }}
+                                  className="p-1.5 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-600 hover:text-amber-700 transition-colors cursor-pointer"
+                                  title="Fişi Düzenle"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleShowFisReceipt(tx)}
+                                  className="p-1.5 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-colors cursor-pointer"
+                                  title="Fiş Dekontunu Görüntüle & Yazdır / PDF İndir"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleShowFisReceipt(tx);
+                                    setIsReceiptWhatsAppOpen(true);
+                                  }}
+                                  className="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                                  title="Fiş Dekontunu WhatsApp ile Paylaş"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                </button>
+                                {onDeleteTransaction && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteTransaction(tx.id)}
+                                    className="p-1.5 rounded-lg border border-transparent hover:border-rose-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                    title="Fiş Kaydını Sil"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr className="bg-slate-50/70 border-y border-slate-200" data-skip-row-highlight="true">
+                              <td colSpan={8} className="p-0">
+                                <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-50 via-teal-50/30 to-white border-l-4 border-l-teal-600 space-y-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-black border ${badge.cls}`}>
+                                        {badge.label.toUpperCase()}
+                                      </span>
+                                      <span className="text-xs text-slate-500 font-medium">
+                                        Fiş No:{" "}
+                                        <span className="font-mono font-bold text-slate-900">
+                                          {tx.documentNo || `#${tx.id.slice(0, 8)}`}
+                                        </span>
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleShowFisReceipt(tx)}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                      >
+                                        <Printer className="w-3.5 h-3.5" />
+                                        <span>Fiş Makbuzu / PDF</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleShowFisReceipt(tx);
+                                          setIsReceiptWhatsAppOpen(true);
+                                        }}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                      >
+                                        <MessageCircle className="w-3.5 h-3.5" />
+                                        <span>WhatsApp</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                                      <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                                        Kasa / Banka Hesabı
+                                      </span>
+                                      <span className="font-bold text-slate-800">{tx.accountName}</span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                                      <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                                        Cari / Kategori
+                                      </span>
+                                      <span className="font-bold text-slate-800">
+                                        {tx.contactName || tx.category || "-"}
+                                      </span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                                      <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                                        KDV & Matrah Detayı
+                                      </span>
+                                      <span className="font-mono font-bold text-slate-800">
+                                        Matrah: ₺{(tx.subtotal ?? tx.amount).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} • KDV: ₺{(tx.totalVat ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                                      <span className="text-slate-400 block text-[10px] font-bold uppercase">
+                                        Açıklama
+                                      </span>
+                                      <span className="font-medium text-slate-700">{tx.description || "-"}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {fisTransactions.length > fisDisplayLimit && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setFisDisplayLimit((prev) => prev + 100)}
+                  className="px-4 py-2 bg-teal-100 text-teal-900 rounded-xl font-bold text-xs hover:bg-teal-200 transition-colors cursor-pointer"
+                >
+                  Daha Fazla Göster ({fisDisplayLimit} / {fisTransactions.length})
+                </button>
+              </div>
+            )}
+          </div>
+          )}
         </div>
       )}
 

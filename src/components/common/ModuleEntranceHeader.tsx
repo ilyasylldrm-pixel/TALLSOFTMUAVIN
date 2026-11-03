@@ -33,7 +33,7 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
   return (
     <div
       id={id}
-      className={`relative overflow-hidden rounded-2xl border p-5 sm:p-6 transition-all shadow-2xs haze-module-entrance-bg ${className}`}
+      className={`relative overflow-hidden rounded-xl border px-4 py-3 sm:px-5 sm:py-3.5 transition-all shadow-2xs haze-module-entrance-bg ${className}`}
       style={{
         borderColor: theme.cardBorder,
       }}
@@ -43,14 +43,14 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
 
       {/* Editorial Glowing Gradient - Ortada (Yumuşatılmış / Softened Center Glow) */}
       <div
-        className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-12 w-96 sm:w-[32rem] h-64 rounded-full blur-3xl opacity-15 dark:opacity-10"
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-12 w-80 sm:w-96 h-40 rounded-full blur-3xl opacity-15 dark:opacity-10"
         style={{
           background: `radial-gradient(ellipse at center, ${theme.primaryColor || "#0f6bae"} 0%, rgba(56,189,248,0.1) 35%, rgba(218,226,253,0.12) 60%, transparent 80%)`,
         }}
         aria-hidden="true"
       />
       <div
-        className="pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-14 w-72 h-44 rounded-full blur-2xl opacity-10 dark:opacity-5"
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-14 w-60 h-32 rounded-full blur-2xl opacity-10 dark:opacity-5"
         style={{
           background: "radial-gradient(ellipse at center, #38bdf8 0%, rgba(234,237,255,0.1) 50%, transparent 75%)",
         }}
@@ -66,13 +66,13 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
       />
 
       {/* Content Layout */}
-      <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
         {/* Centered Module Info: Badge, Title & Description */}
-        <div className="space-y-2 flex-1 flex flex-col items-center text-center max-w-4xl mx-auto">
+        <div className="space-y-1 flex-1 min-w-fit shrink-0 flex flex-col items-center text-center mx-auto">
           {badge && (
-            <div className="flex items-center justify-center gap-1.5">
+            <div className="flex items-center justify-center gap-1">
               <span
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border label-caps shadow-2xs"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border label-caps shadow-2xs whitespace-nowrap"
                 style={{
                   backgroundColor: "#eaedff",
                   color: "#005289",
@@ -86,24 +86,15 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
           )}
 
           <h1
-            className="text-2xl sm:text-3xl font-editorial font-semibold tracking-tight leading-tight text-center"
+            className="text-base sm:text-lg font-editorial font-semibold tracking-tight leading-snug text-center whitespace-nowrap"
             style={{ color: theme.pageText }}
           >
             {title}
           </h1>
 
-          {description && (
-            <p
-              className="text-xs sm:text-sm font-medium leading-relaxed text-center max-w-2xl"
-              style={{ color: theme.pageTextMuted }}
-            >
-              {description}
-            </p>
-          )}
-
           {/* Quick Stats Pills if present */}
           {stats && stats.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-1.5">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
               {stats.map((st, idx) => {
                 let badgeStyle = {
                   bg: "bg-slate-50",
@@ -139,9 +130,9 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
                 return (
                   <div
                     key={idx}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs ${badgeStyle.bg} ${badgeStyle.border} shadow-2xs`}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] ${badgeStyle.bg} ${badgeStyle.border} shadow-2xs`}
                   >
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
                       {st.label}:
                     </span>
                     <span className={`font-mono font-bold font-tabular-num-md ${badgeStyle.text}`}>
@@ -156,7 +147,7 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
 
         {/* Right Actions Container */}
         {actions && (
-          <div className="flex flex-wrap items-center justify-center gap-2.5 shrink-0 self-center">
+          <div className="flex flex-wrap items-center justify-center gap-2 self-center mx-auto lg:mx-0">
             {actions}
           </div>
         )}
