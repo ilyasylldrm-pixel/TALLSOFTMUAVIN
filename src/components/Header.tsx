@@ -116,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className="relative w-full box-border sticky top-0 z-30 transition-colors border-b shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 backdrop-blur-md haze-header-bg md:border-l md:rounded-bl-xl"
+      className={`relative w-full box-border sticky top-0 ${isCompanyDropdownOpen ? "z-50" : "z-30"} transition-colors border-b shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 backdrop-blur-md haze-header-bg md:border-l md:rounded-bl-xl`}
       style={{
         backgroundColor: theme.headerBg,
         borderColor: theme.headerBorder,

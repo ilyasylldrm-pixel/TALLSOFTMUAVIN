@@ -16,6 +16,8 @@ export interface ModuleEntranceHeaderProps {
   }>;
   actions?: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
 }
 
 export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
@@ -27,15 +29,18 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
   stats,
   actions,
   className = "",
+  style,
+  children,
 }) => {
   const { theme } = useTheme();
 
   return (
     <div
       id={id}
-      className={`relative overflow-hidden rounded-xl border px-4 py-3 sm:px-5 sm:py-3.5 transition-all shadow-2xs haze-module-entrance-bg ${className}`}
+      className={`relative overflow-visible ${className.includes("z-") ? "" : "z-30"} rounded-xl border px-4 py-3.5 sm:px-5 sm:py-4 transition-all shadow-2xs haze-module-entrance-bg flex flex-col justify-between gap-3 ${className}`}
       style={{
         borderColor: theme.cardBorder,
+        ...style,
       }}
     >
       {/* Bal Peteği ve Geometrik Şekiller Arka Planı (Honeycomb & Geometric Background) */}
@@ -66,11 +71,11 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
       />
 
       {/* Content Layout */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
-        {/* Centered Module Info: Badge, Title & Description */}
-        <div className="space-y-1 flex-1 min-w-fit shrink-0 flex flex-col items-center text-center mx-auto">
+      <div className="relative z-20 flex flex-col md:flex-row md:items-start justify-between gap-3">
+        {/* Module Info: Badge, Title & Description */}
+        <div className="space-y-1 min-w-0 flex flex-col items-start text-left">
           {badge && (
-            <div className="flex items-center justify-center gap-1">
+            <div className="flex items-center gap-1">
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border label-caps shadow-2xs whitespace-nowrap"
                 style={{
@@ -86,7 +91,7 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
           )}
 
           <h1
-            className="text-base sm:text-lg font-editorial font-semibold tracking-tight leading-snug text-center whitespace-nowrap"
+            className="text-base sm:text-lg font-editorial font-semibold tracking-tight leading-snug whitespace-nowrap"
             style={{ color: theme.pageText }}
           >
             {title}
@@ -94,7 +99,7 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
 
           {/* Quick Stats Pills if present */}
           {stats && stats.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
               {stats.map((st, idx) => {
                 let badgeStyle = {
                   bg: "bg-slate-50",
@@ -147,11 +152,12 @@ export const ModuleEntranceHeader: React.FC<ModuleEntranceHeaderProps> = ({
 
         {/* Right Actions Container */}
         {actions && (
-          <div className="flex flex-wrap items-center justify-center gap-2 self-center mx-auto lg:mx-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 md:justify-end">
             {actions}
           </div>
         )}
       </div>
+      {children && <div className="relative z-20 pt-3 border-t border-white/15">{children}</div>}
     </div>
   );
 };

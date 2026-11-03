@@ -1209,198 +1209,209 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
-      {/* 🚀 Top Header Banner */}
+      {/* 🚀 Top Header Banner (Alt ve Üst Modül Birleştirilmiş Tek Bar) */}
       <ModuleEntranceHeader
         icon={ShieldAlert}
         title="Sistem Yönetici & Yetkilendirme Paneli"
         description="Personel rol sınırlandırmaları, tanımlanan şirket ve kullanıcıların giriş şifreleri, modül bazlı erişim matrisi ve evrak denetimi."
         badge="Yönetim & Yetkilendirme"
-        actions={
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => setActiveTab("mysoft_logs")}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
-              title="Mysoft API Teknik Hata Dökümü ve Çözüm Önerisi Log İzleme Ekranı"
-            >
-              <Terminal className="w-4 h-4" />
-              <span>Log İzleme Ekranı</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("credentials")}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
-              title="Tanımlanan Şirket ve Kullanıcıların Kullanıcı Adı ve Şifreleri"
-            >
-              <KeyRound className="w-4 h-4" />
-              <span>Şirket & Kullanıcı Şifreleri</span>
-            </button>
-            <button
-              onClick={handleOpenAddCompany}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
-              title="Yeni Şirket Ekleme Modülü"
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Yeni Şirket Ekle</span>
-            </button>
-            <button
-              onClick={() => setIsQuickDeleteCompanyModalOpen(true)}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
-              title="Şirket Silme Paneli"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Şirket Sil</span>
-            </button>
-            <button
-              onClick={handleOpenAddUser}
-              className="bg-[#0f6bae] hover:bg-[#005289] text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Yeni Kullanıcı Ekle</span>
-            </button>
-            <button
-              onClick={() => setIsQuickDeleteUserModalOpen(true)}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-2xs active:scale-98"
-              title="Kullanıcı Silme Paneli"
-            >
-              <UserMinus className="w-4 h-4" />
-              <span>Kullanıcı Sil</span>
-            </button>
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs py-2 px-3.5 rounded-xl border border-white/20 flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-              title="Yenile"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-              <span>Yenile</span>
-            </button>
-          </div>
-        }
       >
-        {/* 📑 Tab Navigation */}
-        <div className="flex flex-wrap gap-2">
+        {/* 📑 Birleştirilmiş 16 Adet Buton - Önem Derecesine Göre Yan Yana */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1. Yeni Kullanıcı Ekle (En Yüksek Öncelikli Aksiyon) */}
+          <button
+            onClick={handleOpenAddUser}
+            className="h-9 bg-[#005289] hover:bg-[#0f6bae] text-white font-bold text-xs px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs active:scale-98 border border-sky-400 whitespace-nowrap"
+            title="Yeni Kullanıcı Ekle"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Yeni Kullanıcı Ekle</span>
+          </button>
+
+          {/* 2. Yeni Şirket Ekle */}
+          <button
+            onClick={handleOpenAddCompany}
+            className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs active:scale-98 border border-emerald-400 whitespace-nowrap"
+            title="Yeni Şirket Ekleme Modülü"
+          >
+            <Building2 className="w-4 h-4" />
+            <span>Yeni Şirket Ekle</span>
+          </button>
+
+          {/* 3. Tüm Eklenenler & Sistem Özeti */}
           <button
             onClick={() => setActiveTab("overview")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
               activeTab === "overview"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+                ? "bg-amber-400 text-slate-950 font-extrabold border-2 border-white shadow-md"
+                : "bg-amber-900 hover:bg-amber-800 text-amber-100 font-bold border border-amber-600 shadow-xs"
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-300" />
+            <Sparkles className={`w-4 h-4 ${activeTab === "overview" ? "text-slate-950" : "text-amber-300"}`} />
             <span>Tüm Eklenenler & Sistem Özeti</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab("credentials")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "credentials"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
-            }`}
-          >
-            <KeyRound className="w-4 h-4 text-amber-300" />
-            <span>Şirket & Kullanıcı Şifreleri ({adminCompanies.length + users.length})</span>
-          </button>
-
+          {/* 4. Modül Yetkilendirme Matrisi */}
           <button
             onClick={() => setActiveTab("matrix")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
               activeTab === "matrix"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+                ? "bg-sky-500 text-white font-extrabold border-2 border-white shadow-md"
+                : "bg-sky-900 hover:bg-sky-800 text-sky-100 font-bold border border-sky-600 shadow-xs"
             }`}
           >
-            <Table className="w-4 h-4" />
+            <Table className={`w-4 h-4 ${activeTab === "matrix" ? "text-white" : "text-sky-300"}`} />
             <span>Modül Yetkilendirme Matrisi</span>
             {pendingChangesCount > 0 && (
-              <span className="bg-[#b45309] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md font-mono">
+              <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.5 rounded-md font-mono shadow-xs">
                 {pendingChangesCount}
               </span>
             )}
           </button>
 
+          {/* 5. Kullanıcı & Personel Listesi */}
           <button
             onClick={() => setActiveTab("users")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
               activeTab === "users"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+                ? "bg-blue-600 text-white font-extrabold border-2 border-white shadow-md"
+                : "bg-blue-900 hover:bg-blue-800 text-blue-100 font-bold border border-blue-600 shadow-xs"
             }`}
           >
-            <Users className="w-4 h-4" />
+            <Users className={`w-4 h-4 ${activeTab === "users" ? "text-white" : "text-blue-300"}`} />
             <span>Kullanıcı & Personel Listesi ({users.length})</span>
           </button>
 
+          {/* 6. Şirketler & Mysoft Eşleştirme */}
           <button
             onClick={() => setActiveTab("companies")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
               activeTab === "companies"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+                ? "bg-cyan-500 text-slate-950 font-extrabold border-2 border-white shadow-md"
+                : "bg-cyan-900 hover:bg-cyan-800 text-cyan-100 font-bold border border-cyan-600 shadow-xs"
             }`}
           >
-            <Building2 className="w-4 h-4 text-sky-300" />
+            <Building2 className={`w-4 h-4 ${activeTab === "companies" ? "text-slate-950" : "text-cyan-300"}`} />
             <span>Şirketler & Mysoft Eşleştirme ({adminCompanies.length})</span>
           </button>
 
+          {/* 7. Şirket & Kullanıcı Şifreleri */}
           <button
-            onClick={() => setActiveTab("files")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "files"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+            onClick={() => setActiveTab("credentials")}
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              activeTab === "credentials"
+                ? "bg-amber-500 text-slate-950 font-extrabold border-2 border-white shadow-md"
+                : "bg-yellow-900 hover:bg-yellow-800 text-yellow-100 font-bold border border-yellow-600 shadow-xs"
             }`}
           >
-            <HardDrive className="w-4 h-4" />
+            <KeyRound className={`w-4 h-4 ${activeTab === "credentials" ? "text-slate-950" : "text-yellow-300"}`} />
+            <span>Şirket & Kullanıcı Şifreleri ({adminCompanies.length + users.length})</span>
+          </button>
+
+          {/* 8. Evrak & Belge Denetimi */}
+          <button
+            onClick={() => setActiveTab("files")}
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              activeTab === "files"
+                ? "bg-purple-600 text-white font-extrabold border-2 border-white shadow-md"
+                : "bg-purple-900 hover:bg-purple-800 text-purple-100 font-bold border border-purple-600 shadow-xs"
+            }`}
+          >
+            <HardDrive className={`w-4 h-4 ${activeTab === "files" ? "text-white" : "text-purple-300"}`} />
             <span>Evrak & Belge Denetimi ({allFiles.length})</span>
           </button>
 
+          {/* 9. SGK ve Personel Vergilendirme */}
           <button
             onClick={() => setActiveTab("payroll")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
               activeTab === "payroll"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+                ? "bg-emerald-500 text-slate-950 font-extrabold border-2 border-white shadow-md"
+                : "bg-emerald-900 hover:bg-emerald-800 text-emerald-100 font-bold border border-emerald-600 shadow-xs"
             }`}
           >
-            <Calculator className="w-4 h-4" />
+            <Calculator className={`w-4 h-4 ${activeTab === "payroll" ? "text-slate-950" : "text-emerald-300"}`} />
             <span>SGK ve Personel Vergilendirme</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab("broadcast")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "broadcast"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
-            }`}
-          >
-            <Radio className="w-4 h-4 text-emerald-400" />
-            <span>Canlı Güncelleme Dağıtımı</span>
-          </button>
-
+          {/* 10. Denetim Günlüğü */}
           <button
             onClick={() => setActiveTab("audit")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
               activeTab === "audit"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+                ? "bg-slate-300 text-slate-950 font-extrabold border-2 border-white shadow-md"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold border border-slate-600 shadow-xs"
             }`}
           >
-            <ShieldCheck className="w-4 h-4" />
+            <ShieldCheck className={`w-4 h-4 ${activeTab === "audit" ? "text-slate-950" : "text-slate-300"}`} />
             <span>Denetim Günlüğü</span>
           </button>
 
+          {/* 11. Canlı Güncelleme Dağıtımı */}
           <button
-            onClick={() => setActiveTab("mysoft_logs")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "mysoft_logs"
-                ? "bg-white text-slate-900 shadow-2xs border border-white"
-                : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white border border-white/15"
+            onClick={() => setActiveTab("broadcast")}
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              activeTab === "broadcast"
+                ? "bg-teal-500 text-slate-950 font-extrabold border-2 border-white shadow-md"
+                : "bg-teal-900 hover:bg-teal-800 text-teal-100 font-bold border border-teal-600 shadow-xs"
             }`}
           >
-            <Terminal className="w-4 h-4 text-amber-300" />
+            <Radio className={`w-4 h-4 ${activeTab === "broadcast" ? "text-slate-950" : "text-teal-300"}`} />
+            <span>Canlı Güncelleme Dağıtımı</span>
+          </button>
+
+          {/* 12. Log İzleme Ekranı (Mysoft API) */}
+          <button
+            onClick={() => setActiveTab("mysoft_logs")}
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              activeTab === "mysoft_logs"
+                ? "bg-indigo-500 text-white font-extrabold border-2 border-white shadow-md"
+                : "bg-indigo-900 hover:bg-indigo-800 text-indigo-100 font-bold border border-indigo-600 shadow-xs"
+            }`}
+          >
+            <Terminal className={`w-4 h-4 ${activeTab === "mysoft_logs" ? "text-white" : "text-indigo-300"}`} />
             <span>Log İzleme Ekranı (Mysoft API)</span>
+          </button>
+
+          {/* 13. Hızlı Şifre Kasası */}
+          <button
+            onClick={() => setActiveTab("credentials")}
+            className="h-9 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs active:scale-98 border border-amber-300 whitespace-nowrap"
+            title="Şirket ve Kullanıcı Şifreleri Kasası"
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Hızlı Şifre Kasası</span>
+          </button>
+
+          {/* 14. Veri ve Durum Yenile */}
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="h-9 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-3.5 rounded-xl border border-slate-500 flex items-center gap-1.5 cursor-pointer transition-all shadow-xs disabled:opacity-50 whitespace-nowrap"
+            title="Yenile"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Yenile</span>
+          </button>
+
+          {/* 15. Kullanıcı Sil */}
+          <button
+            onClick={() => setIsQuickDeleteUserModalOpen(true)}
+            className="h-9 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs border border-rose-400 active:scale-98 whitespace-nowrap"
+            title="Kullanıcı Silme Paneli"
+          >
+            <UserMinus className="w-4 h-4" />
+            <span>Kullanıcı Sil</span>
+          </button>
+
+          {/* 16. Şirket Sil */}
+          <button
+            onClick={() => setIsQuickDeleteCompanyModalOpen(true)}
+            className="h-9 bg-red-700 hover:bg-red-800 text-white font-bold text-xs px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs border border-red-500 active:scale-98 whitespace-nowrap"
+            title="Şirket Silme Paneli"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Şirket Sil</span>
           </button>
         </div>
       </ModuleEntranceHeader>
