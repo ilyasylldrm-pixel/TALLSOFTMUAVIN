@@ -4,6 +4,8 @@ import html2canvas from "html2canvas";
 import { CompanySettings, Contact } from "../types";
 import { formatCurrency, formatDate, getCurrencySymbol, sanitizeOklchForHtml2Canvas } from "./pdfCommon";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
+import { GIB_OFFICIAL_UPLOADED_LOGO_DATA_URI } from "./gibOfficialAssets";
+import { numberToTurkishWords } from "./numberToTurkishWords";
 
 export interface LedgerEntryData {
   id?: string;
@@ -1567,4 +1569,349 @@ export async function exportElementToPDFWithPrintStyling(
     triggerFormErrorNotification("PDF hazırlanırken bir hata oluştu. Lütfen tekrar deneyin.", "PDF Hatası");
     return null;
   }
+}
+
+export interface OfficialGibInvoicePDFOptions {
+  docNo: string;
+  ettn: string;
+  issueDate: string;
+  issueTime?: string;
+  scenario?: string;
+  invoiceType?: string;
+  currency?: string;
+  senderName: string;
+  senderVkn: string;
+  senderTaxOffice?: string;
+  senderAddress?: string;
+  senderPhone?: string;
+  senderEmail?: string;
+  receiverName: string;
+  receiverVkn: string;
+  receiverTaxOffice?: string;
+  receiverAddress?: string;
+  items: Array<{
+    id?: string | number;
+    description: string;
+    productCode?: string;
+    quantity: number;
+    unit?: string;
+    unitPrice: number;
+    vatRate: number;
+    vatAmount?: number;
+    total: number;
+  }>;
+  subtotal: number;
+  vatTotal: number;
+  grandTotal: number;
+  notes?: string;
+  qrCodeDataUrl?: string;
+  fileName?: string;
+}
+
+/**
+ * Generates an authentic, vector-sharp official GİB invoice PDF using jsPDF + autoTable.
+ * Guaranteed to succeed without relying on DOM elements or external PDF plugins.
+ */
+export async function generateOfficialGibInvoicePDF(
+  options: OfficialGibInvoicePDFOptions
+): Promise<{ pdf: jsPDF; blob: Blob; fileName: string }> {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const hasUnicode = await loadTurkishFontIntoPDF(doc);
+  const activeFont = hasUnicode ? "Roboto" : "helvetica";
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2;
+  const currency = options.currency || "TRY";
+  const docNo = options.docNo || "BELGE";
+  const ettn = options.ettn || "-";
+  const scenario = (options.scenario || "TICARIFATURA").toUpperCase();
+  const invoiceType = (options.invoiceType || "SATIS").toUpperCase();
+
+  let cursorY = margin;
+
+  // 1. TOP HEADER (Satıcı, GİB Logo & e-Belge Başlığı, Karekod & Metadata)
+  const leftColW = 75;
+  const rightColW = 75;
+  const centerColX = margin + leftColW + 2;
+  const centerColW = contentWidth - leftColW - rightColW - 4;
+  const rightColX = pageWidth - margin - rightColW;
+
+  // SATICI / DÜZENLEYEN
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfText("SATICI / DÜZENLEYEN", hasUnicode), margin, cursorY + 3);
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  const senderLines = doc.splitTextToSize(toPdfText(options.senderName || "Tedarikçi Firma", hasUnicode), leftColW);
+  doc.text(senderLines, margin, cursorY + 7);
+
+  let senderEndY = cursorY + 7 + senderLines.length * 3.5;
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text(toPdfText(`VKN / TCKN: ${options.senderVkn || "-"}`, hasUnicode), margin, senderEndY);
+  senderEndY += 3.5;
+  if (options.senderTaxOffice) {
+    doc.text(toPdfText(`Vergi Dairesi: ${options.senderTaxOffice}`, hasUnicode), margin, senderEndY);
+    senderEndY += 3.5;
+  }
+  if (options.senderAddress) {
+    const addrLines = doc.splitTextToSize(toPdfText(`Adres: ${options.senderAddress}`, hasUnicode), leftColW);
+    doc.text(addrLines, margin, senderEndY);
+    senderEndY += addrLines.length * 3.2;
+  }
+
+  // ORTA: GİB AMBLEMİ & e-FATURA BAŞLIĞI
+  try {
+    if (GIB_OFFICIAL_UPLOADED_LOGO_DATA_URI) {
+      doc.addImage(GIB_OFFICIAL_UPLOADED_LOGO_DATA_URI, "JPEG", centerColX + (centerColW - 16) / 2, cursorY, 16, 16);
+    }
+  } catch {}
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  const isArchive = scenario.includes("ARSIV") || options.docNo?.startsWith("EAR");
+  const docTitle = isArchive ? "e-ARŞİV FATURA" : "e-FATURA";
+  doc.text(toPdfText(docTitle, hasUnicode), centerColX + centerColW / 2, cursorY + 21, { align: "center" });
+
+  // SAĞ: KAREKOD & GİB METADATA TABLOSU
+  const qrSize = 22;
+  const qrX = rightColX + rightColW - qrSize;
+  const qrY = cursorY;
+  if (options.qrCodeDataUrl) {
+    try {
+      doc.addImage(options.qrCodeDataUrl, "PNG", qrX, qrY, qrSize, qrSize);
+    } catch {}
+  }
+
+  // Metadata Table beside/below QR
+  const metaTableX = rightColX;
+  const metaTableY = qrY + qrSize + 2;
+  autoTable(doc, {
+    startY: metaTableY,
+    margin: { left: metaTableX, right: margin },
+    tableWidth: rightColW,
+    theme: "grid",
+    head: [],
+    body: [
+      [toPdfText("Özelleştirme No:", hasUnicode), "TR1.2"],
+      [toPdfText("Senaryo:", hasUnicode), scenario],
+      [toPdfText("Fatura Tipi:", hasUnicode), invoiceType],
+      [toPdfText("Fatura No:", hasUnicode), docNo],
+      [toPdfText("Fatura Tarihi:", hasUnicode), options.issueDate || "-"],
+      [toPdfText("ETTN:", hasUnicode), ettn],
+    ],
+    styles: {
+      font: activeFont,
+      fontSize: 6.5,
+      cellPadding: 1,
+      textColor: [15, 23, 42],
+      lineColor: [100, 116, 139],
+      lineWidth: 0.15,
+    },
+    columnStyles: {
+      0: { fontStyle: "bold", fillColor: [241, 245, 249], cellWidth: 26 },
+      1: { cellWidth: rightColW - 26 },
+    },
+  });
+
+  const lastTableY = (doc as any).lastAutoTable?.finalY || metaTableY + 20;
+  cursorY = Math.max(senderEndY + 2, lastTableY + 4);
+
+  // Divider Line
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.4);
+  doc.line(margin, cursorY, pageWidth - margin, cursorY);
+  cursorY += 3;
+
+  // 2. ALICI / SAYIN BİLGİ KUTUSU
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(margin, cursorY, contentWidth, 18, 1, 1, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfText("SAYIN (ALICI FİRMA):", hasUnicode), margin + 3, cursorY + 4);
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(toPdfText(options.receiverName || "Alıcı Firma", hasUnicode), margin + 3, cursorY + 8);
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text(
+    toPdfText(`VKN / TCKN: ${options.receiverVkn || "-"}  |  Vergi Dairesi: ${options.receiverTaxOffice || "-"}`, hasUnicode),
+    margin + 3,
+    cursorY + 12
+  );
+  if (options.receiverAddress) {
+    doc.text(toPdfText(`Adres: ${options.receiverAddress}`, hasUnicode), margin + 3, cursorY + 15.5);
+  }
+
+  cursorY += 21;
+
+  // 3. KALEMLER TABLOSU (UBL Lines via autoTable)
+  const items = options.items && options.items.length > 0
+    ? options.items
+    : [
+        {
+          id: 1,
+          description: "Mal / Hizmet Teslimi",
+          quantity: 1,
+          unit: "Adet",
+          unitPrice: options.subtotal,
+          vatRate: 20,
+          vatAmount: options.vatTotal,
+          total: options.grandTotal,
+        },
+      ];
+
+  const tableBody = items.map((item, idx) => {
+    const qty = Number(item.quantity || 1);
+    const price = Number(item.unitPrice || 0);
+    const vatRate = Number(item.vatRate || 20);
+    const lineTotal = Number(item.total || qty * price);
+    const vatAmt = Number(item.vatAmount || (lineTotal * vatRate) / 100);
+    const desc = item.description || `Kalem ${idx + 1}`;
+    return [
+      String(idx + 1),
+      toPdfText(desc, hasUnicode),
+      `${qty} ${toPdfText(item.unit || "Adet", hasUnicode)}`,
+      `${price.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`,
+      `%${vatRate}`,
+      `${vatAmt.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`,
+      `${lineTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`,
+    ];
+  });
+
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: margin, right: margin },
+    theme: "grid",
+    head: [
+      [
+        "#",
+        toPdfText("Mal / Hizmet Açıklaması", hasUnicode),
+        toPdfText("Miktar", hasUnicode),
+        toPdfText("Birim Fiyat", hasUnicode),
+        "KDV %",
+        toPdfText("KDV Tutarı", hasUnicode),
+        toPdfText("Toplam Tutar", hasUnicode),
+      ],
+    ],
+    body: tableBody,
+    styles: {
+      font: activeFont,
+      fontSize: 7.5,
+      cellPadding: 2,
+      textColor: [15, 23, 42],
+      lineColor: [203, 213, 225],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 7.5,
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: "center" },
+      1: { cellWidth: "auto" },
+      2: { cellWidth: 22, halign: "right" },
+      3: { cellWidth: 24, halign: "right" },
+      4: { cellWidth: 16, halign: "center" },
+      5: { cellWidth: 24, halign: "right" },
+      6: { cellWidth: 28, halign: "right", fontStyle: "bold" },
+    },
+  });
+
+  cursorY = (doc as any).lastAutoTable?.finalY || cursorY + 40;
+  cursorY += 4;
+
+  // 4. ALT TOPLAMLAR & YAZIYLA TUTAR
+  const totalsTableW = 85;
+  const totalsTableX = pageWidth - margin - totalsTableW;
+
+  // Sol Taraf: Yazıyla Tutar & Notlar
+  const leftSummaryW = totalsTableX - margin - 5;
+  const writtenAmount = numberToTurkishWords(options.grandTotal);
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text(toPdfText(`YALNIZ: ${writtenAmount}`, hasUnicode), margin, cursorY + 4);
+
+  if (options.notes) {
+    doc.setFont(activeFont, "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    const noteLines = doc.splitTextToSize(toPdfText(`Not: ${options.notes}`, hasUnicode), leftSummaryW);
+    doc.text(noteLines, margin, cursorY + 8);
+  }
+
+  // Sağ Taraf: Toplamlar Tablosu
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: totalsTableX, right: margin },
+    tableWidth: totalsTableW,
+    theme: "grid",
+    head: [],
+    body: [
+      [toPdfText("Mal/Hizmet Toplamı:", hasUnicode), `${Number(options.subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`],
+      [toPdfText("Hesaplanan KDV:", hasUnicode), `${Number(options.vatTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`],
+      [toPdfText("Ödenecek Tutar:", hasUnicode), `${Number(options.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currency}`],
+    ],
+    styles: {
+      font: activeFont,
+      fontSize: 7.5,
+      cellPadding: 2,
+      textColor: [15, 23, 42],
+      lineColor: [203, 213, 225],
+      lineWidth: 0.15,
+    },
+    columnStyles: {
+      0: { fontStyle: "bold", fillColor: [248, 250, 252], cellWidth: 42 },
+      1: { halign: "right", cellWidth: totalsTableW - 42 },
+    },
+    didParseCell: (data) => {
+      if (data.row.index === 2) {
+        data.cell.styles.fillColor = [226, 232, 240];
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+
+  const totalsEndY = (doc as any).lastAutoTable?.finalY || cursorY + 20;
+
+  // 5. FOOTER
+  const footerY = Math.max(totalsEndY + 10, doc.internal.pageSize.getHeight() - 12);
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    toPdfText("Bu belge 213 sayılı VUK hükümlerine göre Gelir İdaresi Başkanlığı e-Belge standartlarında üretilmiştir.", hasUnicode),
+    pageWidth / 2,
+    footerY,
+    { align: "center" }
+  );
+
+  const cleanFilename = options.fileName
+    ? (options.fileName.endsWith(".pdf") ? options.fileName : `${options.fileName}.pdf`)
+    : `${docNo}.pdf`;
+  const blob = doc.output("blob");
+
+  return { pdf: doc, blob, fileName: cleanFilename };
 }

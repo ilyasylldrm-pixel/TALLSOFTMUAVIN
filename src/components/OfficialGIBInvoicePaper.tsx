@@ -3441,7 +3441,10 @@ export const InvoiceDesignCustomizerBar: React.FC<InvoiceDesignCustomizerBarProp
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 mr-1">
             <Palette className="w-4 h-4 text-red-700" />
-            <span>e-Fatura & e-Arşiv Tasarımı:</span>
+            <span>Giden e-Fatura &amp; e-Arşiv Tasarımı:</span>
+            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+              Sadece Giden Faturalarda
+            </span>
           </div>
 
           {/* Document Type Switcher (Otomatik / e-Fatura / e-Arşiv Fatura) */}

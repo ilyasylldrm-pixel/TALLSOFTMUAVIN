@@ -252,6 +252,11 @@ export interface MysoftEDocument {
   createdAt?: string;
   updatedAt?: string;
   downloadUrl?: string;
+  pdfUrl?: string;
+  originalPdfUrl?: string;
+  note?: string;
+  notes?: string;
+  iban?: string;
   items?: unknown[];
   lines?: unknown[];
   partyName?: string;

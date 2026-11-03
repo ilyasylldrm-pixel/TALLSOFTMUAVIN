@@ -45,7 +45,6 @@ import {
 import {
   getMysoftEDocument,
   listMysoftEDocuments,
-  listNewMysoftIncomingEDocuments,
   downloadMysoftEDocument,
   syncMysoftEDocuments,
   acceptMysoftEDocument,
@@ -57,9 +56,6 @@ import {
   resolveMysoftDocumentStatus,
   invoiceToMysoftOutgoingEDocument,
   readPersistedEDocuments,
-  getMysoftConnectionStatus,
-  enrichIncomingEDocumentWithXml,
-  type MysoftConnectionStatus,
 } from "../services/mysoftEDocumentService";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
 import { DetailPageLayout } from "./common/DetailPageLayout";
@@ -68,13 +64,13 @@ import { useDetailNavigation } from "../hooks/useDetailNavigation";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData } from "../utils/exportUtils";
-import { openInvoicePrintModal, printHtmlElement } from "../utils/printEngine";
+import { openInvoicePrintModal } from "../utils/printEngine";
 import {
   OfficialGIBInvoicePaper,
   InvoiceDesignCustomizerBar,
   resolveInvoiceDesignSettings,
 } from "./OfficialGIBInvoicePaper";
-import { IncomingGIBInvoiceView } from "./IncomingGIBInvoiceView";
+import { IncomingEDocumentsLegacy } from "./IncomingEDocumentsLegacy";
 
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
@@ -99,7 +95,6 @@ type SyncPeriod =
   | "this_month"
   | "three_months"
   | "all"
-  | "custom"
   | "month_1"
   | "month_2"
   | "month_3"
@@ -112,14 +107,7 @@ type SyncPeriod =
   | "month_10"
   | "month_11"
   | "month_12";
-type DownloadFormat = "pdf" | "xml" | "html";
-type InboxQuickTab =
-  | "all"
-  | "waiting_response"
-  | "unaccounted"
-  | "accounted"
-  | "accepted"
-  | "rejected";
+type DownloadFormat = "pdf" | "xml";
 
 const TURKISH_MONTHS = [
   { id: 1, name: "Ocak", shortName: "Oca" },
@@ -150,28 +138,15 @@ const parseDocYearMonth = (rawDate: unknown): { year: number | null; month: numb
   return { year: null, month: null };
 };
 
-const sanitizeCurrency = (curr?: unknown): string => {
-  const raw = String(curr || "").trim().toUpperCase();
-  if (!raw || raw === "TL" || raw === "₺" || raw === "?" || raw === "NULL" || raw.length !== 3) {
-    return "TRY";
-  }
-  return raw;
-};
-
 const formatMoney = (value: unknown, currency = "TRY") => {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "-";
-  const validCurr = sanitizeCurrency(currency);
-  try {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency: validCurr,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${amount.toFixed(2)} ${validCurr}`;
-  }
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: currency === "₺" ? "TRY" : currency || "TRY",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 };
 
 const formatDate = (value: unknown) => {
@@ -294,7 +269,7 @@ const documentAmount = (document: MysoftEDocument) => {
 const documentCurrency = (document: MysoftEDocument) => {
   const value =
     asRecord(document).currency || asRecord(document).currencyCode || "TRY";
-  return sanitizeCurrency(value);
+  return value === "₺" ? "TRY" : String(value);
 };
 
 const statusTone = (status: string) => {
@@ -356,14 +331,6 @@ const getSyncRange = (period: SyncPeriod, selectedYear: string = "all") => {
       endDate: formatLocalIsoDate(mTo),
     };
   } else if (period === "three_months") {
-    if (selectedYear !== "all" && /^\d{4}$/.test(selectedYear) && targetYear !== now.getFullYear()) {
-      const yFrom = new Date(targetYear, 9, 1);
-      const yTo = new Date(targetYear, 12, 0);
-      return {
-        startDate: formatLocalIsoDate(yFrom),
-        endDate: formatLocalIsoDate(yTo),
-      };
-    }
     from.setMonth(from.getMonth() - 2, 1);
   } else {
     if (selectedYear !== "all" && /^\d{4}$/.test(selectedYear)) {
@@ -403,7 +370,7 @@ const getErrorMessage = (error: unknown) => {
  * Mysoft e-Belge inbox/outbox. The component only talks to the local service
  * abstraction; credentials and the Mysoft API URL remain on the server.
  */
-export const EDocuments: React.FC<EDocumentsProps> = ({
+const OutgoingEDocuments: React.FC<EDocumentsProps> = ({
   direction,
   family = "invoice",
   globalSearchTerm = "",
@@ -484,27 +451,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     String(new Date().getFullYear()),
   );
   const [period, setPeriod] = useState<SyncPeriod>("all");
-  const [isUseDocDate, setIsUseDocDate] = useState<boolean>(true);
-  const [customStartDate, setCustomStartDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(1);
-    return formatLocalIsoDate(d);
-  });
-  const [customEndDate, setCustomEndDate] = useState<string>(() =>
-    formatLocalIsoDate(new Date()),
-  );
-  const [inboxQuickTab, setInboxQuickTab] = useState<InboxQuickTab>("all");
-  const [connectionStatus, setConnectionStatus] =
-    useState<MysoftConnectionStatus | null>(null);
-  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
-  const [rowActionLoading, setRowActionLoading] = useState<{
-    id: string;
-    action: string;
-  } | null>(null);
-  const [inlineRejectDocId, setInlineRejectDocId] = useState<string | null>(null);
-  const [inlineRejectReason, setInlineRejectReason] = useState<string>("");
-  const [enrichingDocId, setEnrichingDocId] = useState<string | null>(null);
-
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] =
     useState<MysoftEDocument | null>(null);
@@ -533,37 +479,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   const [isRejecting, setIsRejecting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const resolveEffectiveSyncRange = useCallback(
-    (targetDirection: EDocumentDirection = activeDirection) => {
-      if (period === "custom" && customStartDate && customEndDate) {
-        return {
-          startDate:
-            customStartDate <= customEndDate ? customStartDate : customEndDate,
-          endDate:
-            customStartDate <= customEndDate ? customEndDate : customStartDate,
-        };
-      }
-      if (normalizeDirection(targetDirection) === "inbox" && period === "all") {
-        return getSyncRange("three_months", selectedYear);
-      }
-      return getSyncRange(period, selectedYear);
-    },
-    [activeDirection, customEndDate, customStartDate, period, selectedYear],
-  );
-
-  // Load Mysoft connection status
-  useEffect(() => {
-    let active = true;
-    void getMysoftConnectionStatus()
-      .then((st) => {
-        if (active) setConnectionStatus(st);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [activeTenantIdentifierNumber, activeManagedCompanyId]);
-
   const handleLookupVkn = async () => {
     const tenant = await lookupByVkn();
     if (tenant) {
@@ -588,7 +503,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     setDetailError(null);
     setActionError(null);
     setNotice(null);
-    setSelectedDocIds([]);
   }, [activeManagedCompanyId]);
 
   const loadDocuments = useCallback(
@@ -605,7 +519,11 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       setIsLoading(true);
       setError(null);
       try {
-        const range = resolveEffectiveSyncRange(requestedDirection);
+        // When period is "all" for inbox paging, cap API query range to 89 days to satisfy Mysoft's 90-day paging limit
+        const range =
+          normalizeDirection(requestedDirection) === "inbox" && period === "all"
+            ? getSyncRange("three_months", selectedYear)
+            : getSyncRange(period, selectedYear);
         const result = await listMysoftEDocuments(requestedDirection, {
           signal: controller.signal,
           tenantIdentifierNumber: activeTenantIdentifierNumber,
@@ -613,7 +531,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           family,
           startDate: range.startDate,
           endDate: range.endDate,
-          isUseDocDate,
           fallback: true,
           // Numbered paging accepts multi-day ranges; day-chunked legacy list does not.
           ...(normalizeDirection(requestedDirection) === "inbox"
@@ -645,8 +562,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       activeDirection,
       activeManagedCompanyId,
       activeTenantIdentifierNumber,
-      resolveEffectiveSyncRange,
-      isUseDocDate,
+      period,
+      selectedYear,
       tenants.length,
       tenantsLoading,
       family,
@@ -664,8 +581,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     setActiveDirection(normalizeDirection(nextDirection));
     setStatusFilter("all");
     setTypeFilter("all");
-    setInboxQuickTab("all");
-    setSelectedDocIds([]);
   };
 
   const handleSync = async () => {
@@ -677,12 +592,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     setNotice(null);
     setError(null);
     try {
-      const range = resolveEffectiveSyncRange(activeDirection);
       const result = await syncMysoftEDocuments({
         direction: activeDirection,
-        startDate: range.startDate,
-        endDate: range.endDate,
-        isUseDocDate,
+        ...getSyncRange(period, selectedYear),
         tenantIdentifierNumber: activeTenantIdentifierNumber,
         companyId: activeManagedCompanyId,
         family,
@@ -692,6 +604,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           ? { pageSize: 100, pageNumber: 1 }
           : {}),
       });
+      // Sync already returns the authoritative merged snapshot.  Use it
+      // directly so the UI does not immediately issue a second, first-page
+      // request (which used to hide records fetched by pagination).
       const syncedRows = Array.isArray(result?.documents) ? result.documents : [];
       const hasCompanyTags = syncedRows.some((document) => Boolean(document.companyId));
       const syncedDocuments = syncedRows.filter(
@@ -699,212 +614,16 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           documentDirection(document) === activeDirection &&
           (!activeManagedCompanyId || !hasCompanyTags || document.companyId === activeManagedCompanyId),
       );
-
-      // For incoming e-invoices, also query newly arrived envelopes so invoices with older document dates are captured
-      let mergedDocs = syncedDocuments;
-      if (activeDirection === "inbox") {
-        try {
-          const newIncoming = await listNewMysoftIncomingEDocuments({
-            startDate: range.startDate,
-            endDate: range.endDate,
-            isUseDocDate: false,
-            tenantIdentifierNumber: activeTenantIdentifierNumber,
-            companyId: activeManagedCompanyId,
-            family,
-            fallback: true,
-          });
-          if (newIncoming.length > 0) {
-            const byId = new Map(mergedDocs.map((d) => [documentIdentity(d), d]));
-            for (const nd of newIncoming) {
-              if (!byId.has(documentIdentity(nd))) {
-                byId.set(documentIdentity(nd), nd);
-              }
-            }
-            mergedDocs = Array.from(byId.values());
-          }
-        } catch {
-          // Ignore secondary new-incoming probe failure
-        }
-      }
-
-      setDocuments(mergedDocs);
+      setDocuments(syncedDocuments);
       setLastSyncedAt(result?.syncedAt || new Date().toISOString());
-      const pulled = mergedDocs.length;
+      const pulled = syncedDocuments.length;
       setNotice(
         pulled > 0
-          ? `Mysoft’tan ${pulled} ${activeDirection === "inbox" ? "gelen" : "giden"} belge senkronize edildi (${isUseDocDate ? "Belge Tarihine Göre" : "Geliş/Zarf Tarihine Göre"}).`
+          ? `Mysoft’tan ${pulled} belge çekildi.`
           : "Mysoft bağlantısı tamam; seçilen firma ve dönemde belge yok.",
       );
     } catch (syncError) {
       setError(getErrorMessage(syncError));
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const isDocumentImported = useCallback(
-    (doc: MysoftEDocument): boolean => {
-      if (!Array.isArray(invoices) || invoices.length === 0) return false;
-      const data = asRecord(doc);
-      const ettn = String(data.ettn || data.uuid || "").trim();
-      const docNo = String(documentNumber(doc) || "").trim().toUpperCase();
-      return invoices.some(
-        (inv) =>
-          (ettn && inv.eDocumentEttn === ettn) ||
-          (docNo && docNo !== "-" && String(inv.invoiceNumber || "").trim().toUpperCase() === docNo),
-      );
-    },
-    [invoices],
-  );
-
-  const isCommercialDocument = useCallback((doc: MysoftEDocument): boolean => {
-    const data = asRecord(doc);
-    const prof = String(
-      data.profile || data.profileId || data.scenario || data.raw?.profileId || data.raw?.profile || "",
-    ).toUpperCase();
-    const tLabel = String(documentType(doc)).toUpperCase();
-    return prof.includes("TICARI") || tLabel.includes("TİCARİ") || tLabel.includes("TICARI");
-  }, []);
-
-  const isWaitingCommercialApproval = useCallback(
-    (doc: MysoftEDocument): boolean => {
-      if (documentDirection(doc) !== "inbox") return false;
-      const resolved = resolveMysoftDocumentStatus(documentStatus(doc));
-      if (resolved.status === "accepted" || resolved.status === "rejected" || resolved.status === "cancelled") {
-        return false;
-      }
-      return isCommercialDocument(doc) || resolved.tone === "warning";
-    },
-    [isCommercialDocument],
-  );
-
-  const [importingDocId, setImportingDocId] = useState<string | null>(null);
-  const [isBulkImporting, setIsBulkImporting] = useState(false);
-
-  const ensureDocumentEnriched = useCallback(
-    async (document: MysoftEDocument): Promise<MysoftEDocument> => {
-      let targetDoc = document;
-      const id = documentIdentity(document);
-      const docRec = asRecord(document);
-      const hasLines =
-        (Array.isArray(docRec.items) && docRec.items.length > 0) ||
-        (Array.isArray(docRec.lines) && docRec.lines.length > 0) ||
-        (Array.isArray(docRec.raw?.invoiceDetail) && docRec.raw.invoiceDetail.length > 0);
-      if (!hasLines && document.source !== "local") {
-        try {
-          const detailed = await getMysoftEDocument(id, {
-            direction: documentDirection(document),
-            tenantIdentifierNumber: activeTenantIdentifierNumber,
-            companyId: activeManagedCompanyId,
-            family,
-            fallback: true,
-          });
-          if (detailed) {
-            targetDoc = { ...document, ...detailed };
-          }
-        } catch {
-          // Proceed to XML enrichment fallback
-        }
-      }
-      if (documentDirection(targetDoc) === "inbox" && family !== "despatch") {
-        try {
-          targetDoc = await enrichIncomingEDocumentWithXml(targetDoc, {
-            direction: "inbox",
-            tenantIdentifierNumber: activeTenantIdentifierNumber,
-            companyId: activeManagedCompanyId,
-            family,
-          });
-        } catch {
-          // Ignore enrichment error
-        }
-      }
-      setDocuments((prev) =>
-        prev.map((d) => (documentIdentity(d) === id ? { ...d, ...targetDoc } : d)),
-      );
-      return targetDoc;
-    },
-    [activeManagedCompanyId, activeTenantIdentifierNumber, family],
-  );
-
-  const handleToggleExpandRow = async (doc: MysoftEDocument) => {
-    const id = documentIdentity(doc);
-    if (expandedDocId === id) {
-      setExpandedDocId(null);
-      return;
-    }
-    setExpandedDocId(id);
-    const rec = asRecord(doc);
-    const hasLines =
-      (Array.isArray(rec.items) && rec.items.length > 0) ||
-      (Array.isArray(rec.lines) && rec.lines.length > 0) ||
-      (Array.isArray(rec.raw?.invoiceDetail) && rec.raw.invoiceDetail.length > 0);
-    if (!hasLines && documentDirection(doc) === "inbox" && !isDespatch) {
-      setEnrichingDocId(id);
-      try {
-        await ensureDocumentEnriched(doc);
-      } finally {
-        setEnrichingDocId(null);
-      }
-    }
-  };
-
-  const handleImportToPurchaseInvoice = async (document: MysoftEDocument) => {
-    if (!onImportInvoice) return;
-    if (isDocumentImported(document)) {
-      setNotice(`${documentNumber(document)} nolu belge zaten Alış Faturaları listesinde kayıtlı.`);
-      return;
-    }
-    const id = documentIdentity(document);
-    setImportingDocId(id);
-    try {
-      const targetDoc = await ensureDocumentEnriched(document);
-      onImportInvoice(targetDoc);
-      setNotice(
-        `${documentNumber(targetDoc)} (${documentParty(targetDoc)}) faturası UBL kalemleriyle birlikte Alış Faturaları ve Cari Hesaplara başarıyla aktarıldı.`,
-      );
-    } catch (importErr) {
-      setError(getErrorMessage(importErr));
-    } finally {
-      setImportingDocId(null);
-    }
-  };
-
-  const handleFetchNewIncoming = async () => {
-    if (!activeTenantIdentifierNumber) {
-      setError("Önce Mysoft iş ortakları listesinden bir firma seçin veya VKN ile getirin.");
-      return;
-    }
-    setIsSyncing(true);
-    setNotice(null);
-    setError(null);
-    try {
-      const range = resolveEffectiveSyncRange("inbox");
-      const newDocs = await listNewMysoftIncomingEDocuments({
-        startDate: range.startDate,
-        endDate: range.endDate,
-        isUseDocDate,
-        tenantIdentifierNumber: activeTenantIdentifierNumber,
-        companyId: activeManagedCompanyId,
-        family,
-        fallback: true,
-      });
-      if (newDocs.length > 0) {
-        setDocuments((prev) => {
-          const byId = new Map(prev.map((d) => [documentIdentity(d), d]));
-          for (const nd of newDocs) {
-            byId.set(documentIdentity(nd), nd);
-          }
-          return Array.from(byId.values());
-        });
-      }
-      setLastSyncedAt(new Date().toISOString());
-      setNotice(
-        newDocs.length > 0
-          ? `Mysoft’tan ${newDocs.length} yeni gelen e-Fatura sorgulandı ve listeye eklendi.`
-          : "Mysoft gelen kutusunda bekleyen yeni e-Fatura bulunamadı.",
-      );
-    } catch (fetchErr) {
-      setError(getErrorMessage(fetchErr));
     } finally {
       setIsSyncing(false);
     }
@@ -994,11 +713,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               : new Blob([String(result?.data || "")], {
                   type:
                     result?.mimeType ||
-                    (format === "xml"
-                      ? "application/xml"
-                      : format === "html"
-                        ? "text/html"
-                        : "application/pdf"),
+                    (format === "xml" ? "application/xml" : "application/pdf"),
                 });
         const url = URL.createObjectURL(blob);
         const anchor = window.document.createElement("a");
@@ -1052,9 +767,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
             ? "İptal edildi"
             : "Gönderildi";
     const updated = patchDocumentStatus(document, nextStatus, nextLabel);
-    setSelectedDocument((prev) =>
-      prev && documentIdentity(prev) === documentIdentity(document) ? updated : prev,
-    );
+    setSelectedDocument(updated);
     setDocuments((current) =>
       current.map((item) => {
         const itemId = documentIdentity(item);
@@ -1062,53 +775,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         return itemId === selectedId ? updated : item;
       }),
     );
-  };
-
-  const runRowDocumentAction = async (
-    document: MysoftEDocument,
-    action: "accept" | "acknowledge" | "deny",
-    customReason?: string,
-  ) => {
-    if (activeCompany?.isPassive) {
-      setError("Pasif mükellef için e-Belge işlemi yapılamaz.");
-      return;
-    }
-    const id = documentIdentity(document);
-    const operationOptions = {
-      direction: documentDirection(document),
-      tenantIdentifierNumber: activeTenantIdentifierNumber,
-      companyId: activeManagedCompanyId,
-      family,
-    };
-    setRowActionLoading({ id, action });
-    setNotice(null);
-    try {
-      if (action === "accept") {
-        await acceptMysoftEDocument(id, operationOptions);
-      } else if (action === "acknowledge") {
-        await acknowledgeMysoftEDocument(id, operationOptions);
-      } else if (action === "deny") {
-        await denyMysoftEDocument(
-          id,
-          customReason || inlineRejectReason || "Muavin üzerinden reddedildi",
-          operationOptions,
-        );
-      }
-      applyActionResult(action, document);
-      setInlineRejectDocId(null);
-      setInlineRejectReason("");
-      setNotice(
-        action === "accept"
-          ? `${documentNumber(document)} nolu ticari fatura Mysoft'ta kabul edildi.`
-          : action === "acknowledge"
-            ? `${documentNumber(document)} nolu belge Mysoft'ta alındı olarak işaretlendi.`
-            : `${documentNumber(document)} nolu ticari fatura Mysoft'ta reddedildi.`,
-      );
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setRowActionLoading(null);
-    }
   };
 
   const runDocumentAction = async (
@@ -1176,26 +842,13 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   const allDocuments = useMemo(() => {
     const mergedMap = new Map<string, MysoftEDocument>();
     const makeDedupeKey = (doc: MysoftEDocument): string => {
-      const rec = asRecord(doc);
-      const ettn = String(rec.ettn || "").trim().toUpperCase();
-      if (activeDirection === "inbox" && ettn && ettn !== "-" && ettn !== "UNDEFINED") {
-        return `ETTN:${ettn}`;
-      }
       const cleanNo = String(documentNumber(doc) || "")
         .replace(/\s*\(TASLAK\)\s*$/i, "")
         .trim()
         .toUpperCase();
-      if (cleanNo && cleanNo !== "-" && cleanNo !== "TASLAK" && cleanNo !== "BELGE") {
-        return `NO:${cleanNo}`;
-      }
-      if (ettn && ettn !== "-" && ettn !== "UNDEFINED") {
-        return `ETTN:${ettn}`;
-      }
-      const id = String(doc.id || rec.id || "").trim().toUpperCase();
-      if (id && id !== "-" && id !== "UNDEFINED") {
-        return `ID:${id}`;
-      }
-      return `KEY:${Math.random()}`;
+      if (cleanNo && cleanNo !== "-") return `NO:${cleanNo}`;
+      const idOrEttn = String(asRecord(doc).ettn || doc.id || "").trim().toUpperCase();
+      return `ID:${idOrEttn}`;
     };
 
     // 1. Add persisted e-documents matching direction & family
@@ -1268,7 +921,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
     return counts;
   }, [allDocuments, selectedYear]);
 
-  // Filter by selected year & monthly/custom period option
+  // Filter by selected year & monthly period option
   const periodFilteredDocuments = useMemo(() => {
     const now = new Date();
     const targetYear =
@@ -1277,16 +930,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         : null;
 
     return allDocuments.filter((doc) => {
-      const docIso = String(documentDate(doc)).slice(0, 10);
-      if (period === "custom" && customStartDate && customEndDate) {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(docIso)) {
-          const from = customStartDate <= customEndDate ? customStartDate : customEndDate;
-          const to = customStartDate <= customEndDate ? customEndDate : customStartDate;
-          return docIso >= from && docIso <= to;
-        }
-        return true;
-      }
-
       const { year, month } = parseDocYearMonth(documentDate(doc));
       if (!year || !month) return true;
 
@@ -1303,6 +946,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
 
       if (period === "three_months") {
         const range = getSyncRange("three_months", selectedYear);
+        const docIso = String(documentDate(doc)).slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(docIso)) {
           return docIso >= range.startDate && docIso <= range.endDate;
         }
@@ -1315,36 +959,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       }
       return true;
     });
-  }, [allDocuments, period, selectedYear, customStartDate, customEndDate]);
-
-  // Quick tab counts for Incoming e-Invoices
-  const inboxQuickTabCounts = useMemo(() => {
-    const allCount = periodFilteredDocuments.length;
-    let waitingCount = 0;
-    let unaccountedCount = 0;
-    let accountedCount = 0;
-    let acceptedCount = 0;
-    let rejectedCount = 0;
-
-    for (const doc of periodFilteredDocuments) {
-      const st = resolveMysoftDocumentStatus(documentStatus(doc));
-      const imported = isDocumentImported(doc);
-      if (imported) accountedCount++;
-      else unaccountedCount++;
-
-      if (isWaitingCommercialApproval(doc)) waitingCount++;
-      if (st.tone === "success" || st.tone === "info") acceptedCount++;
-      if (st.tone === "danger") rejectedCount++;
-    }
-    return {
-      all: allCount,
-      waiting_response: waitingCount,
-      unaccounted: unaccountedCount,
-      accounted: accountedCount,
-      accepted: acceptedCount,
-      rejected: rejectedCount,
-    };
-  }, [periodFilteredDocuments, isDocumentImported, isWaitingCommercialApproval]);
+  }, [allDocuments, period, selectedYear]);
 
   const availableTypes = useMemo(
     () =>
@@ -1375,42 +990,13 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase("tr-TR");
-
-      if (query && !haystack.includes(query)) return false;
-      if (statusFilter !== "all" && documentStatus(document) !== statusFilter) return false;
-      if (typeFilter !== "all" && String(documentType(document)) !== typeFilter) return false;
-
-      if (activeDirection === "inbox" && inboxQuickTab !== "all") {
-        const st = resolveMysoftDocumentStatus(documentStatus(document));
-        if (inboxQuickTab === "waiting_response" && !isWaitingCommercialApproval(document)) {
-          return false;
-        }
-        if (inboxQuickTab === "unaccounted" && isDocumentImported(document)) {
-          return false;
-        }
-        if (inboxQuickTab === "accounted" && !isDocumentImported(document)) {
-          return false;
-        }
-        if (inboxQuickTab === "accepted" && st.tone !== "success" && st.tone !== "info") {
-          return false;
-        }
-        if (inboxQuickTab === "rejected" && st.tone !== "danger") {
-          return false;
-        }
-      }
-
-      return true;
+      return (
+        (!query || haystack.includes(query)) &&
+        (statusFilter === "all" || documentStatus(document) === statusFilter) &&
+        (typeFilter === "all" || String(documentType(document)) === typeFilter)
+      );
     });
-  }, [
-    periodFilteredDocuments,
-    searchTerm,
-    statusFilter,
-    typeFilter,
-    activeDirection,
-    inboxQuickTab,
-    isWaitingCommercialApproval,
-    isDocumentImported,
-  ]);
+  }, [periodFilteredDocuments, searchTerm, statusFilter, typeFilter]);
 
   const stats = useMemo(() => {
     const accepted = periodFilteredDocuments.filter((document) => {
@@ -1427,102 +1013,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       (sum, document) => sum + Number(documentAmount(document) || 0),
       0,
     );
-    return {
-      total: periodFilteredDocuments.length,
-      accepted,
-      waiting,
-      failed,
-      amount: total,
-      unaccounted: inboxQuickTabCounts.unaccounted,
-      accounted: inboxQuickTabCounts.accounted,
-      waitingCommercial: inboxQuickTabCounts.waiting_response,
-    };
-  }, [periodFilteredDocuments, inboxQuickTabCounts]);
-
-  const toggleSelectDoc = (id: string) => {
-    setSelectedDocIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    );
-  };
-
-  const toggleSelectAllFiltered = () => {
-    const allFilteredIds = filteredDocuments.map((d) => documentIdentity(d));
-    const allSelected =
-      allFilteredIds.length > 0 &&
-      allFilteredIds.every((id) => selectedDocIds.includes(id));
-    if (allSelected) {
-      setSelectedDocIds((prev) => prev.filter((id) => !allFilteredIds.includes(id)));
-    } else {
-      setSelectedDocIds(Array.from(new Set([...selectedDocIds, ...allFilteredIds])));
-    }
-  };
-
-  const handleBatchImportSelected = async () => {
-    if (!onImportInvoice) return;
-    const targetDocs = filteredDocuments.filter(
-      (d) =>
-        (selectedDocIds.length === 0 || selectedDocIds.includes(documentIdentity(d))) &&
-        !isDocumentImported(d),
-    );
-    if (targetDocs.length === 0) {
-      setNotice("Aktarılacak muhasebeleşmemiş gelen e-Fatura bulunamadı.");
-      return;
-    }
-    setIsBulkImporting(true);
-    try {
-      let importedCount = 0;
-      for (const doc of targetDocs) {
-        const enriched = await ensureDocumentEnriched(doc);
-        onImportInvoice(enriched);
-        importedCount++;
-      }
-      setSelectedDocIds([]);
-      setNotice(
-        `${importedCount} adet gelen e-Fatura UBL kalemleriyle birlikte Alış Faturaları ve Cari Hesaplara başarıyla aktarıldı.`,
-      );
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsBulkImporting(false);
-    }
-  };
-
-  const handleBatchActionSelected = async (action: "accept" | "acknowledge") => {
-    const targets = filteredDocuments.filter((d) =>
-      selectedDocIds.includes(documentIdentity(d)),
-    );
-    if (targets.length === 0) return;
-    setIsBulkImporting(true);
-    try {
-      let done = 0;
-      for (const doc of targets) {
-        const id = documentIdentity(doc);
-        const opts = {
-          direction: documentDirection(doc),
-          tenantIdentifierNumber: activeTenantIdentifierNumber,
-          companyId: activeManagedCompanyId,
-          family,
-        };
-        if (action === "accept") {
-          await acceptMysoftEDocument(id, opts);
-        } else {
-          await acknowledgeMysoftEDocument(id, opts);
-        }
-        applyActionResult(action, doc);
-        done++;
-      }
-      setSelectedDocIds([]);
-      setNotice(
-        action === "accept"
-          ? `${done} adet gelen fatura Mysoft'ta toplu olarak kabul edildi.`
-          : `${done} adet gelen fatura Mysoft'ta alındı olarak işaretlendi.`,
-      );
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsBulkImporting(false);
-    }
-  };
+    return { total: periodFilteredDocuments.length, accepted, waiting, failed, amount: total };
+  }, [periodFilteredDocuments]);
 
   const getEDocumentsExportData = useCallback((): ExportData => {
     const isDespatch = family === "despatch";
@@ -1538,7 +1030,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       "Tutar",
       "Para Birimi",
       "Durum",
-      "Muhasebe Durumu",
       "ETTN / UUID",
     ];
     const rows = filteredDocuments.map((doc) => {
@@ -1553,11 +1044,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         documentAmount(doc) !== undefined ? formatMoney(documentAmount(doc)) : "-",
         documentCurrency(doc) || "TRY",
         resolveMysoftDocumentStatus(documentStatus(doc)).label,
-        activeDirection === "inbox"
-          ? isDocumentImported(doc)
-            ? "Alış Faturasına Aktarıldı"
-            : "Bekliyor"
-          : "Satış Faturası",
         String(data.ettn || data.uuid || "-"),
       ];
     });
@@ -1570,7 +1056,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       headers,
       rows,
     };
-  }, [family, activeDirection, filteredDocuments, isDocumentImported]);
+  }, [family, activeDirection, filteredDocuments]);
 
   const directionLabel = isDespatch
     ? activeDirection === "inbox"
@@ -1594,33 +1080,13 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   if (selectedDocument) {
     const docData = asRecord(selectedDocument);
     const docNo = String(documentNumber(selectedDocument) || "TASLAK");
-    const cleanDocNo = docNo.replace(/\s*\(TASLAK\)\s*$/i, "").trim().toUpperCase();
-    const isIncoming = documentDirection(selectedDocument) === "inbox";
-    const docEttn = String(docData.ettn || docData.uuid || "").trim().toUpperCase();
-    const hasValidDocNo =
-      cleanDocNo.length >= 4 &&
-      cleanDocNo !== "-" &&
-      cleanDocNo !== "TASLAK" &&
-      cleanDocNo !== "BELGE";
-    const hasValidEttn =
-      docEttn.length > 8 &&
-      docEttn !== "-" &&
-      docEttn !== "UNDEFINED" &&
-      docEttn !== "NULL";
-
-    const matchedLocalInvoice = (invoices || []).find((inv) => {
-      // Must match document direction: purchase for inbox, sales for outbox
-      if (isIncoming && inv.type !== "purchase") return false;
-      if (!isIncoming && inv.type !== "sales") return false;
-
-      const invEttn = String(inv.eDocumentEttn || "").trim().toUpperCase();
-      if (hasValidEttn && invEttn === docEttn) return true;
-
-      const invNo = String(inv.invoiceNumber || "").trim().toUpperCase();
-      if (hasValidDocNo && invNo === cleanDocNo) return true;
-
-      return false;
-    });
+    const cleanDocNo = docNo.replace(/\s*\(TASLAK\)\s*$/i, "").trim();
+    const matchedLocalInvoice = (invoices || []).find(
+      (inv) =>
+        inv.invoiceNumber === docNo ||
+        inv.invoiceNumber === cleanDocNo ||
+        (docData.ettn && inv.eDocumentEttn === docData.ettn)
+    );
 
     const rawPayloadObj = asRecord(docData.raw);
     const rawLines = Array.isArray(docData.items) && docData.items.length > 0
@@ -1638,7 +1104,9 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       : [];
 
     const mappedItems: InvoiceItem[] =
-      rawLines.length > 0
+      matchedLocalInvoice && matchedLocalInvoice.items?.length > 0
+        ? matchedLocalInvoice.items
+        : rawLines.length > 0
         ? rawLines.map((ln: any, idx: number) => {
             const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
             const price = Number(ln.unitPrice ?? ln.unitPriceTra ?? ln.price ?? ln.amount ?? 0) || 0;
@@ -1658,8 +1126,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               totalWithVat: totalWithoutVat + vatAmount,
             };
           })
-        : matchedLocalInvoice && matchedLocalInvoice.items && matchedLocalInvoice.items.length > 0
-        ? matchedLocalInvoice.items
         : [
             {
               id: "line_1",
@@ -1675,61 +1141,31 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           ];
 
     const isArchive = isArchiveDocument(selectedDocument);
-    const previewInvoice: Partial<Invoice> = {
-      ...(matchedLocalInvoice || {}),
-      id: documentIdentity(selectedDocument) || matchedLocalInvoice?.id,
-      invoiceNumber:
-        docNo !== "-" && docNo !== "TASLAK"
-          ? docNo
-          : (matchedLocalInvoice?.invoiceNumber || docNo),
-      type: isIncoming ? "purchase" : "sales",
+    const previewInvoice: Partial<Invoice> = matchedLocalInvoice || {
+      id: documentIdentity(selectedDocument),
+      invoiceNumber: docNo,
+      type: documentDirection(selectedDocument) === "inbox" ? "purchase" : "sales",
       invoiceScenario: isArchive
         ? "EARSIVFATURA"
-        : (docData.profile as any) || matchedLocalInvoice?.invoiceScenario || "TICARIFATURA",
-      invoiceProfileType: matchedLocalInvoice?.invoiceProfileType || "SATIS",
+        : (docData.profile as any) || "TICARIFATURA",
+      invoiceProfileType: "SATIS",
       eDocumentType: isArchive ? "e_arsiv" : "e_fatura",
-      eDocumentEttn: String(docData.ettn || docData.uuid || matchedLocalInvoice?.eDocumentEttn || ""),
-      contactId: matchedLocalInvoice?.contactId || "edoc_party",
-      contactName: String(documentParty(selectedDocument) || matchedLocalInvoice?.contactName || ""),
-      taxNumber: String(documentTaxNumber(selectedDocument) || matchedLocalInvoice?.taxNumber || ""),
-      taxOffice: String(
-        docData.taxOffice ||
-        docData.receiverTaxOffice ||
-        docData.senderTaxOffice ||
-        matchedLocalInvoice?.taxOffice ||
-        "-"
-      ),
-      customerAddress: String(
-        docData.address ||
-        docData.receiverAddress ||
-        docData.senderAddress ||
-        matchedLocalInvoice?.customerAddress ||
-        ""
-      ),
-      issueDate: String(
-        documentDate(selectedDocument) ||
-        matchedLocalInvoice?.issueDate ||
-        new Date().toISOString().slice(0, 10)
-      ).slice(0, 10),
-      dueDate: String(
-        docData.dueDate ||
-        matchedLocalInvoice?.dueDate ||
-        documentDate(selectedDocument) ||
-        new Date().toISOString().slice(0, 10)
-      ).slice(0, 10),
+      eDocumentEttn: String(docData.ettn || docData.uuid || ""),
+      contactId: "edoc_party",
+      contactName: String(documentParty(selectedDocument)),
+      taxNumber: String(documentTaxNumber(selectedDocument)),
+      taxOffice: String(docData.taxOffice || docData.receiverTaxOffice || docData.senderTaxOffice || "-"),
+      customerAddress: String(docData.address || docData.receiverAddress || docData.senderAddress || ""),
+      issueDate: String(documentDate(selectedDocument) || new Date().toISOString().slice(0, 10)).slice(0, 10),
+      dueDate: String(docData.dueDate || documentDate(selectedDocument) || new Date().toISOString().slice(0, 10)).slice(0, 10),
       items: mappedItems,
-      subtotal: Number(
-        docData.subtotal ??
-        (documentAmount(selectedDocument) !== undefined && documentAmount(selectedDocument) !== null
-          ? documentAmount(selectedDocument)
-          : matchedLocalInvoice?.subtotal ?? 0)
-      ),
-      totalVat: Number(docData.vatTotal ?? matchedLocalInvoice?.totalVat ?? 0),
-      grandTotal: Number(documentAmount(selectedDocument) || matchedLocalInvoice?.grandTotal || 0),
-      payableAmount: Number(documentAmount(selectedDocument) || matchedLocalInvoice?.payableAmount || 0),
-      paidAmount: matchedLocalInvoice?.paidAmount || 0,
-      remainingAmount: Number(documentAmount(selectedDocument) || matchedLocalInvoice?.remainingAmount || 0),
-      currency: documentCurrency(selectedDocument) || matchedLocalInvoice?.currency || "TRY",
+      subtotal: Number(docData.subtotal ?? documentAmount(selectedDocument) ?? 0),
+      totalVat: Number(docData.vatTotal ?? 0),
+      grandTotal: Number(documentAmount(selectedDocument) ?? 0),
+      payableAmount: Number(documentAmount(selectedDocument) ?? 0),
+      paidAmount: 0,
+      remainingAmount: Number(documentAmount(selectedDocument) ?? 0),
+      currency: documentCurrency(selectedDocument),
       status: "sent",
     };
 
@@ -1779,16 +1215,11 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
 
     const tone = statusTone(documentStatus(selectedDocument));
     const docId = documentIdentity(selectedDocument);
-    const isIncomingDoc = documentDirection(selectedDocument) === "inbox";
 
     return (
       <DetailPageLayout
         title={`${docNo} — ${documentParty(selectedDocument)}`}
-        subtitle={
-          isIncomingDoc
-            ? `Gelen Orijinal ${isDespatch ? "e-İrsaliye" : isArchive ? "e-Arşiv Fatura" : "e-Fatura"} Belgesi • ETTN: ${docData.ettn || docData.uuid || "-"}`
-            : `Resmi GİB ${isArchive ? "e-Arşiv Fatura" : "e-Fatura"} Görünümü • ETTN: ${docData.ettn || docData.uuid || "-"}`
-        }
+        subtitle={`Resmi GİB ${isArchive ? "e-Arşiv Fatura" : "e-Fatura"} Görünümü • ETTN: ${docData.ettn || docData.uuid || "-"}`}
         breadcrumbs={[
           { label: directionLabel, onClick: handleCloseDetail },
           { label: docNo, active: true },
@@ -1802,7 +1233,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
         headerIcon={<FileText className="w-5 h-5 text-red-700" />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {isIncomingDoc && (
+            {documentDirection(selectedDocument) === "inbox" && (
               <>
                 <button
                   type="button"
@@ -1822,41 +1253,10 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                   <XCircle className="w-3.5 h-3.5" />
                   <span>Reddet</span>
                 </button>
-                <button
-                  type="button"
-                  disabled={Boolean(actionLoading)}
-                  onClick={() => void runDocumentAction("acknowledge")}
-                  className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <ArrowDownToLine className="w-3.5 h-3.5" />
-                  <span>Alındı İşaretle</span>
-                </button>
-                {!isDespatch && onImportInvoice && (
-                  isDocumentImported(selectedDocument) ? (
-                    <span className="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Alış Faturalarında Kayıtlı</span>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={importingDocId === docId}
-                      onClick={() => void handleImportToPurchaseInvoice(selectedDocument)}
-                      className="px-3 py-2 rounded-xl bg-[#0f6bae] hover:bg-[#0c568c] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      {importingDocId === docId ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ArrowDownToLine className="w-3.5 h-3.5" />
-                      )}
-                      <span>Alış Faturasına Aktar (Muhasebeleştir)</span>
-                    </button>
-                  )
-                )}
               </>
             )}
 
-            {!isIncomingDoc && isArchive && (
+            {documentDirection(selectedDocument) === "outbox" && isArchive && (
               <button
                 type="button"
                 disabled={Boolean(actionLoading)}
@@ -1888,46 +1288,23 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
               <span>UBL XML İndir</span>
             </button>
 
-            {isIncomingDoc && (
-              <button
-                type="button"
-                onClick={() => void triggerDownload(selectedDocument, "html")}
-                disabled={downloading?.id === docId}
-                className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>GİB HTML İndir</span>
-              </button>
-            )}
-
-            {isIncomingDoc ? (
-              <button
-                type="button"
-                onClick={() => void printHtmlElement("invoice-preview-paper", `${docNo}_Gelen_eBelge`)}
-                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5 text-sky-300" />
-                <span>Faturayı Yazdır</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  openInvoicePrintModal(
-                    {
-                      invoice: previewInvoice,
-                      companySettings: { ...effectiveCompanySettings, invoiceDesign: localDesign },
-                      contact: effectiveBuyerContact,
-                    },
-                    { title: `${docNo}_eBelge` }
-                  )
-                }
-                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5 text-purple-300" />
-                <span>Yazdır / Şablon</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() =>
+                openInvoicePrintModal(
+                  {
+                    invoice: previewInvoice,
+                    companySettings: { ...effectiveCompanySettings, invoiceDesign: localDesign },
+                    contact: effectiveBuyerContact,
+                  },
+                  { title: `${docNo}_eBelge` }
+                )
+              }
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5 text-purple-300" />
+              <span>Yazdır / Şablon</span>
+            </button>
 
             <button
               type="button"
@@ -1979,44 +1356,25 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           )}
 
           <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
-            {isIncomingDoc ? (
-              <IncomingGIBInvoiceView
-                invoice={previewInvoice}
-                buyerCompanySettings={companySettings}
-                rawEDocument={selectedDocument}
-                tenantIdentifierNumber={activeTenantIdentifierNumber}
-                companyId={activeManagedCompanyId}
-                family={family}
-                paperId="invoice-preview-paper"
-              />
-            ) : (
-              <OfficialGIBInvoicePaper
-                invoice={previewInvoice}
-                companySettings={effectiveCompanySettings}
-                contact={effectiveBuyerContact}
-                designOverride={localDesign}
-                previewDocTypeOverride={previewDocType}
-                paperId="invoice-preview-paper"
-              />
-            )}
+            <OfficialGIBInvoicePaper
+              invoice={previewInvoice}
+              companySettings={effectiveCompanySettings}
+              contact={effectiveBuyerContact}
+              designOverride={localDesign}
+              previewDocTypeOverride={previewDocType}
+              paperId="invoice-preview-paper"
+            />
           </div>
         </div>
       </DetailPageLayout>
     );
   }
 
-  const pkAlias =
-    companySettings?.mysoftPkAlias ||
-    companySettings?.eInvoiceAlias ||
-    (activeTenantIdentifierNumber
-      ? `urn:mail:defaultpk@${activeTenantIdentifierNumber}.gov.tr`
-      : "urn:mail:defaultpk@muavin.tr");
-
   return (
-    <section className="p-4 sm:p-6 max-w-[1500px] mx-auto space-y-5 sm:space-y-6">
+    <section className="p-4 sm:p-6 max-w-[1500px] mx-auto space-y-6 sm:space-y-7">
       {/* EDITORIAL MODULE ENTRANCE HEADER */}
       <ModuleEntranceHeader
-        badge="Mysoft e-Belge Entegrasyonu"
+        badge="Mysoft Entegrasyonu"
         badgeIcon={<DirectionIcon className="w-2.5 h-2.5 text-[#0f6bae]" />}
         title={directionLabel}
         description={
@@ -2024,7 +1382,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
             ? "Mysoft gelen ve giden e-irsaliye listesi. Belgeler seçilen müşterinin VKN’si ile çekilir."
             : activeDirection === "outbox"
               ? "Kesilen tüm gelir faturaları (e-Fatura, e-Arşiv ve GYR) bu ekrana otomatik aktarılır; aylık olarak filtreleyebilir ve Mysoft ile senkronize edebilirsiniz."
-              : "Mysoft Gelen e-Fatura Entegrasyon Merkezi. Gelen faturaları belge veya geliş tarihine göre sorgulayın, orijinal GİB görünümünde inceleyin, UBL kalemleriyle alış faturalarına ve cari hesaplara tek tıkla aktarın."
+              : "Mysoft Gelen / Giden Fatura ekranı. Aylık dönem seçip senkronize edin; kabul, red, PDF/XML buradan."
         }
         actions={
           <>
@@ -2070,7 +1428,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                 Bu Ay ({TURKISH_MONTHS[new Date().getMonth()]?.name})
               </option>
               <option value="three_months">Son 3 Ay</option>
-              <option value="custom">Özel Tarih Aralığı</option>
               <optgroup label="Aylık Seçenekler">
                 {TURKISH_MONTHS.map((m) => (
                   <option key={m.id} value={`month_${m.id}`}>
@@ -2079,37 +1436,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                 ))}
               </optgroup>
             </select>
-            {activeDirection === "inbox" && !isDespatch && (
-              <button
-                type="button"
-                onClick={() => void handleFetchNewIncoming()}
-                disabled={isSyncing || tenantsLoading || !activeTenantIdentifierNumber}
-                className="h-10 px-3.5 rounded-xl bg-[#eaedff] hover:bg-[#dae2fd] text-[#0f6bae] text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60 cursor-pointer shrink-0"
-                title="Mysoft gelen kutusundaki yeni faturaları sorgula"
-              >
-                <ArrowDownToLine className="w-4 h-4" />
-                <span>Yeni Gelenleri Sorgula</span>
-              </button>
-            )}
-            {activeDirection === "inbox" && !isDespatch && onImportInvoice && filteredDocuments.some((d) => !isDocumentImported(d)) && (
-              <button
-                type="button"
-                disabled={isBulkImporting}
-                onClick={() => void handleBatchImportSelected()}
-                className="h-10 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-60 cursor-pointer shrink-0"
-              >
-                {isBulkImporting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4" />
-                )}
-                <span>
-                  {selectedDocIds.length > 0
-                    ? `Seçilenleri Alışa Aktar (${selectedDocIds.length})`
-                    : `Gelenleri Alışa Aktar (${filteredDocuments.filter((d) => !isDocumentImported(d)).length})`}
-                </span>
-              </button>
-            )}
             <button
               type="button"
               onClick={handleSync}
@@ -2127,128 +1453,6 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           </>
         }
       />
-
-      {/* MYSOFT GELEN E-FATURA ENTEGRASYON MERKEZİ PANELİ */}
-      {activeDirection === "inbox" && (
-        <div className="bg-gradient-to-r from-[#0b2341] via-[#10335c] to-[#13467c] rounded-2xl p-4 sm:p-5 text-white shadow-md border border-sky-900/40">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  {connectionStatus?.mockMode
-                    ? "Mysoft Entegrasyon Aktif (Simülasyon / Canlı UBL Motoru)"
-                    : "Mysoft Canlı GİB Entegrasyonu Aktif"}
-                </span>
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-white/10 text-sky-100 border border-white/15">
-                  Mükellef VKN/TCKN: <strong className="text-white">{activeTenantIdentifierNumber || "-"}</strong>
-                </span>
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-mono bg-white/10 text-sky-200 border border-white/15 hidden sm:inline-block">
-                  PK Etiketi: {pkAlias}
-                </span>
-              </div>
-              <h3 className="text-sm sm:text-base font-bold tracking-tight text-white">
-                Mysoft Gelen {isDespatch ? "e-İrsaliye" : "e-Fatura"} Entegrasyon ve Otomatik Muhasebeleştirme Merkezi
-              </h3>
-              <p className="text-xs text-sky-100/85 max-w-3xl">
-                Mysoft gelen kutusundaki belgeler UBL-TR 1.2 XML ve orijinal GİB XSLT görünümü ile çekilir. Faturaları{" "}
-                <strong>Belge Tarihine</strong> veya <strong>GİB Zarf Geliş Tarihine</strong> göre sorgulayabilir, ticari faturalara kabul/red yanıtı verebilir ve alış faturalarına kalem bazında aktarabilirsiniz.
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
-              {/* Sorgulama Kriteri: Fatura Tarihi vs Geliş/Zarf Tarihi */}
-              <div className="bg-white/10 border border-white/15 rounded-xl p-1 flex items-center text-xs">
-                <button
-                  type="button"
-                  onClick={() => setIsUseDocDate(true)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                    isUseDocDate
-                      ? "bg-white text-[#0b2341] shadow-xs"
-                      : "text-sky-100 hover:text-white"
-                  }`}
-                  title="Fatura üzerindeki düzenleme tarihine göre sorgula (isUseDocDate: true)"
-                >
-                  Fatura Tarihine Göre
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsUseDocDate(false)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                    !isUseDocDate
-                      ? "bg-white text-[#0b2341] shadow-xs"
-                      : "text-sky-100 hover:text-white"
-                  }`}
-                  title="Zarfın Mysoft gelen kutusuna düştüğü tarihe göre sorgula (isUseDocDate: false)"
-                >
-                  Geliş / Zarf Tarihine Göre
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Özel Tarih Aralığı & Entegrasyon Durum Çubuğu */}
-          <div className="mt-3.5 pt-3 border-t border-white/15 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sky-200 font-semibold">Sorgu Tarih Aralığı:</span>
-              <input
-                type="date"
-                value={
-                  period === "custom"
-                    ? customStartDate
-                    : resolveEffectiveSyncRange("inbox").startDate
-                }
-                onChange={(e) => {
-                  setCustomStartDate(e.target.value);
-                  setPeriod("custom");
-                }}
-                className="h-8 px-2.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-mono outline-none focus:border-sky-300"
-              />
-              <span className="text-sky-200">—</span>
-              <input
-                type="date"
-                value={
-                  period === "custom"
-                    ? customEndDate
-                    : resolveEffectiveSyncRange("inbox").endDate
-                }
-                onChange={(e) => {
-                  setCustomEndDate(e.target.value);
-                  setPeriod("custom");
-                }}
-                className="h-8 px-2.5 rounded-lg bg-white/10 border border-white/20 text-white text-xs font-mono outline-none focus:border-sky-300"
-              />
-              <button
-                type="button"
-                onClick={() => void handleSync()}
-                disabled={isSyncing || !activeTenantIdentifierNumber}
-                className="h-8 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {isSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                <span>Bu Aralığı Çek</span>
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-sky-200">
-              <span>
-                Aktif Firma: <strong className="text-white">{activeCompany?.name || companySettings?.companyTitle || "Seçili Mükellef"}</strong>
-              </span>
-              {lastSyncedAt && (
-                <span>
-                  • Son Senkronizasyon:{" "}
-                  <strong className="text-emerald-300">
-                    {formatDate(lastSyncedAt)}{" "}
-                    {new Date(lastSyncedAt).toLocaleTimeString("tr-TR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </strong>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {!shouldHideMysoftPartners && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
@@ -2317,7 +1521,7 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       {notice && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm">
           <span className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="w-4 h-4" />
             {notice}
           </span>
           <button
@@ -2354,72 +1558,38 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       )}
 
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-        {(activeDirection === "inbox" && !isDespatch
-          ? [
-              {
-                label: "Toplam Gelen Fatura",
-                value: stats.total.toLocaleString("tr-TR"),
-                icon: FileText,
-                accent: "text-[#0f6bae] bg-[#eaedff]",
-              },
-              {
-                label: "Muhasebeleşmeyen (Bekleyen)",
-                value: stats.unaccounted.toLocaleString("tr-TR"),
-                icon: ArrowDownToLine,
-                accent: "text-amber-600 bg-amber-50",
-              },
-              {
-                label: "Alışa Aktarılan (Muhasebeleşen)",
-                value: stats.accounted.toLocaleString("tr-TR"),
-                icon: CheckCircle2,
-                accent: "text-emerald-600 bg-emerald-50",
-              },
-              {
-                label: "Yanıt Bekleyen Ticari",
-                value: stats.waitingCommercial.toLocaleString("tr-TR"),
-                icon: Clock3,
-                accent: "text-purple-600 bg-purple-50",
-              },
-              {
-                label: "Gelen Fatura Toplamı",
-                value: formatMoney(stats.amount),
-                icon: DirectionIcon,
-                accent: "text-sky-600 bg-sky-50",
-              },
-            ]
-          : [
-              {
-                label: "Toplam belge",
-                value: stats.total.toLocaleString("tr-TR"),
-                icon: FileText,
-                accent: "text-[#0f6bae] bg-[#eaedff]",
-              },
-              {
-                label: "Başarılı durum",
-                value: stats.accepted.toLocaleString("tr-TR"),
-                icon: CheckCircle2,
-                accent: "text-emerald-600 bg-emerald-50",
-              },
-              {
-                label: "Bekleyen",
-                value: stats.waiting.toLocaleString("tr-TR"),
-                icon: Clock3,
-                accent: "text-amber-600 bg-amber-50",
-              },
-              {
-                label: "Hata / red / iptal",
-                value: stats.failed.toLocaleString("tr-TR"),
-                icon: XCircle,
-                accent: "text-rose-600 bg-rose-50",
-              },
-              {
-                label: "Belge toplamı",
-                value: formatMoney(stats.amount),
-                icon: DirectionIcon,
-                accent: "text-sky-600 bg-sky-50",
-              },
-            ]
-        ).map((card) => {
+        {[
+          {
+            label: "Toplam belge",
+            value: stats.total.toLocaleString("tr-TR"),
+            icon: FileText,
+            accent: "text-[#0f6bae] bg-[#eaedff]",
+          },
+          {
+            label: "Başarılı durum",
+            value: stats.accepted.toLocaleString("tr-TR"),
+            icon: CheckCircle2,
+            accent: "text-emerald-600 bg-emerald-50",
+          },
+          {
+            label: "Bekleyen",
+            value: stats.waiting.toLocaleString("tr-TR"),
+            icon: Clock3,
+            accent: "text-amber-600 bg-amber-50",
+          },
+          {
+            label: "Hata / red / iptal",
+            value: stats.failed.toLocaleString("tr-TR"),
+            icon: XCircle,
+            accent: "text-rose-600 bg-rose-50",
+          },
+          {
+            label: "Belge toplamı",
+            value: formatMoney(stats.amount),
+            icon: DirectionIcon,
+            accent: "text-sky-600 bg-sky-50",
+          },
+        ].map((card) => {
           const CardIcon = card.icon;
           return (
             <div
@@ -2536,119 +1706,13 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* GELEN E-FATURA HIZLI SEKME FİLTRELERİ */}
-        {activeDirection === "inbox" && !isDespatch && (
-          <div className="px-4 pt-3 pb-2.5 bg-slate-50/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(
-                [
-                  { id: "all", label: "Tümü", count: inboxQuickTabCounts.all },
-                  {
-                    id: "unaccounted",
-                    label: "Muhasebeleşmeyenler",
-                    count: inboxQuickTabCounts.unaccounted,
-                  },
-                  {
-                    id: "accounted",
-                    label: "Alışa Aktarılanlar",
-                    count: inboxQuickTabCounts.accounted,
-                  },
-                  {
-                    id: "waiting_response",
-                    label: "Yanıt Bekleyen Ticari",
-                    count: inboxQuickTabCounts.waiting_response,
-                  },
-                  {
-                    id: "accepted",
-                    label: "Kabul / Temel Fatura",
-                    count: inboxQuickTabCounts.accepted,
-                  },
-                  {
-                    id: "rejected",
-                    label: "Reddedilenler",
-                    count: inboxQuickTabCounts.rejected,
-                  },
-                ] as { id: InboxQuickTab; label: string; count: number }[]
-              ).map((tab) => {
-                const active = inboxQuickTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setInboxQuickTab(tab.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                      active
-                        ? "bg-[#0f6bae] text-white shadow-2xs"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span>{tab.label}</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                        active
-                          ? "bg-white/20 text-white"
-                          : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {selectedDocIds.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 bg-[#eaedff] border border-[#0f6bae]/30 px-3 py-1.5 rounded-xl">
-                <span className="text-xs font-bold text-[#0f6bae]">
-                  {selectedDocIds.length} belge seçili
-                </span>
-                {onImportInvoice && (
-                  <button
-                    type="button"
-                    disabled={isBulkImporting}
-                    onClick={() => void handleBatchImportSelected()}
-                    className="px-2.5 py-1 rounded-lg bg-[#0f6bae] hover:bg-[#0c568c] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  >
-                    <ArrowDownToLine className="w-3 h-3" />
-                    <span>Seçilenleri Alışa Aktar</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={isBulkImporting}
-                  onClick={() => void handleBatchActionSelected("accept")}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Toplu Kabul Et</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isBulkImporting}
-                  onClick={() => void handleBatchActionSelected("acknowledge")}
-                  className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  <span>Alındı İşaretle</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDocIds([])}
-                  className="text-[11px] text-slate-600 hover:text-slate-900 underline ml-1 cursor-pointer"
-                >
-                  Temizle
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
         <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
           <div className="relative flex-1 max-w-xl">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Belge no, cari unvan, VKN veya ETTN ara..."
+              placeholder="Belge no, cari, VKN veya ETTN ara..."
               className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-[#0f6bae] focus:ring-2 focus:ring-[#0f6bae]/10"
             />
           </div>
@@ -2686,19 +1750,12 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           </div>
         </div>
         {lastSyncedAt && (
-          <div className="px-4 py-2 bg-slate-50 text-[11px] text-slate-500 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
-            <span>
-              Son senkronizasyon: {formatDate(lastSyncedAt)}{" "}
-              {new Date(lastSyncedAt).toLocaleTimeString("tr-TR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-            {activeDirection === "inbox" && (
-              <span className="text-[#0f6bae] font-semibold">
-                Gelen faturalar orijinal GİB XSLT / UBL-TR 1.2 görünümüyle açılır
-              </span>
-            )}
+          <div className="px-4 py-2 bg-slate-50 text-[11px] text-slate-500 border-b border-slate-100">
+            Son senkronizasyon: {formatDate(lastSyncedAt)}{" "}
+            {new Date(lastSyncedAt).toLocaleTimeString("tr-TR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </div>
         )}
         {isLoading && allDocuments.length === 0 ? (
@@ -2723,16 +1780,13 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                   (period !== "all" ? "veya Tüm Aylar" : "veya yıl") +
                   ") seçerek tekrar deneyin."}
             </p>
-            {period !== "all" || inboxQuickTab !== "all" ? (
+            {period !== "all" ? (
               <button
                 type="button"
-                onClick={() => {
-                  setPeriod("all");
-                  setInboxQuickTab("all");
-                }}
+                onClick={() => setPeriod("all")}
                 className="mt-4 px-3.5 py-2 rounded-lg bg-[#eaedff] text-[#0f6bae] text-xs font-semibold hover:bg-[#dae2fd] cursor-pointer"
               >
-                Tüm Belgeleri Göster
+                Tüm Ayları Göster
               </button>
             ) : (
               allDocuments.length === 0 && (
@@ -2748,34 +1802,16 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left">
+            <table className="w-full min-w-[900px] text-left">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr className="text-[11px] uppercase tracking-wider text-slate-500">
-                  {activeDirection === "inbox" && !isDespatch && (
-                    <th className="w-9 px-3 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        aria-label="Tümünü seç"
-                        checked={
-                          filteredDocuments.length > 0 &&
-                          filteredDocuments.every((d) =>
-                            selectedDocIds.includes(documentIdentity(d)),
-                          )
-                        }
-                        onChange={toggleSelectAllFiltered}
-                        className="rounded border-slate-300 text-[#0f6bae] focus:ring-[#0f6bae] cursor-pointer"
-                      />
-                    </th>
-                  )}
-                  <th className="w-10 px-2 py-3 font-semibold text-center"></th>
+                  <th className="w-10 px-3 py-3 font-semibold text-center"></th>
                   <th className="px-4 py-3 font-semibold">Belge</th>
-                  <th className="px-4 py-3 font-semibold">
-                    {activeDirection === "inbox" ? "Gönderici Cari (Tedarikçi)" : "Alıcı Cari"}
-                  </th>
+                  <th className="px-4 py-3 font-semibold">Cari</th>
                   <th className="px-4 py-3 font-semibold">Tarih</th>
-                  <th className="px-4 py-3 font-semibold">Senaryo / Tür</th>
+                  <th className="px-4 py-3 font-semibold">Tür</th>
                   <th className="px-4 py-3 font-semibold text-right">Tutar</th>
-                  <th className="px-4 py-3 font-semibold">Zarf & Muhasebe Durumu</th>
+                  <th className="px-4 py-3 font-semibold">Durum</th>
                   <th className="px-4 py-3 font-semibold text-right">
                     İşlemler
                   </th>
@@ -2789,41 +1825,17 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                   const id = documentIdentity(document);
                   const isDownloading = downloading?.id === id;
                   const isExpanded = expandedDocId === id;
-                  const isSelected = selectedDocIds.includes(id);
-                  const isWaitingResp = isWaitingCommercialApproval(document);
-                  const isRowBusy = rowActionLoading?.id === id;
-                  const profileBadge = String(
-                    data.profile || data.profileId || data.raw?.profileId || "",
-                  ).toUpperCase();
-
                   return (
                     <React.Fragment key={id}>
                       <tr
-                        className={`transition-colors ${
-                          isExpanded
-                            ? "bg-[#eaedff]/30"
-                            : isSelected
-                              ? "bg-sky-50/70"
-                              : "hover:bg-blue-50/80"
-                        }`}
+                        className={`transition-colors ${isExpanded ? "bg-[#eaedff]/30" : "hover:bg-blue-50/80"}`}
                       >
-                        {activeDirection === "inbox" && !isDespatch && (
-                          <td className="w-9 px-3 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              aria-label={`${documentNumber(document)} seç`}
-                              checked={isSelected}
-                              onChange={() => toggleSelectDoc(id)}
-                              className="rounded border-slate-300 text-[#0f6bae] focus:ring-[#0f6bae] cursor-pointer"
-                            />
-                          </td>
-                        )}
-                        <td className="w-10 px-2 py-3 text-center">
+                        <td className="w-10 px-3 py-3 text-center">
                           <button
                             type="button"
-                            onClick={() => void handleToggleExpandRow(document)}
+                            onClick={() => setExpandedDocId(isExpanded ? null : id)}
                             className="p-1 rounded-md text-slate-400 hover:text-[#0f6bae] hover:bg-[#eaedff] transition-colors cursor-pointer"
-                            title={isExpanded ? "Detayı Gizle" : "Hızlı Kalem Özeti Göster"}
+                            title={isExpanded ? "Detayı Gizle" : "Hızlı Detayları Göster"}
                           >
                             {isExpanded ? (
                               <ChevronDown className="w-4 h-4 text-[#0f6bae]" />
@@ -2836,46 +1848,32 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                           <button
                             type="button"
                             onClick={() => void openDetails(document)}
-                            className="group text-left cursor-pointer"
+                            className="group text-left"
                           >
-                            <span className="font-mono text-xs font-bold text-slate-800 group-hover:text-[#0f6bae] underline-offset-2 group-hover:underline">
+                            <span className="font-mono text-xs font-semibold text-slate-800 group-hover:text-[#0f6bae]">
                               {documentNumber(document)}
                             </span>
-                            <span className="block text-[11px] text-slate-400 mt-0.5 font-mono">
-                              ETTN: {String(data.ettn || data.uuid || "-").slice(0, 18)}
-                              {String(data.ettn || data.uuid || "").length > 18 ? "…" : ""}
+                            <span className="block text-[11px] text-slate-400 mt-0.5">
+                              ETTN: {data.ettn || data.uuid || "-"}
                             </span>
                           </button>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-xs font-semibold text-slate-800 max-w-[230px] truncate">
+                          <p className="text-xs font-semibold text-slate-800 max-w-[220px] truncate">
                             {documentParty(document)}
                           </p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                            VKN/TCKN: {documentTaxNumber(document)}
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {documentTaxNumber(document)}
                           </p>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
                           {formatDate(documentDate(document))}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-col gap-1">
-                            <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
-                              <FileCode2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              {documentType(document)}
-                            </span>
-                            {profileBadge && (
-                              <span
-                                className={`inline-flex w-fit px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  profileBadge.includes("TICARI")
-                                    ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                    : "bg-slate-100 text-slate-600"
-                                }`}
-                              >
-                                {profileBadge}
-                              </span>
-                            )}
-                          </div>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                            <FileCode2 className="w-3.5 h-3.5 text-slate-400" />
+                            {documentType(document)}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-right text-xs font-semibold text-slate-800 whitespace-nowrap font-mono tabular-nums font-tabular-num-md">
                           {formatMoney(
@@ -2884,82 +1882,25 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-[11px] font-semibold ${tone.className}`}
-                            >
-                              <StatusIcon className="w-3 h-3" />
-                              {tone.label}
-                            </span>
-                            {activeDirection === "inbox" && !isDespatch && (
-                              isDocumentImported(document) ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
-                                  <CheckCircle2 className="w-2.5 h-2.5" />
-                                  Muhasebeleşti
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold">
-                                  Alışa Aktarılmadı
-                                </span>
-                              )
-                            )}
-                          </div>
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-[11px] font-semibold ${tone.className}`}
+                          >
+                            <StatusIcon className="w-3 h-3" />
+                            {tone.label}
+                          </span>
                           {(data.envelopeStatusText || data.envelopeStatusCode) && (
-                            <span className="block text-[11px] text-slate-400 mt-1 max-w-[190px] truncate" title={String(data.envelopeStatusText || data.envelopeStatusCode)}>
+                            <span className="block text-[11px] text-slate-400 mt-1 max-w-[180px] truncate" title={String(data.envelopeStatusText || data.envelopeStatusCode)}>
                               Zarf: {data.envelopeStatusText || data.envelopeStatusCode}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1 flex-wrap">
-                            {activeDirection === "inbox" && isWaitingResp && (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={isRowBusy}
-                                  onClick={() => void runRowDocumentAction(document, "accept")}
-                                  title="Ticari Faturayı Kabul Et"
-                                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                >
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>Kabul</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isRowBusy}
-                                  onClick={() => {
-                                    setInlineRejectDocId(inlineRejectDocId === id ? null : id);
-                                    setInlineRejectReason("");
-                                  }}
-                                  title="Ticari Faturayı Reddet"
-                                  className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                >
-                                  <XCircle className="w-3 h-3" />
-                                  <span>Red</span>
-                                </button>
-                              </>
-                            )}
-                            {activeDirection === "inbox" && !isDespatch && onImportInvoice && !isDocumentImported(document) && (
-                              <button
-                                type="button"
-                                onClick={() => void handleImportToPurchaseInvoice(document)}
-                                disabled={importingDocId === id}
-                                title="Alış Faturasına Aktar (Muhasebeleştir)"
-                                className="px-2 py-1.5 rounded-lg bg-[#eaedff] hover:bg-[#dae2fd] text-[#0f6bae] text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                              >
-                                {importingDocId === id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <ArrowDownToLine className="w-3.5 h-3.5" />
-                                )}
-                                <span>Alışa Aktar</span>
-                              </button>
-                            )}
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => void openDetails(document)}
-                              title="Orijinal Faturayı Görüntüle"
-                              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-[#0f6bae] cursor-pointer"
+                              title="Detayı görüntüle"
+                              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-[#0f6bae]"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
@@ -2969,8 +1910,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                                 void triggerDownload(document, "pdf")
                               }
                               disabled={isDownloading}
-                              title="Resmi PDF indir"
-                              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-[#0f6bae] disabled:opacity-50 cursor-pointer"
+                              title="PDF indir"
+                              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-[#0f6bae] disabled:opacity-50"
                             >
                               {isDownloading && downloading?.format === "pdf" ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -2984,8 +1925,8 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                                 void triggerDownload(document, "xml")
                               }
                               disabled={isDownloading}
-                              title="UBL XML indir"
-                              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-[#0f6bae] disabled:opacity-50 cursor-pointer"
+                              title="XML indir"
+                              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-[#0f6bae] disabled:opacity-50"
                             >
                               <FileCode2 className="w-4 h-4" />
                             </button>
@@ -2993,52 +1934,15 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                         </td>
                       </tr>
 
-                      {/* Satır İçi Ticari Fatura Red Gerekçesi Kutusu */}
-                      {inlineRejectDocId === id && (
-                        <tr className="bg-rose-50/70 border-b border-rose-200">
-                          <td colSpan={activeDirection === "inbox" && !isDespatch ? 9 : 8} className="px-6 py-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-bold text-rose-900">
-                                {documentNumber(document)} Red Gerekçesi:
-                              </span>
-                              <input
-                                type="text"
-                                value={inlineRejectReason}
-                                onChange={(e) => setInlineRejectReason(e.target.value)}
-                                placeholder="Ticari fatura red sebebini yazınız..."
-                                className="flex-1 min-w-[220px] h-8 px-3 rounded-lg bg-white border border-rose-300 text-xs outline-none"
-                              />
-                              <button
-                                type="button"
-                                disabled={!inlineRejectReason.trim() || isRowBusy}
-                                onClick={() =>
-                                  void runRowDocumentAction(document, "deny", inlineRejectReason)
-                                }
-                                className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-                              >
-                                {isRowBusy ? "Gönderiliyor..." : "Reddi Mysoft'a Gönder"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setInlineRejectDocId(null)}
-                                className="h-8 px-2.5 rounded-lg border border-rose-200 text-rose-700 text-xs font-semibold cursor-pointer"
-                              >
-                                Vazgeç
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-
                       {/* Hidden Details Master-Detail Section */}
                       {isExpanded && (
                         <tr className="bg-[#f8fafc] border-b border-slate-200">
-                          <td colSpan={activeDirection === "inbox" && !isDespatch ? 9 : 8} className="p-4 pl-12">
+                          <td colSpan={8} className="p-4 pl-12">
                             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold text-slate-800">
-                                    Hızlı Belge & UBL Kalem Özeti:
+                                    Hızlı Belge Özeti:
                                   </span>
                                   <span className="font-mono text-xs font-bold text-[#0f6bae]">
                                     {documentNumber(document)}
@@ -3046,40 +1950,14 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                                   <span className="text-[11px] text-slate-500 font-mono">
                                     (ETTN: {data.ettn || data.uuid || "-"})
                                   </span>
-                                  {data.profile && (
-                                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold">
-                                      {String(data.profile)}
-                                    </span>
-                                  )}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {activeDirection === "inbox" && (
-                                    <button
-                                      type="button"
-                                      onClick={() => void runRowDocumentAction(document, "acknowledge")}
-                                      disabled={isRowBusy}
-                                      className="px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                    >
-                                      <span>Alındı İşaretle</span>
-                                    </button>
-                                  )}
-                                  {activeDirection === "inbox" && !isDespatch && onImportInvoice && !isDocumentImported(document) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleImportToPurchaseInvoice(document)}
-                                      disabled={importingDocId === id}
-                                      className="px-2.5 py-1 rounded-lg bg-[#0f6bae] hover:bg-[#0c568c] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                                    >
-                                      <ArrowDownToLine className="w-3.5 h-3.5" />
-                                      <span>Alış Faturasına Aktar</span>
-                                    </button>
-                                  )}
+                                <div className="flex items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={() => void openDetails(document)}
                                     className="text-xs font-bold text-[#0f6bae] hover:underline flex items-center gap-1 cursor-pointer"
                                   >
-                                    <Eye className="w-3.5 h-3.5" /> Orijinal GİB Belgesini Aç
+                                    <Eye className="w-3.5 h-3.5" /> Tam Görünüm & Detayları Aç
                                   </button>
                                 </div>
                               </div>
@@ -3089,76 +1967,18 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
                                   <span className="font-semibold text-slate-800">{documentParty(document)}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[11px] text-slate-400 block">Vergi No (VKN/TCKN) & Vergi Dairesi</span>
-                                  <span className="font-mono font-semibold text-slate-800">
-                                    {documentTaxNumber(document)}
-                                    {data.senderTaxOffice ? ` • ${data.senderTaxOffice}` : ""}
-                                  </span>
+                                  <span className="text-[11px] text-slate-400 block">Vergi No (VKN/TCKN)</span>
+                                  <span className="font-mono font-semibold text-slate-800">{documentTaxNumber(document)}</span>
                                 </div>
                                 <div>
                                   <span className="text-[11px] text-slate-400 block">Belge Tarihi & Türü</span>
                                   <span className="font-semibold text-slate-800">{formatDate(documentDate(document))} • {documentType(document)}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[11px] text-slate-400 block">KDV Dahil Toplam Tutar</span>
+                                  <span className="text-[11px] text-slate-400 block">Net Tutar</span>
                                   <span className="font-mono font-bold text-[#0f6bae] text-sm">{formatMoney(documentAmount(document), documentCurrency(document))}</span>
                                 </div>
                               </div>
-                              {enrichingDocId === id && (
-                                <div className="py-2 text-xs text-[#0f6bae] flex items-center gap-2">
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span>UBL-TR XML içerisinden fatura satırları çözümleniyor...</span>
-                                </div>
-                              )}
-                              {Array.isArray(data.items || data.lines || data.raw?.invoiceDetail) &&
-                                (data.items || data.lines || data.raw?.invoiceDetail).length > 0 && (
-                                  <div className="pt-2 border-t border-slate-100">
-                                    <p className="text-[11px] font-bold text-slate-600 mb-1.5">
-                                      Fatura Kalemleri ({(data.items || data.lines || data.raw?.invoiceDetail).length} Kalem)
-                                    </p>
-                                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                      <table className="w-full text-xs">
-                                        <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 border-b border-slate-200">
-                                          <tr>
-                                            <th className="px-3 py-1.5 text-left">Kod / Açıklama</th>
-                                            <th className="px-3 py-1.5 text-right">Miktar</th>
-                                            <th className="px-3 py-1.5 text-right">Birim Fiyat</th>
-                                            <th className="px-3 py-1.5 text-right">KDV %</th>
-                                            <th className="px-3 py-1.5 text-right">Net Tutar</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                          {(data.items || data.lines || data.raw?.invoiceDetail).map((ln: any, idx: number) => {
-                                            const qty = Number(ln.quantity ?? ln.qty ?? 1) || 1;
-                                            const price = Number(ln.unitPrice ?? ln.unitPriceTra ?? ln.price ?? 0) || 0;
-                                            const vatRate = Number(ln.vatRate ?? ln.taxRate ?? ln.taxPercent ?? 20);
-                                            const lineNet = Number(ln.totalWithoutVat ?? ln.amtTra ?? ln.lineExtensionAmount ?? qty * price);
-                                            return (
-                                              <tr key={idx} className="hover:bg-slate-50">
-                                                <td className="px-3 py-1.5 font-medium text-slate-800">
-                                                  {ln.productCode ? `${ln.productCode} — ` : ""}
-                                                  {ln.description || ln.productName || ln.itemName || "Kalem"}
-                                                </td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">
-                                                  {qty} {ln.unitName || ln.unit || ln.unitCode || "Adet"}
-                                                </td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">
-                                                  {formatMoney(price, documentCurrency(document))}
-                                                </td>
-                                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">
-                                                  %{vatRate}
-                                                </td>
-                                                <td className="px-3 py-1.5 text-right font-mono font-semibold text-slate-800">
-                                                  {formatMoney(lineNet, documentCurrency(document))}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
                             </div>
                           </td>
                         </tr>
@@ -3176,5 +1996,11 @@ export const EDocuments: React.FC<EDocumentsProps> = ({
   );
 };
 
-export default EDocuments;
+export const EDocuments: React.FC<EDocumentsProps> = (props) => {
+  if ((props.family ?? "invoice") === "invoice" && normalizeDirection(props.direction) === "inbox") {
+    return <IncomingEDocumentsLegacy {...props} />;
+  }
+  return <OutgoingEDocuments {...props} />;
+};
 
+export default EDocuments;

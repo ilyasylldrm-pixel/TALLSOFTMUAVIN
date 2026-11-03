@@ -453,15 +453,11 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
         if (direction === "outgoing" || direction === "outbox") {
           return format === "xml"
             ? client.getDespatchOutgoingXml(invoiceETTN, tenantIdentifierNumber)
-            : format === "html"
-              ? client.getDespatchOutgoingHtml(invoiceETTN, tenantIdentifierNumber)
-              : client.getDespatchOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
+            : client.getDespatchOutgoingPdf(invoiceETTN, tenantIdentifierNumber);
         }
         return format === "xml"
           ? client.getDespatchIncomingXml(invoiceETTN, tenantIdentifierNumber)
-          : format === "html"
-            ? client.getDespatchIncomingHtml(invoiceETTN, tenantIdentifierNumber)
-            : client.getDespatchIncomingPdf(invoiceETTN, tenantIdentifierNumber);
+          : client.getDespatchIncomingPdf(invoiceETTN, tenantIdentifierNumber);
       }
       if (direction === "outgoing" || direction === "outbox") {
         return format === "xml"
@@ -513,29 +509,6 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       }
     }),
   );
-  router.get(
-    "/e-documents/:invoiceETTN/model",
-    run(async (req) => {
-      const invoiceETTN = ettnOrThrow(req);
-      const direction = (queryText(req, "direction") || "incoming").toLowerCase();
-      const tenantIdentifierNumber = tenantFrom(req);
-      if (familyFrom(req) === "despatch") {
-        return direction === "outgoing" || direction === "outbox"
-          ? client.getDespatchOutgoingStatus(invoiceETTN, tenantIdentifierNumber)
-          : client.getDespatchIncomingModel(invoiceETTN, tenantIdentifierNumber);
-      }
-      if (direction === "outgoing" || direction === "outbox") {
-        return client.getOutgoingModel(invoiceETTN, tenantIdentifierNumber);
-      }
-      try {
-        return await client.getIncomingModel(invoiceETTN, tenantIdentifierNumber);
-      } catch (error) {
-        if (!(error instanceof MysoftApiError) || error.status < 400 || error.status >= 500) throw error;
-        return client.getOutgoingModel(invoiceETTN, tenantIdentifierNumber);
-      }
-    }),
-  );
-
   router.get(
     "/e-documents/:invoiceETTN",
     run(async (req) => {
@@ -739,37 +712,9 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     "/outgoing/:invoiceETTN/xml",
     runBinary((req) => client.getOutgoingXml(ettnOrThrow(req), tenantFrom(req)))
   );
-  router.get(
-    "/incoming/:invoiceETTN/html",
-    runBinary((req) => client.getIncomingHtml(ettnOrThrow(req), tenantFrom(req)))
-  );
-  router.get(
-    "/outgoing/:invoiceETTN/html",
-    runBinary((req) => client.getOutgoingHtml(ettnOrThrow(req), tenantFrom(req)))
-  );
   router.post(
     "/incoming/:invoiceETTN/acknowledge",
     run((req) => client.acknowledgeIncoming(ettnOrThrow(req), tenantFrom(req)))
-  );
-  router.post(
-    "/incoming/:invoiceETTN/accept",
-    run((req) => client.acceptIncoming(ettnOrThrow(req), tenantFrom(req)))
-  );
-  router.post(
-    "/incoming/:invoiceETTN/deny",
-    run((req) => {
-      const reason = textParam((req.body as Record<string, unknown> | undefined)?.rejectReason);
-      if (!reason) throw new InvalidMysoftRequestError("rejectReason is required");
-      return client.rejectIncoming(ettnOrThrow(req), reason, tenantFrom(req));
-    })
-  );
-  router.post(
-    "/incoming/:invoiceETTN/archive",
-    run((req) => {
-      const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
-      const archiveStatus = body.archiveStatus !== false;
-      return client.updateIncomingArchiveStatus(ettnOrThrow(req), archiveStatus, tenantFrom(req));
-    })
   );
   return router;
 }

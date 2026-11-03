@@ -1032,14 +1032,14 @@ export const Settings: React.FC<SettingsProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-red-800/80 text-red-100 border border-red-700">
-                    Sistem Ayarları • Resmi e-Belge XSLT &amp; Tasarım Stüdyosu
+                    Sistem Ayarları • Giden e-Fatura &amp; e-Arşiv XSLT &amp; Tasarım Stüdyosu
                   </span>
                 </div>
                 <h2 className="text-base font-bold mt-1">
-                  e-Fatura &amp; e-Arşiv Tasarım Ayarları
+                  Giden e-Fatura &amp; e-Arşiv Tasarım Ayarları
                 </h2>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Şirketinizin fatura &amp; belge format parametrelerini, Mysoft portaldaki serileri, kurumsal logosunu, kaşe/imza görselini, tema rengini ve GİB amblemi / imza kutusu konumlarını buradan özelleştirip kaydedebilirsiniz.
+                  Şirketinizin <strong>giden e-fatura ve e-arşiv belgelerinde</strong> kullanılacak format parametrelerini, Mysoft serilerini, firma logosunu, kaşe/imza görselini ve tema düzenini buradan özelleştirebilirsiniz. <em>(Gelen e-faturalar tedarikçinin kendi orijinal şablonu/GİB görünümüyle korunur, bu tasarım yalnızca giden faturalarınızda geçerlidir.)</em>
                 </p>
               </div>
             </div>
@@ -1071,10 +1071,18 @@ export const Settings: React.FC<SettingsProps> = ({
           {/* 1. FATURA & BELGE FORMAT PARAMETRELERİ (Taşınan Bölüm) */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-purple-600" />
-                <span>Fatura &amp; Belge Format Parametreleri</span>
-              </h3>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-purple-600" />
+                  <span>Fatura &amp; Belge Format Parametreleri</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                    Sadece Giden Faturalarda Geçerlidir
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Burada belirlediğiniz e-fatura/e-arşiv serileri, para birimi, KDV oranı ve görsel tasarım ayarları sadece müşterilerinize kestiğiniz <strong>giden e-faturalarda</strong> kullanılır. Gelen faturalar tedarikçinin kendi orijinal belgesi olarak açılır.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1570,12 +1578,20 @@ export const Settings: React.FC<SettingsProps> = ({
                       />
                     )}
                   </div>
-                  <div>
-                    <span className="font-bold text-slate-900 block">
-                      QR Kod Altında Şirket Logosu &amp; Karekod Şablonu ({formData.companyName || "Aktif Şirket"})
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-bold text-slate-900 block">
+                        Giden e-Belge QR Kod &amp; Şirket Logosu Şablonu ({formData.companyName || "Aktif Şirket"})
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                        Sadece Giden e-Belgelerde Kullanılır
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-500 block leading-relaxed">
+                      Müşterilerinize düzenlediğiniz <strong>giden e-Fatura ve e-Arşiv</strong> belgelerinde sağ üst köşede belirlediğiniz QR kod şablonu ve hemen altında şirket logonuz yer alır.
                     </span>
-                    <span className="text-[11px] text-slate-500 block">
-                      e-Fatura ve e-Arşiv belgelerinde sağ üst köşede yüklediğiniz QR kod şablonu yer alır, şirket logosu doğrudan QR kodun altında gösterilir.
+                    <span className="text-[10.5px] text-emerald-800 bg-emerald-50/80 border border-emerald-200 rounded-lg px-2.5 py-1 block leading-normal mt-1">
+                      <strong>Mevzuat &amp; Tedarikçi Orijinallik Koruması:</strong> Tedarikçilerinizden <strong>gelen faturalardaki QR kodlar değiştirilmez</strong>. Gelen fatura görüntülerinde faturayı kesen tedarikçinin kendi resmi UBL-TR / GİB karekodu korunur.
                     </span>
                   </div>
                 </div>

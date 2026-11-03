@@ -354,6 +354,11 @@ function nestedRecords(
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstString(...value);
+      if (nested) return nested;
+      continue;
+    }
     const result = asString(value);
     if (result) return result;
   }
@@ -362,6 +367,11 @@ function firstString(...values: unknown[]): string | undefined {
 
 function firstNumber(...values: unknown[]): number | undefined {
   for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstNumber(...value);
+      if (nested !== undefined) return nested;
+      continue;
+    }
     const result = asNumber(value);
     if (result !== undefined) return result;
   }
@@ -381,10 +391,29 @@ function canonicalDocumentFamily(
   return "invoice";
 }
 
-function mapDocumentType(value: unknown): EDocumentType | string {
+function mapDocumentType(value: unknown, profileHint?: unknown): EDocumentType | string {
   const raw = (asString(value) || "").toUpperCase().replace(/[ ._-]/g, "");
-  if (raw.includes("EFATURA") || raw === "EINVOICE") return "e_fatura";
-  if (raw.includes("EARSIV") || raw === "EARCHIVE") return "e_arsiv";
+  const prof = (asString(profileHint) || "").toUpperCase().replace(/[ ._-]/g, "");
+  if (raw.includes("EARSIV") || raw === "EARCHIVE" || prof.includes("EARSIV") || prof === "EARCHIVE") {
+    return "e_arsiv";
+  }
+  if (
+    raw.includes("EFATURA") ||
+    raw === "EINVOICE" ||
+    prof === "TEMELFATURA" ||
+    prof === "TICARIFATURA" ||
+    prof === "KAMU" ||
+    prof === "YOLCUBERABERFATURA" ||
+    prof === "IHRACAT" ||
+    raw === "SATIS" ||
+    raw === "IADE" ||
+    raw === "TEVKIFAT" ||
+    raw === "ISTISNA" ||
+    raw === "OZELMATRAH" ||
+    raw === "IHRACKAYITLI"
+  ) {
+    return "e_fatura";
+  }
   if (raw.includes("ESMM")) return "e_smm";
   if (raw.includes("EMM")) return "e_mm";
   if (
@@ -395,7 +424,7 @@ function mapDocumentType(value: unknown): EDocumentType | string {
   ) {
     return "e_irsaliye";
   }
-  return asString(value) || "unknown";
+  return asString(value) || (prof ? "e_fatura" : "unknown");
 }
 
 export type MysoftStatusTone = "success" | "info" | "warning" | "danger" | "muted";
@@ -582,17 +611,31 @@ export function normalizeMysoftEDocument(
       "belgeNo",
     ]),
   );
-  const issueDate = firstString(
-    pickField(raw, [
-      "docDate",
-      "issueDate",
-      "invoiceDate",
-      "documentDate",
-      "date",
-    ]),
+  const normalizeDateValue = (val: string | undefined): string | undefined => {
+    if (!val) return undefined;
+    const trimmed = val.trim();
+    const trMatch = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(.*))?$/.exec(trimmed);
+    if (trMatch) {
+      const [, dd, mm, yyyy] = trMatch;
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return trimmed;
+  };
+  const issueDate = normalizeDateValue(
+    firstString(
+      pickField(raw, [
+        "docDate",
+        "issueDate",
+        "invoiceDate",
+        "documentDate",
+        "date",
+      ]),
+    ),
   );
-  const dueDate = firstString(
-    pickField(raw, ["dueDate", "paymentDueDate", "vadeDate"]),
+  const dueDate = normalizeDateValue(
+    firstString(
+      pickField(raw, ["dueDate", "paymentDueDate", "vadeDate"]),
+    ),
   );
   const directAccountName = firstString(
     pickField(raw, ["accountName", "title", "name", "partyName"]),
@@ -666,8 +709,8 @@ export function normalizeMysoftEDocument(
       "partyTaxNumber",
     ]),
     canonical === "outgoing"
-      ? pickField(raw, ["receiverTaxNumber", "customerTaxNumber"])
-      : directTaxNumber,
+      ? directTaxNumber
+      : pickField(raw, ["receiverTaxNumber", "customerTaxNumber", "tenantIdentifierNumber"]),
   );
   const legalTotal = nestedRecord(raw, [
     "legalMonetaryTotal",
@@ -727,26 +770,6 @@ export function normalizeMysoftEDocument(
     ]),
     pickField(raw, ["invoiceStatusCode", "statusCode"]),
   );
-  const senderTaxOffice = firstString(
-    pickField(senderRecord, ["taxOfficeName", "taxOffice", "vergiDairesi"]),
-    pickField(raw, ["senderTaxOffice", "taxOfficeName", "taxOffice"]),
-  );
-  const senderAddress = firstString(
-    pickField(senderRecord, ["streetName", "address", "fullAddress"]),
-    pickField(raw, ["senderAddress", "address"]),
-  );
-  const senderCity = firstString(
-    pickField(senderRecord, ["cityName", "city"]),
-    pickField(raw, ["senderCity", "cityName", "city"]),
-  );
-  const senderPhone = firstString(
-    pickField(senderRecord, ["telephone", "phone"]),
-    pickField(raw, ["senderPhone", "telephone", "phone"]),
-  );
-  const senderEmail = firstString(
-    pickField(senderRecord, ["email", "mail"]),
-    pickField(raw, ["senderEmail", "email"]),
-  );
   const normalized: MysoftEDocument = {
     id,
     ...(companyId ? { companyId } : {}),
@@ -761,9 +784,11 @@ export function normalizeMysoftEDocument(
               "eDocumentType",
               "documentType",
               "invoiceType",
+              "invoiceTypeCode",
               "eDespatchType",
               "type",
             ]),
+            pickField(raw, ["profile", "profileId", "invoiceProfile"]),
           ),
     ettn,
     documentNo,
@@ -783,11 +808,6 @@ export function normalizeMysoftEDocument(
     ),
     senderName,
     senderTaxNumber,
-    ...(senderTaxOffice ? { senderTaxOffice } : {}),
-    ...(senderAddress ? { senderAddress } : {}),
-    ...(senderCity ? { senderCity } : {}),
-    ...(senderPhone ? { senderPhone } : {}),
-    ...(senderEmail ? { senderEmail } : {}),
     receiverName,
     receiverTaxNumber,
     accountName:
@@ -2667,14 +2687,25 @@ async function requestMysoftEDocumentPage(
     }),
     { method: "GET", signal: normalizedOptions.signal },
   );
+  const docs = normalizeRows(
+    payload,
+    canonical === "outgoing" ? "outgoing" : "incoming",
+    new Date().toISOString(),
+    options.companyId,
+    canonicalDocumentFamily(normalizedOptions.family),
+  ).map((doc) => ({
+    ...doc,
+    ...(normalizedOptions.tenantIdentifierNumber
+      ? {
+          tenantIdentifierNumber: normalizedOptions.tenantIdentifierNumber,
+          ...(canonical === "incoming" && !doc.receiverTaxNumber
+            ? { receiverTaxNumber: normalizedOptions.tenantIdentifierNumber }
+            : {}),
+        }
+      : {}),
+  }));
   return {
-    documents: normalizeRows(
-      payload,
-      canonical === "outgoing" ? "outgoing" : "incoming",
-      new Date().toISOString(),
-      options.companyId,
-      canonicalDocumentFamily(normalizedOptions.family),
-    ),
+    documents: docs,
     afterValue: extractAfterValue(payload),
     totalCount: extractTotalCount(payload),
   };
@@ -2718,413 +2749,6 @@ export async function listMysoftEDocuments(
   }
 }
 
-/** List newly arrived (unacknowledged) incoming e-invoices from Mysoft (/api/mysoft/incoming/new). */
-export async function listNewMysoftIncomingEDocuments(
-  optionsOrSignal?: MysoftListOptions | AbortSignal,
-): Promise<MysoftEDocument[]> {
-  const options = normalizeListOptions(getOptions(optionsOrSignal));
-  try {
-    const { payload } = await proxyRequest(
-      "incoming/new",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          afterValue: options.afterValue ?? 0,
-          limit: options.limit ?? 100,
-          startDate: options.startDate,
-          endDate: options.endDate,
-          tenantIdentifierNumber: options.tenantIdentifierNumber,
-          isUseDocDate: options.isUseDocDate ?? true,
-        }),
-        signal: options.signal,
-      },
-      "",
-    );
-    const docs = normalizeRows(
-      payload,
-      "incoming",
-      new Date().toISOString(),
-      options.companyId,
-      canonicalDocumentFamily(options.family),
-    );
-    if (docs.length > 0) {
-      try {
-        const previous = readPersistedEDocuments();
-        const byKey = new Map(previous.map((doc) => [documentStorageKey(doc), doc]));
-        for (const doc of docs) {
-          byKey.set(documentStorageKey(doc), doc);
-        }
-        saveStoredData("EDOCUMENTS", [...byKey.values()]);
-      } catch {
-        // Non-fatal persistence update
-      }
-    }
-    return docs;
-  } catch (error) {
-    if (isAbortError(error) || options.fallback !== true) throw error;
-    return listMysoftEDocuments("inbox", options);
-  }
-}
-
-export interface ParsedUblInvoiceDetails {
-  documentNo?: string;
-  ettn?: string;
-  issueDate?: string;
-  issueTime?: string;
-  profile?: string;
-  invoiceType?: string;
-  currency?: string;
-  notes?: string[];
-  senderName?: string;
-  senderTaxNumber?: string;
-  senderTaxOffice?: string;
-  senderAddress?: string;
-  senderDistrict?: string;
-  senderCity?: string;
-  senderPhone?: string;
-  senderEmail?: string;
-  senderIban?: string;
-  receiverName?: string;
-  receiverTaxNumber?: string;
-  receiverTaxOffice?: string;
-  receiverAddress?: string;
-  subtotal?: number;
-  vatTotal?: number;
-  grandTotal?: number;
-  discountTotal?: number;
-  items: Array<{
-    id: string;
-    productCode?: string;
-    productName: string;
-    description: string;
-    quantity: number;
-    qty: number;
-    unitCode: string;
-    unit: string;
-    unitPrice: number;
-    unitPriceTra: number;
-    vatRate: number;
-    vatAmount: number;
-    amtVatTra: number;
-    totalWithoutVat: number;
-    amtTra: number;
-    totalWithVat: number;
-  }>;
-}
-
-const UBL_UNIT_LABELS: Record<string, string> = {
-  C62: "Adet",
-  NIU: "Adet",
-  EA: "Adet",
-  MON: "Ay",
-  DAY: "Gün",
-  HUR: "Saat",
-  KGM: "Kg",
-  GRM: "Gr",
-  LTR: "Lt",
-  MTR: "Metre",
-  MTK: "m²",
-  MTQ: "m³",
-  KWH: "kWh",
-  SET: "Set",
-  BX: "Kutu",
-  PK: "Paket",
-  PR: "Çift",
-};
-
-/**
- * Parse a UBL-TR 1.2 Invoice XML string into structured supplier details, totals, and line items.
- */
-export function parseUblXmlInvoiceDetails(xmlText: string): ParsedUblInvoiceDetails | null {
-  if (!xmlText || typeof xmlText !== "string" || !xmlText.includes("Invoice")) {
-    return null;
-  }
-
-  const decodeEntities = (str: string) =>
-    str
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .trim();
-
-  const extractTag = (block: string, tagName: string): string | undefined => {
-    const regex = new RegExp(`<(?:[a-zA-Z0-9]+:)?${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[a-zA-Z0-9]+:)?${tagName}>`, "i");
-    const match = regex.exec(block);
-    return match && match[1] ? decodeEntities(match[1]) : undefined;
-  };
-
-  const extractAllTags = (block: string, tagName: string): string[] => {
-    const regex = new RegExp(`<(?:[a-zA-Z0-9]+:)?${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[a-zA-Z0-9]+:)?${tagName}>`, "gi");
-    const results: string[] = [];
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(block)) !== null) {
-      if (match[1]) {
-        const cleaned = decodeEntities(match[1]);
-        if (cleaned) results.push(cleaned);
-      }
-    }
-    return results;
-  };
-
-  // Strip InvoiceLine blocks before extracting top-level header fields
-  const headerXml = xmlText.replace(/<(?:[a-zA-Z0-9]+:)?InvoiceLine(?:\s[^>]*)?>[\s\S]*?<\/(?:[a-zA-Z0-9]+:)?InvoiceLine>/gi, "");
-
-  const documentNo = extractTag(headerXml, "ID");
-  const ettn = extractTag(headerXml, "UUID");
-  const issueDate = extractTag(headerXml, "IssueDate");
-  const issueTime = extractTag(headerXml, "IssueTime");
-  const profile = extractTag(headerXml, "ProfileID");
-  const invoiceType = extractTag(headerXml, "InvoiceTypeCode");
-  const currency = extractTag(headerXml, "DocumentCurrencyCode") || "TRY";
-  const notes = extractAllTags(headerXml, "Note");
-
-  // Supplier party
-  const supplierBlock = extractTag(headerXml, "AccountingSupplierParty") || "";
-  const supplierPartyNameBlock = extractTag(supplierBlock, "PartyName") || "";
-  const supplierPersonBlock = extractTag(supplierBlock, "Person") || "";
-  const senderPersonName = [
-    extractTag(supplierPersonBlock, "FirstName"),
-    extractTag(supplierPersonBlock, "FamilyName"),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const senderName = extractTag(supplierPartyNameBlock, "Name") || senderPersonName || undefined;
-
-  let senderTaxNumber: string | undefined;
-  const partyIdRegex = /<(?:[a-zA-Z0-9]+:)?ID[^>]*schemeID=["']?(?:VKN|TCKN)["']?[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?ID>/i;
-  const vknMatch = partyIdRegex.exec(supplierBlock);
-  if (vknMatch && vknMatch[1]) {
-    senderTaxNumber = decodeEntities(vknMatch[1]).replace(/\D/g, "");
-  } else {
-    const partyIdBlock = extractTag(supplierBlock, "PartyIdentification") || "";
-    const candidateId = extractTag(partyIdBlock, "ID")?.replace(/\D/g, "");
-    if (candidateId && (candidateId.length === 10 || candidateId.length === 11)) {
-      senderTaxNumber = candidateId;
-    }
-  }
-
-  const supplierTaxSchemeBlock = extractTag(supplierBlock, "PartyTaxScheme") || "";
-  const senderTaxOffice = extractTag(supplierTaxSchemeBlock, "Name");
-  const supplierAddrBlock = extractTag(supplierBlock, "PostalAddress") || "";
-  const senderStreet = extractTag(supplierAddrBlock, "StreetName");
-  const senderBld = extractTag(supplierAddrBlock, "BuildingNumber");
-  const senderDistrict = extractTag(supplierAddrBlock, "CitySubdivisionName");
-  const senderCity = extractTag(supplierAddrBlock, "CityName");
-  const senderAddress = [
-    senderStreet,
-    senderBld ? `No: ${senderBld}` : undefined,
-    senderDistrict && senderCity ? `${senderDistrict} / ${senderCity}` : senderDistrict || senderCity,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || undefined;
-
-  const supplierContactBlock = extractTag(supplierBlock, "Contact") || "";
-  const senderPhone = extractTag(supplierContactBlock, "Telephone");
-  const senderEmail = extractTag(supplierContactBlock, "ElectronicMail");
-
-  // Buyer party
-  const customerBlock = extractTag(headerXml, "AccountingCustomerParty") || "";
-  const customerPartyNameBlock = extractTag(customerBlock, "PartyName") || "";
-  const customerPersonBlock = extractTag(customerBlock, "Person") || "";
-  const receiverPersonName = [
-    extractTag(customerPersonBlock, "FirstName"),
-    extractTag(customerPersonBlock, "FamilyName"),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const receiverName = extractTag(customerPartyNameBlock, "Name") || receiverPersonName || undefined;
-  const customerVknMatch = partyIdRegex.exec(customerBlock);
-  const receiverTaxNumber = customerVknMatch?.[1]
-    ? decodeEntities(customerVknMatch[1]).replace(/\D/g, "")
-    : undefined;
-  const customerTaxSchemeBlock = extractTag(customerBlock, "PartyTaxScheme") || "";
-  const receiverTaxOffice = extractTag(customerTaxSchemeBlock, "Name");
-  const customerAddrBlock = extractTag(customerBlock, "PostalAddress") || "";
-  const receiverAddress = [
-    extractTag(customerAddrBlock, "StreetName"),
-    extractTag(customerAddrBlock, "CitySubdivisionName"),
-    extractTag(customerAddrBlock, "CityName"),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || undefined;
-
-  // PaymentMeans IBAN
-  const paymentBlock = extractTag(headerXml, "PaymentMeans") || "";
-  const financialAccBlock = extractTag(paymentBlock, "PayeeFinancialAccount") || "";
-  const senderIban = extractTag(financialAccBlock, "ID");
-
-  // Monetary totals
-  const monetaryBlock = extractTag(headerXml, "LegalMonetaryTotal") || "";
-  const subtotal =
-    Number(extractTag(monetaryBlock, "TaxExclusiveAmount") ?? extractTag(monetaryBlock, "LineExtensionAmount")) ||
-    undefined;
-  const grandTotal =
-    Number(extractTag(monetaryBlock, "PayableAmount") ?? extractTag(monetaryBlock, "TaxInclusiveAmount")) ||
-    undefined;
-  const discountTotal = Number(extractTag(monetaryBlock, "AllowanceTotalAmount")) || undefined;
-
-  const headerTaxBlock = extractTag(headerXml, "TaxTotal") || "";
-  const vatTotal = Number(extractTag(headerTaxBlock, "TaxAmount")) || undefined;
-
-  // InvoiceLine items
-  const lineBlocks = extractAllTags(xmlText, "InvoiceLine");
-  const items = lineBlocks.map((lineXml, idx) => {
-    const id = extractTag(lineXml, "ID") || String(idx + 1);
-    const qtyMatch = /<(?:[a-zA-Z0-9]+:)?InvoicedQuantity([^>]*)>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?InvoicedQuantity>/i.exec(lineXml);
-    const unitCodeMatch = qtyMatch?.[1] ? /unitCode=["']([^"']+)["']/i.exec(qtyMatch[1]) : null;
-    const unitCode = unitCodeMatch?.[1] || "C62";
-    const unit = UBL_UNIT_LABELS[unitCode.toUpperCase()] || unitCode;
-    const quantity = Number(qtyMatch?.[2] ? decodeEntities(qtyMatch[2]) : 1) || 1;
-    const totalWithoutVat = Number(extractTag(lineXml, "LineExtensionAmount")) || 0;
-
-    const itemBlock = extractTag(lineXml, "Item") || "";
-    const itemName = extractTag(itemBlock, "Name") || extractTag(itemBlock, "Description") || `Mal / Hizmet Kalemi #${idx + 1}`;
-    const sellersIdBlock = extractTag(itemBlock, "SellersItemIdentification") || "";
-    const productCode = extractTag(sellersIdBlock, "ID") || undefined;
-
-    const priceBlock = extractTag(lineXml, "Price") || "";
-    const unitPrice =
-      Number(extractTag(priceBlock, "PriceAmount")) ||
-      (quantity > 0 ? Number((totalWithoutVat / quantity).toFixed(4)) : 0);
-
-    const lineTaxBlock = extractTag(lineXml, "TaxTotal") || "";
-    const vatRate = Number(extractTag(lineTaxBlock, "Percent") ?? 20);
-    const vatAmount =
-      Number(extractTag(lineTaxBlock, "TaxAmount")) ||
-      Number(((totalWithoutVat * vatRate) / 100).toFixed(2));
-    const totalWithVat = Number((totalWithoutVat + vatAmount).toFixed(2));
-
-    return {
-      id,
-      productCode,
-      productName: itemName,
-      description: itemName,
-      quantity,
-      qty: quantity,
-      unitCode,
-      unit,
-      unitPrice,
-      unitPriceTra: unitPrice,
-      vatRate,
-      vatAmount,
-      amtVatTra: vatAmount,
-      totalWithoutVat,
-      amtTra: totalWithoutVat,
-      totalWithVat,
-    };
-  });
-
-  return {
-    documentNo,
-    ettn,
-    issueDate,
-    issueTime,
-    profile,
-    invoiceType,
-    currency,
-    notes: notes.length > 0 ? notes : undefined,
-    senderName,
-    senderTaxNumber,
-    senderTaxOffice,
-    senderAddress,
-    senderDistrict,
-    senderCity,
-    senderPhone,
-    senderEmail,
-    senderIban,
-    receiverName,
-    receiverTaxNumber,
-    receiverTaxOffice,
-    receiverAddress,
-    subtotal,
-    vatTotal,
-    grandTotal,
-    discountTotal,
-    items,
-  };
-}
-
-/**
- * Enrich an incoming MysoftEDocument by downloading and parsing its UBL-TR XML
- * whenever line items or supplier details are missing from the header model.
- */
-export async function enrichIncomingEDocumentWithXml(
-  doc: MysoftEDocument,
-  options: MysoftOperationOptions = {},
-): Promise<MysoftEDocument> {
-  const targetId = doc.ettn || doc.id;
-  if (!targetId) return doc;
-  try {
-    const xmlDownload = await downloadMysoftEDocument(targetId, "xml", {
-      ...options,
-      direction: "incoming",
-    });
-    let xmlText = "";
-    if (xmlDownload.blob) {
-      xmlText = await xmlDownload.blob.text();
-    } else if (typeof xmlDownload.data === "string") {
-      xmlText = xmlDownload.data;
-    }
-    if (!xmlText || !xmlText.includes("Invoice")) return doc;
-
-    const parsed = parseUblXmlInvoiceDetails(xmlText);
-    if (!parsed) return doc;
-
-    const existingRaw = asRecord(doc.raw) || {};
-    const mergedItems =
-      parsed.items.length > 0
-        ? parsed.items
-        : Array.isArray(doc.items) && doc.items.length > 0
-          ? doc.items
-          : undefined;
-
-    return {
-      ...doc,
-      documentNo: doc.documentNo || parsed.documentNo,
-      number: doc.number || parsed.documentNo,
-      documentNumber: doc.documentNumber || parsed.documentNo,
-      issueDate: doc.issueDate || parsed.issueDate,
-      date: doc.date || parsed.issueDate,
-      profile: doc.profile || parsed.profile,
-      currency: doc.currency || parsed.currency,
-      senderName: doc.senderName || parsed.senderName,
-      senderTaxNumber: doc.senderTaxNumber || parsed.senderTaxNumber,
-      senderTaxOffice: doc.senderTaxOffice || parsed.senderTaxOffice,
-      senderAddress: doc.senderAddress || parsed.senderAddress,
-      senderCity: doc.senderCity || parsed.senderCity,
-      senderPhone: doc.senderPhone || parsed.senderPhone,
-      senderEmail: doc.senderEmail || parsed.senderEmail,
-      receiverName: doc.receiverName || parsed.receiverName,
-      receiverTaxNumber: doc.receiverTaxNumber || parsed.receiverTaxNumber,
-      subtotal: doc.subtotal ?? parsed.subtotal,
-      vatTotal: doc.vatTotal ?? parsed.vatTotal,
-      grandTotal: doc.grandTotal ?? parsed.grandTotal,
-      amount: doc.amount ?? parsed.grandTotal,
-      items: mergedItems,
-      lines: mergedItems,
-      raw: {
-        ...existingRaw,
-        ...(parsed.senderTaxOffice ? { taxOfficeName: parsed.senderTaxOffice } : {}),
-        ...(parsed.senderAddress ? { streetName: parsed.senderAddress } : {}),
-        ...(parsed.senderDistrict ? { townName: parsed.senderDistrict } : {}),
-        ...(parsed.senderCity ? { cityName: parsed.senderCity } : {}),
-        ...(parsed.senderIban ? { iban: parsed.senderIban } : {}),
-        ...(parsed.issueTime ? { issueTime: parsed.issueTime } : {}),
-        ...(parsed.notes && parsed.notes.length > 0 ? { note: parsed.notes.join(" | ") } : {}),
-        ...(mergedItems ? { invoiceDetail: mergedItems } : {}),
-      },
-    };
-  } catch {
-    return doc;
-  }
-}
-
 /** Get a single model by ETTN/id. Connection fallbacks are opt-in. */
 export async function getMysoftEDocument(
   id: string,
@@ -3155,22 +2779,13 @@ export async function getMysoftEDocument(
         ) as EDocumentDirection)) ||
       options.direction ||
       "incoming";
-    const normalized = normalizeMysoftEDocument(
+    return normalizeMysoftEDocument(
       raw,
       direction,
       new Date().toISOString(),
       options.companyId,
       canonicalDocumentFamily(options.family),
     );
-    if (
-      normalized &&
-      canonicalDirection(direction) === "incoming" &&
-      canonicalDocumentFamily(options.family) === "invoice" &&
-      (!Array.isArray(normalized.items) || normalized.items.length === 0)
-    ) {
-      return await enrichIncomingEDocumentWithXml(normalized, options);
-    }
-    return normalized;
   } catch (error) {
     if (isAbortError(error) || options.fallback !== true) throw error;
     const fallback = fallbackDocuments("all", options.companyId).find(
@@ -3306,15 +2921,26 @@ async function binaryDownloadShape(
   const isStillZip = !unpackedFromZip && isZip;
   const isPdf = bytes.length >= 4 &&
     bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+  const headText = new TextDecoder().decode(bytes.slice(0, 128)).trimStart();
+  const isHtmlBytes =
+    /\.html?$/i.test(extractedFilename || "") ||
+    /^<!doctype html/i.test(headText) ||
+    /^<html/i.test(headText);
+  const isXmlBytes =
+    /\.xml$/i.test(extractedFilename || "") ||
+    /^<\?xml/i.test(headText) ||
+    /^<(?:Invoice|DespatchAdvice)/i.test(headText);
   const mimeType = isStillZip
     ? "application/zip"
     : isPdf
       ? "application/pdf"
-      : format === "xml"
-        ? "application/xml"
-        : format === "html"
-          ? "text/html"
-          : decoded.mediaType || contentType;
+      : isHtmlBytes || format === "html"
+        ? "text/html;charset=utf-8"
+        : isXmlBytes || format === "xml"
+          ? "application/xml;charset=utf-8"
+          : format === "pdf"
+            ? "application/pdf"
+            : decoded.mediaType || contentType;
   const cleanBaseFilename = filename.replace(/\.zip$/i, "");
   const outputFilename = isStillZip && !/\.zip$/i.test(filename)
     ? `${filename}.zip`
@@ -3415,8 +3041,11 @@ export async function downloadMysoftEDocument(
       };
     }
     const record = asRecord(payload);
+    const unwrapped = asRecord(unwrapResult(payload));
     const data = firstString(
-      pickField(record, ["data", "url", "downloadUrl", "file", "content"]),
+      pickField(record, ["data", "url", "downloadUrl", "file", "content", "fileContent", "bytes", "base64"]),
+      pickField(unwrapped, ["data", "url", "downloadUrl", "file", "content", "fileContent", "bytes", "base64"]),
+      typeof unwrapResult(payload) === "string" ? unwrapResult(payload) : undefined,
     );
     if (data) {
       const isUrl = /^https?:\/\//i.test(data) || /^data:/i.test(data);
@@ -3430,11 +3059,28 @@ export async function downloadMysoftEDocument(
         );
         if (binary) return binary;
       }
+      const trimmedData = data.trim();
+      const detectedMime =
+        trimmedData.startsWith("<!DOCTYPE html") || /^<html/i.test(trimmedData)
+          ? "text/html;charset=utf-8"
+          : trimmedData.startsWith("<?xml") || /^<(?:Invoice|DespatchAdvice)/i.test(trimmedData)
+            ? "application/xml;charset=utf-8"
+            : contentType.includes("json")
+              ? format === "xml"
+                ? "application/xml;charset=utf-8"
+                : format === "html"
+                  ? "text/html;charset=utf-8"
+                  : "application/pdf"
+              : contentType;
       return {
         id,
         format,
         filename,
-        mimeType: contentType,
+        mimeType: detectedMime,
+        blob:
+          !isUrl && typeof Blob !== "undefined"
+            ? new Blob([data], { type: detectedMime })
+            : undefined,
         url: isUrl ? data : undefined,
         data,
       };
