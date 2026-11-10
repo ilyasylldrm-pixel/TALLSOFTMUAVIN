@@ -43,10 +43,8 @@ RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
 # Copy compiled bundles from builder stage
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/public ./public 2>/dev/null || true
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/index.html ./index.html
-COPY --from=builder /app/server.ts ./server.ts 2>/dev/null || true
-COPY --from=builder /app/tsconfig*.json ./ 2>/dev/null || true
 
 # Expose standard Cloud Run port
 EXPOSE 3000

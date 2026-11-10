@@ -55,3 +55,6 @@ data/github-config.json
 bun.lock
 bun.lockb
 
+
+# CI tarafından yayın sırasında üretilir
+public/version.txt

@@ -1,4 +1,14 @@
-name: Build & Verify
+name: Build & Deploy (tallsoft.org)
+
+# main'e gönderilen her commit önce derlenir, ardından Cloud Run'a yayınlanır.
+# Uygulama içindeki "GitHub'a Gönder & Yayınla" butonu da bu iş akışını
+# workflow_dispatch ile tetikler.
+#
+# Tek seferlik kurulum (GitHub > Settings > Secrets and variables > Actions):
+#   Secret   GCP_SA_KEY        : Cloud Run'a yayın yetkili servis hesabı anahtarı (JSON)
+#   Variable CLOUD_RUN_SERVICE : tallsoft.org'u sunan Cloud Run servisinin adı
+#   Variable GCP_REGION        : servisin bölgesi (örn. europe-west3)
+# Bunlar tanımlı değilse yayın adımı atlanır ve sadece derleme yapılır.
 
 on:
   push:
@@ -10,16 +20,74 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Derleme
         run: |
           npm install
           npm run build
-      - name: Build kaniti
-        run: echo "actions-build OK | $(date -u +%FT%TZ) | ${GITHUB_SHA}" > dist/actions-deploy.txt
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      REGION: ${{ vars.GCP_REGION }}
+    steps:
+      - name: Yayın ayarlarını kontrol et
+        id: cfg
+        run: |
+          if [ -z "$GCP_SA_KEY" ] || [ -z "$SERVICE" ] || [ -z "$REGION" ]; then
+            echo "::warning::GCP_SA_KEY, CLOUD_RUN_SERVICE veya GCP_REGION tanımlı değil; Cloud Run yayını atlandı."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+
+      - name: Sürüm bilgisini ekle
+        if: steps.cfg.outputs.ready == 'true'
+        # Vite public/ klasörünü dist/'e kopyalar; yayından sonra
+        # https://tallsoft.org/version.txt hangi commit'in canlıda olduğunu gösterir.
+        run: printf '%s\n%s\n' "${GITHUB_SHA}" "$(date -u +%FT%TZ)" > public/version.txt
+
+      - uses: google-github-actions/auth@v2
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.cfg.outputs.ready == 'true'
+
+      - name: Cloud Run'a yayınla
+        if: steps.cfg.outputs.ready == 'true'
+        # Sadece kaynak kod güncellenir; servisin mevcut ortam değişkenleri,
+        # CPU/RAM ve alan adı ayarları olduğu gibi korunur.
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --source . \
+            --region "$REGION" \
+            --quiet
+
+      - name: Yayını doğrula
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "Servis adresi: $URL"
+          for i in $(seq 1 12); do
+            if curl -fsS "$URL/version.txt" | grep -q "${GITHUB_SHA}"; then
+              echo "Canlı sürüm doğrulandı: ${GITHUB_SHA}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Yeni sürüm $URL/version.txt adresinde görünmedi."
+          exit 1

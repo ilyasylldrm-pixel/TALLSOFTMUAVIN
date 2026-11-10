@@ -1,3 +1,0 @@
-deploy-test OK
-olusturma: 2026-11-10T12:24:36Z
-kaynak: claude/blissful-heisenberg-1jgjct
