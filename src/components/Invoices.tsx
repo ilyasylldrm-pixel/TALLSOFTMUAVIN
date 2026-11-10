@@ -9222,8 +9222,11 @@ export const Invoices: React.FC<InvoicesProps> = ({
         className="rounded-2xl border shadow-2xs overflow-hidden"
         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
       >
-        <div className="overflow-x-auto custom-scrollbar w-full">
-          <table className="w-full text-left text-xs min-w-[750px]">
+        <div
+          className="overflow-x-auto custom-scrollbar w-full"
+          style={{ ["--sticky-cell-bg" as any]: theme.cardBg }}
+        >
+          <table className="invoice-list-table w-full text-left text-xs min-w-[750px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="w-10 py-3.5 px-3 text-center">
