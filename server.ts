@@ -9,7 +9,24 @@ import { whatsAppService } from "./src/services/whatsappService.ts";
 import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
-import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
+import { requireAuth, requireAdmin, canAccessCompany, resolveSessionUser, type AuthRequest } from "./src/middleware/auth.ts";
+import {
+  SYSTEM_ADMIN_EMAILS,
+  signSession,
+  sessionCookieHeader,
+  clearSessionCookieHeader,
+  checkPassword,
+  hashPassword,
+  hashPlainPasswordFields,
+  verifyFirebasePassword,
+  isRateLimited,
+  recordFailure,
+  clearFailures,
+  isAdminRole,
+  type SessionUser,
+} from "./src/lib/serverAuth.ts";
+import { adminAuth } from "./src/lib/firebase-admin.ts";
+import { createPool } from "./src/db/index.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import {
   getAllUserAccountingRecords,
@@ -96,6 +113,45 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "25mb" }));
+
+// ==========================================
+// GENEL API GİRİŞ KAPISI
+// Aşağıdaki birkaç uç dışında tüm /api istekleri geçerli bir sunucu oturumu ister.
+// ==========================================
+const PUBLIC_API_PATHS = new Set([
+  "/health",
+  "/auth/login",
+  "/auth/logout",
+  "/auth/activate",
+  "/auth/google",
+  "/auth/me",
+]);
+app.use("/api", (req, res, next) => {
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
+  return requireAuth(req as AuthRequest, res, next);
+});
+// Sadece Sistem Yöneticisinin kullanabileceği uçlar
+app.use(
+  ["/api/github", "/api/admin", "/api/extension/sync", "/api/cloud-sync/broadcast", "/api/spark/webhook"],
+  requireAdmin,
+);
+// /api/db: kullanıcı yalnızca kendi şirketinin verisine erişebilir
+app.use("/api/db", (req: AuthRequest, res, next) => {
+  if (req.path === "/health") return next();
+  const fromQuery = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
+  const fromHeader = typeof req.headers["x-company-id"] === "string" ? req.headers["x-company-id"].trim() : "";
+  const fromBody = req.body && typeof req.body.companyId === "string" ? req.body.companyId.trim() : "";
+  const requested = fromQuery || fromHeader || fromBody;
+  if (requested) {
+    if (!canAccessCompany(req.user, requested)) {
+      return res.status(403).json({ success: false, error: "Bu şirketin verisine erişim yetkiniz yok." });
+    }
+  } else if (req.user && !req.user.isAdmin) {
+    req.headers["x-company-id"] = req.user.companyId || "comp_default";
+  }
+  return next();
+});
+
 app.use("/api/mysoft", getMysoftRouter());
 app.use("/api/whatsapp", getWhatsAppRouter());
 app.use("/api/portal-proxy", getPortalProxyRouter());
@@ -1801,11 +1857,7 @@ function sanitizeLegacyDemoIdentity(obj: any): any {
   return copy;
 }
 
-let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
-  try {
-    if (fs.existsSync(CLOUD_SYNC_FILE_PATH)) {
-      const raw = fs.readFileSync(CLOUD_SYNC_FILE_PATH, "utf-8");
-      const parsed = JSON.parse(raw);
+function normalizeCloudSyncStore(parsed: any): ServerCloudSyncStore | null {
       if (parsed && typeof parsed === "object") {
         const rawCompaniesData =
           parsed.companiesData && typeof parsed.companiesData === "object" ? parsed.companiesData : {};
@@ -1839,10 +1891,10 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
           lastUpdatedBy: parsed.lastUpdatedBy || "Sistem Yöneticisi",
         };
       }
-    }
-  } catch (err) {
-    console.warn("Cloud sync store disk okuma uyarısı:", err);
-  }
+      return null;
+}
+
+function emptyCloudSyncStore(): ServerCloudSyncStore {
   return {
     companiesRegistry: [],
     usersRegistry: [],
@@ -1854,7 +1906,145 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
     lastActionSummary: "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
     lastUpdatedBy: "Sistem Yöneticisi",
   };
+}
+
+let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
+  try {
+    if (fs.existsSync(CLOUD_SYNC_FILE_PATH)) {
+      const normalized = normalizeCloudSyncStore(JSON.parse(fs.readFileSync(CLOUD_SYNC_FILE_PATH, "utf-8")));
+      if (normalized) return normalized;
+    }
+  } catch (err) {
+    console.warn("Cloud sync store disk okuma uyarısı:", err);
+  }
+  return emptyCloudSyncStore();
 })();
+
+// ==========================================
+// ŞİFRE GÜVENLİĞİ: düz metin şifreler hash'e çevrilir ve hiçbir yanıtta dışarı verilmez
+// ==========================================
+const USER_PASSWORD_FIELDS: Array<[string, string]> = [["passwordPlain", "passwordHash"]];
+const COMPANY_PASSWORD_FIELDS: Array<[string, string]> = [["loginPasswordPlain", "loginPasswordHash"]];
+const SECRET_FIELD_NAMES = new Set(["passwordPlain", "passwordHash", "loginPasswordPlain", "loginPasswordHash", "password"]);
+
+function migrateStorePasswords(store: ServerCloudSyncStore): boolean {
+  let changed = false;
+  store.usersRegistry.forEach((u) => {
+    if (hashPlainPasswordFields(u, USER_PASSWORD_FIELDS)) changed = true;
+  });
+  store.companiesRegistry.forEach((c) => {
+    if (hashPlainPasswordFields(c, COMPANY_PASSWORD_FIELDS)) changed = true;
+  });
+  return changed;
+}
+
+/** Kullanıcı/şirket kaydından şifre alanlarını çıkarır (dışarı verilecek kopya). */
+function stripSecrets<T>(obj: T): T {
+  if (!obj || typeof obj !== "object") return obj;
+  const copy: any = { ...(obj as any) };
+  for (const k of Object.keys(copy)) {
+    if (SECRET_FIELD_NAMES.has(k)) delete copy[k];
+  }
+  return copy;
+}
+
+/** İstemciden gelen bir kaydı birleştirmeye hazırlar: şifreyi hash'ler, hash alanının dışarıdan yazılmasını engeller. */
+// İstemcinin eskiden kendiliğinden ürettiği varsayılan şifreler; bunlar asla gerçek şifre olarak kabul edilmez.
+const REJECTED_DEFAULT_PASSWORDS = new Set(["Admin2026!", "Muavin2026!", "123456", "12345678"]);
+
+function prepareIncomingRecord(incoming: any, pairs: Array<[string, string]>): any {
+  const copy: any = { ...(incoming || {}) };
+  for (const [plainKey, hashKey] of pairs) {
+    delete copy[hashKey];
+    const plain = copy[plainKey];
+    if (typeof plain !== "string" || plain.trim().length < 6 || REJECTED_DEFAULT_PASSWORDS.has(plain.trim())) {
+      delete copy[plainKey];
+    }
+  }
+  delete copy.password;
+  hashPlainPasswordFields(copy, pairs);
+  return copy;
+}
+
+migrateStorePasswords(memoryCloudSyncStore);
+
+// ==========================================
+// KALICI DEPOLAMA (PostgreSQL / Cloud SQL)
+// Cloud Run örneklerinin dosya sistemi geçicidir; bulut deposu PostgreSQL'de saklanır,
+// böylece yeni yayınlarda veya örnekler arasında veri kaybolmaz.
+// ==========================================
+const CLOUD_SYNC_PG_ENABLED = Boolean(process.env.SQL_HOST);
+let cloudSyncPgReady: Promise<void> | null = null;
+let cloudSyncPgLastCheck = 0;
+let cloudSyncPgWriteTimer: NodeJS.Timeout | null = null;
+
+async function ensureCloudSyncTable(): Promise<void> {
+  const pool = createPool();
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS muavin_cloud_sync_store (
+       id TEXT PRIMARY KEY,
+       data JSONB NOT NULL,
+       version BIGINT NOT NULL,
+       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`,
+  );
+}
+
+async function loadCloudSyncStoreFromPostgres(): Promise<void> {
+  if (!CLOUD_SYNC_PG_ENABLED) return;
+  await ensureCloudSyncTable();
+  const pool = createPool();
+  const result = await pool.query("SELECT data, version FROM muavin_cloud_sync_store WHERE id = 'main'");
+  const row = result.rows?.[0];
+  if (row && Number(row.version) >= Number(memoryCloudSyncStore.version || 0)) {
+    const normalized = normalizeCloudSyncStore(row.data);
+    if (normalized) {
+      normalized.version = Number(row.version);
+      memoryCloudSyncStore = normalized;
+      if (migrateStorePasswords(memoryCloudSyncStore)) await writeCloudSyncStoreToPostgres();
+    }
+  } else if (memoryCloudSyncStore.usersRegistry.length || memoryCloudSyncStore.companiesRegistry.length) {
+    // PostgreSQL'de henüz kayıt yok (ilk geçiş) veya daha eski: mevcut depoyu yaz.
+    await writeCloudSyncStoreToPostgres();
+  }
+  cloudSyncPgLastCheck = Date.now();
+}
+
+async function writeCloudSyncStoreToPostgres(): Promise<void> {
+  if (!CLOUD_SYNC_PG_ENABLED) return;
+  const pool = createPool();
+  await pool.query(
+    `INSERT INTO muavin_cloud_sync_store (id, data, version, updated_at)
+     VALUES ('main', $1::jsonb, $2, NOW())
+     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, version = EXCLUDED.version, updated_at = NOW()
+     WHERE muavin_cloud_sync_store.version <= EXCLUDED.version`,
+    [JSON.stringify(memoryCloudSyncStore), Number(memoryCloudSyncStore.version || Date.now())],
+  );
+}
+
+/** Başka bir örnek daha yeni veri yazdıysa (en fazla 5 sn'de bir kontrol) belleği tazeler. */
+async function refreshCloudSyncStoreIfStale(): Promise<void> {
+  if (!CLOUD_SYNC_PG_ENABLED) return;
+  try {
+    if (cloudSyncPgReady) await cloudSyncPgReady;
+    if (Date.now() - cloudSyncPgLastCheck < 5000) return;
+    cloudSyncPgLastCheck = Date.now();
+    const pool = createPool();
+    const result = await pool.query("SELECT version FROM muavin_cloud_sync_store WHERE id = 'main'");
+    const remoteVersion = Number(result.rows?.[0]?.version || 0);
+    if (remoteVersion > Number(memoryCloudSyncStore.version || 0)) {
+      await loadCloudSyncStoreFromPostgres();
+    }
+  } catch (err) {
+    console.warn("Bulut deposu PostgreSQL tazeleme uyarısı:", (err as any)?.message || err);
+  }
+}
+
+if (CLOUD_SYNC_PG_ENABLED) {
+  cloudSyncPgReady = loadCloudSyncStoreFromPostgres().catch((err) => {
+    console.warn("Bulut deposu PostgreSQL'den yüklenemedi, dosya/bellek deposu kullanılıyor:", err?.message || err);
+  });
+}
 
 function persistServerCloudSyncStore() {
   try {
@@ -1866,20 +2056,261 @@ function persistServerCloudSyncStore() {
   } catch (err) {
     console.warn("Cloud sync store diske yazılamadı:", err);
   }
+  if (CLOUD_SYNC_PG_ENABLED) {
+    if (cloudSyncPgWriteTimer) clearTimeout(cloudSyncPgWriteTimer);
+    cloudSyncPgWriteTimer = setTimeout(() => {
+      cloudSyncPgWriteTimer = null;
+      writeCloudSyncStoreToPostgres().catch((err) =>
+        console.warn("Bulut deposu PostgreSQL'e yazılamadı:", err?.message || err),
+      );
+    }, 1000);
+  }
 }
 
-app.get("/api/cloud-sync/state", (req, res) => {
-  const companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
-  const companySlice = companyId ? memoryCloudSyncStore.companiesData[companyId] || null : null;
+
+// ==========================================
+// KİMLİK DOĞRULAMA UÇLARI (sunucu tarafı giriş)
+// ==========================================
+function findUserByIdentifier(identifier: string): any | null {
+  const clean = identifier.trim().toLowerCase();
+  return (
+    memoryCloudSyncStore.usersRegistry.find((u: any) => {
+      if (!u) return false;
+      return [u.email, u.username, u.userId].some((v) => typeof v === "string" && v.trim().toLowerCase() === clean);
+    }) || null
+  );
+}
+
+function findCompanyLoginByIdentifier(identifier: string): any | null {
+  const clean = identifier.trim().toLowerCase();
+  return (
+    memoryCloudSyncStore.companiesRegistry.find((c: any) => {
+      if (!c || c.loginUserDeleted) return false;
+      return [c.loginEmail, c.loginUsername].some((v) => typeof v === "string" && v.trim().toLowerCase() === clean);
+    }) || null
+  );
+}
+
+function isIdentifierDeleted(identifier: string, user?: any): boolean {
+  const deleted = new Set(memoryCloudSyncStore.deletedUserKeys.map((k) => String(k).toLowerCase()));
+  const keys = [identifier, user?.email, user?.username, user?.userId]
+    .filter((v) => typeof v === "string" && v)
+    .map((v: string) => v.trim().toLowerCase());
+  return keys.some((k) => deleted.has(k));
+}
+
+/** Şirket giriş bilgisinden (companiesRegistry.login*) kullanıcı profili oluşturur. */
+function profileFromCompanyLogin(c: any): any {
+  return {
+    userId: c.loginEmail || c.loginUsername || c.id,
+    email: c.loginEmail || "",
+    username: c.loginUsername || "",
+    name: c.loginFullName || c.companyName || "",
+    role: c.loginRole || "Firma Yöneticisi",
+    companyId: c.id,
+    companyName: c.companyName || c.name || "",
+    allowedModules: c.moduleRestrictionEnabled ? c.allowedModules : undefined,
+    taxNumber: c.taxNumber || c.vkn || "",
+    phone: c.phone || "",
+  };
+}
+
+/** Şirket bağlantısı olmayan kullanıcıyı, şirket kartındaki giriş e-postasıyla eşleştirir. */
+function resolveCompanyIdByEmail(email: string): string {
+  if (!email) return "";
+  const match = memoryCloudSyncStore.companiesRegistry.find(
+    (c: any) => c && [c.loginEmail, c.email].some((v) => typeof v === "string" && v.trim().toLowerCase() === email),
+  );
+  return match?.id || "";
+}
+
+function buildSessionUser(profile: any, isSysAdmin: boolean, fallbackEmail: string): SessionUser {
+  const email = String(profile?.email || fallbackEmail || "").trim().toLowerCase();
+  const role = String(profile?.role || (isSysAdmin ? "Sistem Yöneticisi (Admin)" : "Personel"));
+  return {
+    uid: String(profile?.userId || email || fallbackEmail),
+    email,
+    companyId: String(profile?.companyId || resolveCompanyIdByEmail(email) || (isSysAdmin ? "" : "comp_default")),
+    role,
+    isAdmin: isSysAdmin || isAdminRole(role) || SYSTEM_ADMIN_EMAILS.has(email),
+  };
+}
+
+function issueSession(req: express.Request, res: express.Response, profile: any, isSysAdmin: boolean, fallbackEmail: string) {
+  const sessionUser = buildSessionUser(profile, isSysAdmin, fallbackEmail);
+  const token = signSession(sessionUser);
+  const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+  res.setHeader("Set-Cookie", sessionCookieHeader(token, secure));
   res.json({
     success: true,
-    companiesRegistry: memoryCloudSyncStore.companiesRegistry,
-    usersRegistry: memoryCloudSyncStore.usersRegistry,
+    token,
+    isSysAdmin: sessionUser.isAdmin,
+    profile: profile ? stripSecrets(profile) : null,
+    session: sessionUser,
+  });
+}
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    if (cloudSyncPgReady) await cloudSyncPgReady;
+    await refreshCloudSyncStoreIfStale();
+    const identifier = String(req.body?.identifier || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, error: "Lütfen kullanıcı adınızı/e-postanızı ve şifrenizi giriniz." });
+    }
+    const limitKey = `${req.ip}|${identifier}`;
+    if (isRateLimited(limitKey)) {
+      return res.status(429).json({ success: false, error: "Çok fazla hatalı deneme. Lütfen 15 dakika sonra tekrar deneyin." });
+    }
+    const fail = (status = 401, msg = "Kullanıcı adı/e-posta veya şifre hatalı.") => {
+      recordFailure(limitKey);
+      return res.status(status).json({ success: false, error: msg });
+    };
+
+    const user = findUserByIdentifier(identifier);
+    if (isIdentifierDeleted(identifier, user)) {
+      return fail(403, "Bu kullanıcı yönetici tarafından sistemden kaldırılmıştır.");
+    }
+    const isSysAdminEmail = SYSTEM_ADMIN_EMAILS.has(identifier) || SYSTEM_ADMIN_EMAILS.has(String(user?.email || "").toLowerCase());
+
+    // 1) Yönetici tarafından açılmış kullanıcı kaydı
+    if (user && checkPassword(password, user.passwordHash, user.passwordPlain)) {
+      if (user.passwordPlain) {
+        user.passwordHash = hashPassword(password);
+        delete user.passwordPlain;
+        persistServerCloudSyncStore();
+      }
+      clearFailures(limitKey);
+      return issueSession(req, res, user, isSysAdminEmail, identifier);
+    }
+
+    // 2) Şirket kartındaki giriş bilgisi
+    const company = findCompanyLoginByIdentifier(identifier);
+    if (company && checkPassword(password, company.loginPasswordHash, company.loginPasswordPlain)) {
+      if (company.loginPasswordPlain) {
+        company.loginPasswordHash = hashPassword(password);
+        delete company.loginPasswordPlain;
+        persistServerCloudSyncStore();
+      }
+      clearFailures(limitKey);
+      return issueSession(req, res, profileFromCompanyLogin(company), false, identifier);
+    }
+
+    // 3) Firebase Authentication hesabı (Sistem Yöneticisi veya Firebase ile şifre belirlemiş kullanıcı)
+    const firebaseEmail = String(user?.email || (identifier.includes("@") ? identifier : "")).toLowerCase();
+    if ((user || isSysAdminEmail) && firebaseEmail && (await verifyFirebasePassword(firebaseEmail, password))) {
+      clearFailures(limitKey);
+      return issueSession(req, res, user, isSysAdminEmail, firebaseEmail);
+    }
+
+    return fail();
+  } catch (err: any) {
+    console.error("Giriş hatası:", err);
+    res.status(500).json({ success: false, error: "Giriş işlemi sırasında sunucu hatası oluştu." });
+  }
+});
+
+// Yönetici tarafından açılmış ama henüz şifresi belirlenmemiş hesabın ilk şifresini belirler.
+app.post("/api/auth/activate", async (req, res) => {
+  try {
+    if (cloudSyncPgReady) await cloudSyncPgReady;
+    const identifier = String(req.body?.identifier || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    if (!identifier || password.length < 8) {
+      return res.status(400).json({ success: false, error: "Şifre en az 8 karakter olmalıdır." });
+    }
+    const user = findUserByIdentifier(identifier);
+    if (!user || isIdentifierDeleted(identifier, user)) {
+      return res.status(403).json({
+        success: false,
+        error: "Bu adres için Sistem Yöneticisi tarafından açılmış bir kullanıcı kaydı bulunmamaktadır.",
+      });
+    }
+    if (user.passwordHash || user.passwordPlain) {
+      return res.status(409).json({
+        success: false,
+        error: "Bu hesap zaten aktif. Lütfen Giriş Yap ekranından şifrenizle giriş yapın; şifrenizi unuttuysanız yöneticinize başvurun.",
+      });
+    }
+    user.passwordHash = hashPassword(password);
+    user.updatedAt = new Date().toISOString();
+    memoryCloudSyncStore.version = Date.now();
+    persistServerCloudSyncStore();
+    const isSysAdminEmail = SYSTEM_ADMIN_EMAILS.has(String(user.email || "").toLowerCase());
+    return issueSession(req, res, user, isSysAdminEmail, identifier);
+  } catch (err: any) {
+    console.error("Hesap aktivasyon hatası:", err);
+    res.status(500).json({ success: false, error: "Hesap aktivasyonu sırasında sunucu hatası oluştu." });
+  }
+});
+
+// Google ile giriş: Firebase ID token sunucuda doğrulanır, e-posta kayıtlı olmalıdır.
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    if (cloudSyncPgReady) await cloudSyncPgReady;
+    const idToken = String(req.body?.idToken || "");
+    if (!idToken) return res.status(400).json({ success: false, error: "Geçersiz Google oturumu." });
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    const provider = (decoded as any)?.firebase?.sign_in_provider;
+    const email = String(decoded.email || "").toLowerCase();
+    if (provider !== "google.com" || !decoded.email_verified || !email) {
+      return res.status(401).json({ success: false, error: "Google hesabı doğrulanamadı." });
+    }
+    const user = findUserByIdentifier(email);
+    const isSysAdminEmail = SYSTEM_ADMIN_EMAILS.has(email);
+    if ((!user && !isSysAdminEmail) || isIdentifierDeleted(email, user)) {
+      return res.status(403).json({
+        success: false,
+        error: `Bu Google hesabı (${email}) için Sistem Yöneticisi tarafından açılmış bir kullanıcı kaydı bulunamadı.`,
+      });
+    }
+    return issueSession(req, res, user, isSysAdminEmail, email);
+  } catch (err: any) {
+    console.error("Google giriş doğrulama hatası:", err?.message || err);
+    res.status(401).json({ success: false, error: "Google oturumu doğrulanamadı." });
+  }
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const user = resolveSessionUser(req);
+  if (!user) return res.status(401).json({ success: false });
+  res.json({ success: true, session: user });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+  res.setHeader("Set-Cookie", clearSessionCookieHeader(secure));
+  res.json({ success: true });
+});
+
+app.get("/api/cloud-sync/state", requireAuth, async (req: AuthRequest, res) => {
+  await refreshCloudSyncStoreIfStale();
+  const user = req.user!;
+  const ownCompanyId = user.companyId || "comp_default";
+  let companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
+  if (!user.isAdmin && !companyId) companyId = ownCompanyId;
+  if (companyId && !canAccessCompany(user, companyId)) {
+    return res.status(403).json({ success: false, error: "Bu şirketin verisine erişim yetkiniz yok." });
+  }
+  const companySlice = companyId ? memoryCloudSyncStore.companiesData[companyId] || null : null;
+  const visibleCompanies = user.isAdmin
+    ? memoryCloudSyncStore.companiesRegistry
+    : memoryCloudSyncStore.companiesRegistry.filter((c: any) => c && c.id === ownCompanyId);
+  const visibleUsers = user.isAdmin
+    ? memoryCloudSyncStore.usersRegistry
+    : memoryCloudSyncStore.usersRegistry.filter(
+        (u: any) => u && ((u.companyId || "comp_default") === ownCompanyId || String(u.email || "").toLowerCase() === user.email),
+      );
+  res.json({
+    success: true,
+    companiesRegistry: visibleCompanies.map(stripSecrets),
+    usersRegistry: visibleUsers.map(stripSecrets),
     deletedCompanyIds: memoryCloudSyncStore.deletedCompanyIds,
-    deletedUserKeys: memoryCloudSyncStore.deletedUserKeys,
+    deletedUserKeys: user.isAdmin ? memoryCloudSyncStore.deletedUserKeys : [],
     companyData: companySlice?.data || null,
     companyUpdatedAt: companySlice?.updatedAt || null,
-    allCompaniesData: companyId ? undefined : memoryCloudSyncStore.companiesData,
+    allCompaniesData: companyId || !user.isAdmin ? undefined : memoryCloudSyncStore.companiesData,
     updatedAt: memoryCloudSyncStore.updatedAt,
     version: memoryCloudSyncStore.version || Date.now(),
     lastActionSummary: memoryCloudSyncStore.lastActionSummary,
@@ -1887,9 +2318,12 @@ app.get("/api/cloud-sync/state", (req, res) => {
   });
 });
 
-app.post("/api/cloud-sync/system", (req, res) => {
+app.post("/api/cloud-sync/system", requireAuth, async (req: AuthRequest, res) => {
   try {
-    const {
+    await refreshCloudSyncStoreIfStale();
+    const user = req.user!;
+    const ownCompanyId = user.companyId || "comp_default";
+    let {
       companiesRegistry,
       usersRegistry,
       deletedCompanyIds,
@@ -1898,6 +2332,36 @@ app.post("/api/cloud-sync/system", (req, res) => {
       performedBy,
     } = req.body || {};
     const nowIso = new Date().toISOString();
+
+    // Yönetici olmayan kullanıcı yalnızca kendi şirketinin kayıtlarını değiştirebilir
+    // ve kimseye Sistem Yöneticisi rolü veremez.
+    if (!user.isAdmin) {
+      deletedCompanyIds = undefined;
+      if (Array.isArray(companiesRegistry)) {
+        companiesRegistry = companiesRegistry.filter((c: any) => c && c.id === ownCompanyId);
+      }
+      if (Array.isArray(usersRegistry)) {
+        usersRegistry = usersRegistry.filter(
+          (u: any) => u && (u.companyId || "comp_default") === ownCompanyId && !isAdminRole(u.role),
+        );
+      }
+      if (Array.isArray(deletedUserKeys)) {
+        const ownKeys = new Set(
+          memoryCloudSyncStore.usersRegistry
+            .filter((u: any) => u && (u.companyId || "comp_default") === ownCompanyId && !isAdminRole(u.role))
+            .flatMap((u: any) => [u.email, u.userId, u.username])
+            .filter(Boolean)
+            .map((k: string) => String(k).trim().toLowerCase()),
+        );
+        deletedUserKeys = deletedUserKeys.filter((k: any) => ownKeys.has(String(k || "").trim().toLowerCase()));
+      }
+    }
+    if (Array.isArray(companiesRegistry)) {
+      companiesRegistry = companiesRegistry.map((c: any) => prepareIncomingRecord(c, COMPANY_PASSWORD_FIELDS));
+    }
+    if (Array.isArray(usersRegistry)) {
+      usersRegistry = usersRegistry.map((u: any) => prepareIncomingRecord(u, USER_PASSWORD_FIELDS));
+    }
 
     if (Array.isArray(deletedCompanyIds)) {
       memoryCloudSyncStore.deletedCompanyIds = Array.from(
@@ -1963,13 +2427,22 @@ app.post("/api/cloud-sync/system", (req, res) => {
   }
 });
 
-app.post("/api/cloud-sync/company", (req, res) => {
+app.post("/api/cloud-sync/company", requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { companyId, companyMeta, data, updatedAt } = req.body || {};
+    await refreshCloudSyncStoreIfStale();
+    const { companyId, data, updatedAt } = req.body || {};
     const cleanId = String(companyId || "").trim();
     if (!cleanId || !data || typeof data !== "object") {
       return res.status(400).json({ success: false, error: "Geçersiz şirket verisi" });
     }
+    if (!canAccessCompany(req.user, cleanId)) {
+      return res.status(403).json({ success: false, error: "Bu şirketin verisine erişim yetkiniz yok." });
+    }
+    const rawMeta = req.body?.companyMeta;
+    const companyMeta =
+      rawMeta && rawMeta.id && (req.user!.isAdmin || rawMeta.id === cleanId)
+        ? prepareIncomingRecord(rawMeta, COMPANY_PASSWORD_FIELDS)
+        : null;
     const nowIso = updatedAt || new Date().toISOString();
 
     const existingEntry = memoryCloudSyncStore.companiesData[cleanId];
@@ -2052,7 +2525,7 @@ app.post("/api/cloud-sync/company", (req, res) => {
   }
 });
 
-app.post("/api/cloud-sync/broadcast", (req, res) => {
+app.post("/api/cloud-sync/broadcast", requireAdmin, (req, res) => {
   try {
     const { actionName, performedBy } = req.body || {};
     const nowIso = new Date().toISOString();
@@ -2121,7 +2594,7 @@ function mergeUniqueById<T extends { id?: string }>(primaryList: T[] = [], fallb
 
 // Kullanıcı giriş yaptığında mevcut stok, fatura, işlem, cari ve hesap verilerini şirket ID'sine göre çeker
 app.get("/api/db/state", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim()
     ? req.query.companyId.trim()
     : (typeof req.headers["x-company-id"] === "string" && req.headers["x-company-id"].trim()
@@ -2173,7 +2646,7 @@ app.get("/api/db/state", requireAuth, async (req: AuthRequest, res) => {
 
 // Toplu stok, fatura, işlem, cari ve hesap senkronizasyonu (PostgreSQL + Cloud Store)
 app.post("/api/db/sync", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const { companyId, products, invoices, transactions, contacts, accounts, data } = req.body || {};
   const targetCompanyId = String(companyId || req.headers["x-company-id"] || uid).trim();
   const email = req.user?.email || `${targetCompanyId}@muavin.com`;
@@ -2214,7 +2687,7 @@ app.post("/api/db/sync", requireAuth, async (req: AuthRequest, res) => {
 
 // Doğrudan Stok (Product) Ekleme / Güncelleme / Silme Uç Noktaları
 app.get("/api/db/products", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.products || [];
   try {
@@ -2226,7 +2699,7 @@ app.get("/api/db/products", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.post("/api/db/products", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const { product, companyId } = req.body || {};
   if (!product || typeof product !== "object") {
     return res.status(400).json({ error: "Geçersiz stok kaydı" });
@@ -2255,7 +2728,7 @@ app.post("/api/db/products", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.delete("/api/db/products/:id", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const id = String(req.params.id || "").trim();
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
@@ -2273,7 +2746,7 @@ app.delete("/api/db/products/:id", requireAuth, async (req: AuthRequest, res) =>
 
 // Doğrudan Fatura (Invoice) Ekleme / Güncelleme / Silme Uç Noktaları
 app.get("/api/db/invoices", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.invoices || [];
   try {
@@ -2285,7 +2758,7 @@ app.get("/api/db/invoices", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.post("/api/db/invoices", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const { invoice, companyId } = req.body || {};
   if (!invoice || typeof invoice !== "object") {
     return res.status(400).json({ error: "Geçersiz fatura kaydı" });
@@ -2314,7 +2787,7 @@ app.post("/api/db/invoices", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.delete("/api/db/invoices/:id", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const id = String(req.params.id || "").trim();
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
@@ -2332,7 +2805,7 @@ app.delete("/api/db/invoices/:id", requireAuth, async (req: AuthRequest, res) =>
 
 // Doğrudan İşlem (Transaction) Ekleme / Güncelleme / Silme Uç Noktaları
 app.get("/api/db/transactions", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const fallback = memoryCloudSyncStore.companiesData[companyId]?.data?.transactions || [];
   try {
@@ -2344,7 +2817,7 @@ app.get("/api/db/transactions", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.post("/api/db/transactions", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const { transaction, companyId } = req.body || {};
   if (!transaction || typeof transaction !== "object") {
     return res.status(400).json({ error: "Geçersiz işlem kaydı" });
@@ -2373,7 +2846,7 @@ app.post("/api/db/transactions", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.delete("/api/db/transactions/:id", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const id = String(req.params.id || "").trim();
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const entry = memoryCloudSyncStore.companiesData[companyId]?.data;
@@ -2391,7 +2864,7 @@ app.delete("/api/db/transactions/:id", requireAuth, async (req: AuthRequest, res
 
 // Doğrudan Kasa ve Banka Hesabı (Account) Ekleme / Güncelleme / Silme Uç Noktaları
 app.post("/api/db/accounts", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const { account, companyId } = req.body || {};
   if (!account || typeof account !== "object") {
     return res.status(400).json({ error: "Geçersiz kasa/banka hesabı kaydı" });
@@ -2420,7 +2893,7 @@ app.post("/api/db/accounts", requireAuth, async (req: AuthRequest, res) => {
 });
 
 app.delete("/api/db/accounts/:id", requireAuth, async (req: AuthRequest, res) => {
-  const uid = req.user?.uid || "comp_default";
+  const uid = (req.user && !req.user.isAdmin ? req.user.companyId || "comp_default" : req.user?.uid) || "comp_default";
   const id = String(req.params.id || "").trim();
   const companyId = typeof req.query.companyId === "string" && req.query.companyId.trim() ? req.query.companyId.trim() : uid;
   const nowIso = new Date().toISOString();

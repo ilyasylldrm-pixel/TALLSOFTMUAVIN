@@ -812,12 +812,31 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
     localStorage.removeItem("muavin_active_user");
     sessionStorage.removeItem("muavin_active_user");
     setCurrentUser(null);
     setAuthModalMode("login");
     setAuthModalOpen(true);
   };
+
+  // Sunucu oturumu yoksa veya süresi dolduysa (çerez silinmiş, 12 saat geçmiş) giriş ekranına dön.
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    fetch("/api/auth/me", { credentials: "same-origin" })
+      .then((resp) => {
+        if (!cancelled && resp.status === 401) handleLogout();
+      })
+      .catch(() => {});
+    const onExpired = () => handleLogout();
+    window.addEventListener("muavin:session-expired", onExpired);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("muavin:session-expired", onExpired);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   // Sync state changes with localStorage per slice (scoped to activeCompanyId)
   useEffect(() => { saveStoredData("SETTINGS", data.settings, activeCompanyId); }, [data.settings, activeCompanyId]);

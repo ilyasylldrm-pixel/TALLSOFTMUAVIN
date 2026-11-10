@@ -1817,7 +1817,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     })
                     .map((u) => {
                       const uname = u.username || u.email?.split("@")[0] || u.userId;
-                      const upass = u.passwordPlain || "123456";
+                      const upass = u.passwordPlain || "•••••••• (gizli)";
                       const isSysAdmin = isUserSysAdmin(u);
 
                       return (
@@ -2117,7 +2117,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     const effectiveModules = getUserEffectiveModules(user);
                     const isPending = hasUserPendingChanges(user.userId);
                     const userUsername = user.username || user.email?.split("@")[0] || user.userId;
-                    const userPassword = user.passwordPlain || "123456";
+                    const userPassword = user.passwordPlain || "•••••••• (gizli)";
                     const visibleMods = allAppModules.filter(
                       (m) =>
                         (matrixCategoryFilter === "Tümü" ||
@@ -2359,7 +2359,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               const effectiveModules = getUserEffectiveModules(user);
               const userFilesCount = getFilesForUser(user.userId).length;
               const uname = user.username || user.email?.split("@")[0] || user.userId;
-              const upass = user.passwordPlain || "123456";
+              const upass = user.passwordPlain || "•••••••• (gizli)";
 
               return (
                 <div

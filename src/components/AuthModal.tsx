@@ -30,18 +30,37 @@ import {
   googleProvider,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   firebaseSignOut,
   saveUserProfile,
   getUserProfile,
   findUserProfileByEmail,
-  isUserCreatedByAdmin,
 } from "../lib/firebase";
 import { AppModuleKey } from "../types";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { safeSetStorageItem, getCompaniesList, setActiveCompanyId } from "../utils/storage";
 import { pullLatestCompanyDataFromCloud } from "../services/systemSyncService";
+
+/** Sunucu tarafı giriş uçlarını çağırır. Oturum HttpOnly çerez olarak sunucu tarafından ayarlanır. */
+async function callServerAuth(
+  path: "login" | "activate" | "google",
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string; profile?: any; isSysAdmin?: boolean; session?: any }> {
+  try {
+    const resp = await fetch(`/api/auth/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok || !json?.success) {
+      return { ok: false, error: json?.error || "Giriş yapılamadı. Lütfen bilgilerinizi kontrol ediniz." };
+    }
+    return { ok: true, profile: json.profile || null, isSysAdmin: json.isSysAdmin === true, session: json.session };
+  } catch {
+    return { ok: false, error: "Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyiniz." };
+  }
+}
 
 async function syncAndResolveCompanyForUserLogin(profile: UserProfile): Promise<UserProfile> {
   try {
@@ -351,54 +370,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (password.length < 6) {
-      setErrorMessage("Şifre en az 6 karakter olmalıdır.");
+    if (password.length < (mode === "register" ? 8 : 6)) {
+      setErrorMessage(mode === "register" ? "Şifre en az 8 karakter olmalıdır." : "Şifre en az 6 karakter olmalıdır.");
       return;
     }
 
     setSubmitting(true);
     const cleanEmail = email.trim().toLowerCase();
-    const isSystemAdmin =
-      cleanEmail.includes("admin") ||
-      cleanEmail === "ilyasyildirim@outlook.com.tr" ||
-      cleanEmail === "ilyasylldrm@gmail.com";
 
     try {
-      // 1. Enforce strict registration policy:
-      // "admin kullanıcı oluşturmadığı sürece yeni kayıt yapma"
-      const authCheck = await isUserCreatedByAdmin(cleanEmail);
-
+      // Kimlik doğrulama tamamen sunucuda yapılır; şifreler tarayıcıya hiç gelmez.
       // Handle Registration / Account Activation Mode
       if (mode === "register") {
-        if (!authCheck.isAuthorized) {
-          setErrorMessage(
-            `Kayıt İzni Reddedildi: '${cleanEmail}' adresi için Sistem Yöneticisi tarafından açılmış bir kullanıcı kaydı bulunmamaktadır. Admin kullanıcı oluşturmadığı sürece sisteme yeni kayıt yapılamaz. Lütfen yöneticinizle iletişime geçiniz.`
-          );
+        const activation = await callServerAuth("activate", { identifier: cleanEmail, password });
+        if (!activation.ok) {
+          setErrorMessage(activation.error || "Hesap aktivasyonu yapılamadı.");
           setSubmitting(false);
           return;
         }
 
-        const preCreated = authCheck.existingProfile;
-        let firebaseUid = preCreated?.userId || `usr_${Date.now()}`;
-
-        // Attempt linking or creating in Firebase Auth
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-          firebaseUid = userCredential.user.uid;
-        } catch (authErr: any) {
-          if (authErr.code === "auth/email-already-in-use") {
-            try {
-              const signRes = await signInWithEmailAndPassword(auth, cleanEmail, password);
-              firebaseUid = signRes.user.uid;
-            } catch {
-              // Ignore if already created
-            }
-          } else if (authErr.code === "auth/weak-password") {
-            setErrorMessage("Şifreniz çok zayıf. Lütfen en az 6 karakterli güçlü bir şifre giriniz.");
-            setSubmitting(false);
-            return;
-          }
-        }
+        const isSystemAdmin = activation.isSysAdmin === true;
+        const preCreated = activation.profile;
+        const firebaseUid = preCreated?.userId || activation.session?.uid || `usr_${Date.now()}`;
 
         const finalProfile: UserProfile = {
           id: firebaseUid,
@@ -448,69 +441,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       // Handle Login Mode ("login")
-      if (!authCheck.isAuthorized) {
-        setErrorMessage(
-          `Kullanıcı Bulunamadı: '${cleanEmail}' adresi için Sistem Yöneticisi tarafından açılmış bir hesap kaydı bulunmamaktadır. Admin kullanıcı oluşturmadığı sürece sisteme giriş yapılamaz.`
-        );
+      const login = await callServerAuth("login", { identifier: cleanEmail, password });
+      if (!login.ok) {
+        setErrorMessage(login.error || "Kullanıcı adı/e-posta veya şifre hatalı.");
         setSubmitting(false);
         return;
       }
 
-      const preCreated = authCheck.existingProfile;
-      let firebaseUid = preCreated?.userId || (isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : `usr_${Date.now()}`);
-      let authSuccessful = false;
+      const isSystemAdmin = login.isSysAdmin === true;
+      const preCreated = login.profile;
+      const firebaseUid =
+        preCreated?.userId || (isSystemAdmin ? "nuT309AyQxQKddnAp1ZJjlSgBXt2" : login.session?.uid || `usr_${Date.now()}`);
 
       const authEmailToUse = preCreated?.email || (cleanEmail.includes("@") ? cleanEmail : `${cleanEmail}@muavin.com`);
-
-      // 1. Check if user is pre-created by admin with passwordPlain
-      const enteredPassword = password;
-      const cleanEnteredPassword = enteredPassword.trim();
-      const storedPlainPassword = preCreated?.passwordPlain;
-
-      if (
-        preCreated &&
-        storedPlainPassword &&
-        (storedPlainPassword === enteredPassword || storedPlainPassword.trim() === cleanEnteredPassword)
-      ) {
-        authSuccessful = true;
-        // Optionally register/sync in Firebase Auth in background so native credentials work too
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
-          firebaseUid = userCredential.user.uid;
-        } catch {
-          // If already created in Firebase Auth, attempt sign-in to sync session
-          try {
-            const userCredential = await signInWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
-            firebaseUid = userCredential.user.uid;
-          } catch {
-            // Keep existing preCreated.userId
-          }
-        }
-      } else {
-        // 2. Try Firebase Auth with email & password
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
-          firebaseUid = userCredential.user.uid;
-          authSuccessful = true;
-        } catch (signInErr: any) {
-          if (isSystemAdmin) {
-            // Auto bootstrap system admin
-            try {
-              const userCredential = await createUserWithEmailAndPassword(auth, authEmailToUse, enteredPassword);
-              firebaseUid = userCredential.user.uid;
-              authSuccessful = true;
-            } catch {
-              authSuccessful = true;
-            }
-          }
-        }
-      }
-
-      if (!authSuccessful) {
-        setErrorMessage("Hatalı şifre girdiniz. Lütfen yöneticinizin tanımladığı şifreyi kontrol ediniz.");
-        setSubmitting(false);
-        return;
-      }
 
       // Final profile constructed with admin permissions
       const finalProfile: UserProfile = {
@@ -553,21 +496,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const userEmail = user.email || "";
       const cleanUserEmail = userEmail.trim().toLowerCase();
 
-      // Enforce strict policy: Check if this user was created by admin
-      const authCheck = await isUserCreatedByAdmin(cleanUserEmail);
+      // Google kimliği sunucuda doğrulanır; kullanıcı yönetici tarafından açılmış olmalıdır.
+      const googleLogin = await callServerAuth("google", { idToken: await user.getIdToken() });
 
-      if (!authCheck.isAuthorized) {
+      if (!googleLogin.ok) {
         // Sign out immediately!
         await firebaseSignOut(auth);
         setErrorMessage(
-          `Yetkisiz Erişim: Bu Google hesabı (${cleanUserEmail}) için Sistem Yöneticisi tarafından açılmış bir kullanıcı kaydı bulunamadı. Admin kullanıcı oluşturmadığı sürece yeni kayıt yapılamaz. Lütfen yöneticinizle iletişime geçiniz.`
+          googleLogin.error ||
+            `Yetkisiz Erişim: Bu Google hesabı (${cleanUserEmail}) için Sistem Yöneticisi tarafından açılmış bir kullanıcı kaydı bulunamadı.`
         );
         setSubmitting(false);
         return;
       }
 
-      const isSystemAdmin = authCheck.isSysAdmin;
-      const preCreated = authCheck.existingProfile;
+      const isSystemAdmin = googleLogin.isSysAdmin === true;
+      const preCreated = googleLogin.profile;
       const firebaseUid = user.uid;
 
       const finalProfile: UserProfile = {

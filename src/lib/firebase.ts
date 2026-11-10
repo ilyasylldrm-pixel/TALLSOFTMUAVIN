@@ -474,7 +474,7 @@ function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnTy
   const derivedPassword =
     user.passwordPlain?.trim() ||
     matchedCompany?.loginPasswordPlain?.trim() ||
-    (isSysAdmin ? "Admin2026!" : "Muavin2026!");
+    undefined;
 
   return {
     ...user,
@@ -542,7 +542,6 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
     selectedLogoName: "E-MUAVİN Kurumsal Logo",
     selectedLogoUrl: "/logo.svg",
     role: "Sistem Yöneticisi (Admin)",
-    passwordPlain: "Admin2026!",
     createdByAdmin: true,
     createdAt: "2024-01-01T00:00:00.000Z",
   };
@@ -568,7 +567,7 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
         selectedLogoUrl: "/logo.svg",
         role: comp.loginRole || "Firma Yöneticisi",
         allowedModules: comp.moduleRestrictionEnabled ? (comp.allowedModules as AppModuleKey[]) : undefined,
-        passwordPlain: comp.loginPasswordPlain || "Muavin2026!",
+        passwordPlain: comp.loginPasswordPlain || undefined,
         createdByAdmin: true,
         createdAt: comp.createdAt || new Date().toISOString(),
       };
