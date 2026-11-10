@@ -285,24 +285,51 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     safeSetStorageItem(STORAGE_KEY, JSON.stringify(theme));
   }, [theme]);
 
+  // Tema kullanıcı hesabında saklanır: girişte hesaptaki tema yüklenir,
+  // böylece aynı kullanıcı her cihazda aynı görünümü görür.
+  useEffect(() => {
+    const loadFromAccount = () => {
+      fetch("/api/auth/preferences", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => {
+          const saved = json?.theme;
+          if (!saved || typeof saved !== "object" || !saved.id) return;
+          const preset = THEME_PRESETS.find((p) => p.id === saved.id);
+          setThemeState(preset && saved.id !== "custom" ? preset : { ...THEME_PRESETS[0], ...saved });
+        })
+        .catch(() => {});
+    };
+    loadFromAccount();
+    window.addEventListener("muavin:auth-changed", loadFromAccount);
+    return () => window.removeEventListener("muavin:auth-changed", loadFromAccount);
+  }, []);
+
+  const saveToAccount = (next: ThemeConfig) => {
+    fetch("/api/auth/preferences", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ theme: next }),
+    }).catch(() => {});
+  };
+
   const setTheme = (updates: Partial<ThemeConfig>) => {
-    setThemeState((prev) => ({
-      ...prev,
-      ...updates,
-      id: "custom",
-      name: "Özel Tema",
-    }));
+    const next = { ...theme, ...updates, id: "custom", name: "Özel Tema" };
+    setThemeState(next);
+    saveToAccount(next);
   };
 
   const setPreset = (presetId: string) => {
     const found = THEME_PRESETS.find((p) => p.id === presetId);
     if (found) {
       setThemeState(found);
+      saveToAccount(found);
     }
   };
 
   const resetTheme = () => {
     setThemeState(THEME_PRESETS[0]);
+    saveToAccount(THEME_PRESETS[0]);
   };
 
   const effectiveTheme: ThemeConfig = {

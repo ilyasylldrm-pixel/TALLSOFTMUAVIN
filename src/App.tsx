@@ -826,7 +826,9 @@ export default function App() {
     let cancelled = false;
     fetch("/api/auth/me", { credentials: "same-origin" })
       .then((resp) => {
-        if (!cancelled && resp.status === 401) handleLogout();
+        if (cancelled) return;
+        if (resp.status === 401) handleLogout();
+        else if (resp.ok) window.dispatchEvent(new Event("muavin:auth-changed"));
       })
       .catch(() => {});
     const onExpired = () => handleLogout();

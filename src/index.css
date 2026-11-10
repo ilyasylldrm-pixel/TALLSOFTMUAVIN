@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Koyu renkler yalnızca uygulamada "Koyu Mod" teması seçildiğinde (html.dark) devreye girer;
+   cihazın (Windows/Mac/telefon) koyu mod ayarı yok sayılır. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* ========================================================================= */
   /* HAZE FINANCIAL EDITORIAL DESIGN SYSTEM TOKENS                            */

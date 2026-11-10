@@ -1841,6 +1841,8 @@ interface ServerCloudSyncStore {
   version?: number;
   lastActionSummary?: string;
   lastUpdatedBy?: string;
+  /** Kullanıcı bazlı arayüz tercihleri (tema vb.), anahtar: oturum e-postası veya kullanıcı kimliği */
+  userPreferences?: Record<string, { theme?: Record<string, string>; updatedAt: string }>;
 }
 
 const CLOUD_SYNC_FILE_PATH = path.join(process.cwd(), "data", "cloud_sync_store.json");
@@ -1889,6 +1891,8 @@ function normalizeCloudSyncStore(parsed: any): ServerCloudSyncStore | null {
           lastActionSummary:
             parsed.lastActionSummary || "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
           lastUpdatedBy: parsed.lastUpdatedBy || "Sistem Yöneticisi",
+          userPreferences:
+            parsed.userPreferences && typeof parsed.userPreferences === "object" ? parsed.userPreferences : {},
         };
       }
       return null;
@@ -2276,6 +2280,35 @@ app.get("/api/auth/me", (req, res) => {
   const user = resolveSessionUser(req);
   if (!user) return res.status(401).json({ success: false });
   res.json({ success: true, session: user });
+});
+
+// Kullanıcının arayüz tercihleri (tema): hesapla birlikte saklanır, her cihazda aynı görünür.
+function preferenceKey(user: SessionUser): string {
+  return (user.email || user.uid).trim().toLowerCase();
+}
+
+app.get("/api/auth/preferences", requireAuth, async (req: AuthRequest, res) => {
+  await refreshCloudSyncStoreIfStale();
+  const prefs = memoryCloudSyncStore.userPreferences?.[preferenceKey(req.user!)] || null;
+  res.json({ success: true, theme: prefs?.theme || null, updatedAt: prefs?.updatedAt || null });
+});
+
+app.put("/api/auth/preferences", requireAuth, async (req: AuthRequest, res) => {
+  const theme = req.body?.theme;
+  if (!theme || typeof theme !== "object" || Array.isArray(theme)) {
+    return res.status(400).json({ success: false, error: "Geçersiz tema." });
+  }
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(theme).slice(0, 40)) {
+    if (typeof v === "string" && k.length <= 40 && v.length <= 120) clean[k] = v;
+  }
+  await refreshCloudSyncStoreIfStale();
+  memoryCloudSyncStore.userPreferences = memoryCloudSyncStore.userPreferences || {};
+  const updatedAt = new Date().toISOString();
+  memoryCloudSyncStore.userPreferences[preferenceKey(req.user!)] = { theme: clean, updatedAt };
+  memoryCloudSyncStore.version = Date.now();
+  persistServerCloudSyncStore();
+  res.json({ success: true, updatedAt });
 });
 
 app.post("/api/auth/logout", (req, res) => {

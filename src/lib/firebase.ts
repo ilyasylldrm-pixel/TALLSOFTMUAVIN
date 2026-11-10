@@ -75,7 +75,9 @@ try {
   firestoreInstance = initializeFirestore(
     app,
     {
-      experimentalForceLongPolling: true,
+      // Zorla uzun yoklama her dinleyici için saniyeler içinde onlarca istek üretiyordu.
+      // Otomatik algılama mümkünse kalıcı akış bağlantısı kullanır, gerekirse yoklamaya düşer.
+      experimentalAutoDetectLongPolling: true,
       ignoreUndefinedProperties: true
     },
     targetDbId
