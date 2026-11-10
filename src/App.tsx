@@ -73,6 +73,7 @@ import { Contacts } from "./components/Contacts";
 import { Invoices } from "./components/Invoices";
 import { Quotes } from "./components/Quotes";
 import { Orders } from "./components/Orders";
+import { ECommerceModule } from "./components/ECommerceModule";
 import { Waybills } from "./components/Waybills";
 import { Accounts } from "./components/Accounts";
 import { Transactions } from "./components/Transactions";
@@ -3973,6 +3974,15 @@ export default function App() {
         return "Siparişler & Sipariş Oluştur";
       case "orders_module":
         return "Sipariş & Proforma";
+      case "ecommerce":
+      case "ecommerce_orders":
+        return "E-Ticaret Modülü - Pazaryeri Siparişleri & Kargo";
+      case "ecommerce_stores":
+        return "E-Ticaret Modülü - Mağaza & Pazaryeri Entegrasyonları";
+      case "ecommerce_products":
+        return "E-Ticaret Modülü - Ürün & Stok Eşleştirme";
+      case "ecommerce_finance":
+        return "E-Ticaret Modülü - Komisyon & Hakediş Mutabakatı";
       case "production":
         return "Üretim Yönetimi";
       case "sectors":
@@ -4078,6 +4088,11 @@ export default function App() {
       orders_module: { key: "orders_module" },
       orders: { key: "orders_sales", parent: "orders_module" },
       quotes: { key: "orders_quotes", parent: "orders_module" },
+      ecommerce: { key: "ecommerce" },
+      ecommerce_orders: { key: "ecommerce_orders", parent: "ecommerce" },
+      ecommerce_stores: { key: "ecommerce_stores", parent: "ecommerce" },
+      ecommerce_products: { key: "ecommerce_products", parent: "ecommerce" },
+      ecommerce_finance: { key: "ecommerce_finance", parent: "ecommerce" },
       quotes_and_slips: { key: "invoices_expense", parent: "invoices" },
       accounts: { key: "accounts" },
       transactions: { key: "finance_gelir_gider", parent: "accounts" },
@@ -4501,6 +4516,29 @@ export default function App() {
               onConvertOrderToInvoice={handleConvertOrderToInvoice}
               onDeleteOrder={handleDeleteOrder}
               onBulkDeleteOrders={handleBulkDeleteOrders}
+            />
+          )}
+
+          {(currentTab === "ecommerce" ||
+            currentTab === "ecommerce_orders" ||
+            currentTab === "ecommerce_stores" ||
+            currentTab === "ecommerce_products" ||
+            currentTab === "ecommerce_finance") && (
+            <ECommerceModule
+              activeSubTab={currentTab}
+              onSelectSubTab={(subTab) => setCurrentTab(subTab)}
+              orders={data.orders || []}
+              products={data.products || []}
+              contacts={data.contacts || []}
+              invoices={data.invoices || []}
+              warehouses={data.warehouses || []}
+              companySettings={data.settings}
+              activeCompanyId={activeCompanyId}
+              globalSearchTerm={searchTerm}
+              onAddOrder={handleAddOrder}
+              onAddInvoice={handleAddInvoice}
+              onUpdateProduct={handleUpdateProduct}
+              onAddContact={handleAddContact}
             />
           )}
 

@@ -314,6 +314,13 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "orders", name: "↳ Siparişler & Sipariş Oluştur", description: "Satış ve satınalma siparişleri yönetimi", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
   { id: "quotes", name: "↳ Proforma Faturalar & Teklifler", description: "Proforma fatura hazırlama ve siparişe/faturaya dönüştürme", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
 
+  // Ana Modül: E-Ticaret Modülü & Alt Modülleri
+  { id: "ecommerce", name: "E-Ticaret Modülü", description: "Pazaryeri mağazaları, online siparişler, stok eşleştirme ve komisyon/hakediş yönetimi", category: "commercial", badge: "E-Ticaret" },
+  { id: "ecommerce_orders", name: "↳ Pazaryeri Siparişleri & Kargo", description: "Trendyol, Hepsiburada, Amazon, N11 ve web mağaza siparişleri", category: "commercial", parentId: "ecommerce", isSubModule: true, badge: "Alt Modül" },
+  { id: "ecommerce_stores", name: "↳ Mağaza & Pazaryeri Entegrasyonları", description: "Pazaryeri API bağlantıları ve mağaza ayarları", category: "commercial", parentId: "ecommerce", isSubModule: true, badge: "Alt Modül" },
+  { id: "ecommerce_products", name: "↳ Ürün & Stok Senkronizasyonu", description: "Stok kartları ile pazaryeri ürünleri fiyat/stok eşleştirme", category: "commercial", parentId: "ecommerce", isSubModule: true, badge: "Alt Modül" },
+  { id: "ecommerce_finance", name: "↳ Komisyon & Hakediş Mutabakatı", description: "Pazaryeri komisyon, kargo kesintisi, stopaj ve net hakediş analizi", category: "commercial", parentId: "ecommerce", isSubModule: true, badge: "Alt Modül" },
+
   // Ana Modül: Cari Hesaplar
   { id: "contacts", name: "Cari Hesaplar (Müşteri & Tedarikçi)", description: "Müşteri ve satıcı kartları, ekstreler, bakiye takibi", category: "commercial" },
 
@@ -1391,6 +1398,11 @@ export type AppModuleKey =
   | "orders_module"
   | "orders"
   | "quotes"
+  | "ecommerce"
+  | "ecommerce_orders"
+  | "ecommerce_stores"
+  | "ecommerce_products"
+  | "ecommerce_finance"
   | "production"
   | "sectors"
   | "auto_service"
@@ -2031,6 +2043,13 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler (Ana Modül)", category: "Ticari" },
   { key: "orders", label: "↳ Siparişler & Sipariş Oluştur", description: "Alınan ve verilen siparişlerin takibi", category: "Ticari", parentKey: "orders_module", isSubModule: true },
   { key: "quotes", label: "↳ Proforma Faturalar", description: "Fiyat teklifi ve proforma fatura yönetimi", category: "Ticari", parentKey: "orders_module", isSubModule: true },
+
+  // E-Ticaret Modülü & Alt Modülleri
+  { key: "ecommerce", label: "E-Ticaret Modülü", description: "Pazaryeri mağazaları, siparişler, stok senkronizasyonu ve komisyon hakediş yönetimi", category: "Ticari" },
+  { key: "ecommerce_orders", label: "↳ Pazaryeri Siparişleri & Kargo", description: "Trendyol, Hepsiburada, Amazon, N11 ve web sipariş takibi", category: "Ticari", parentKey: "ecommerce", isSubModule: true },
+  { key: "ecommerce_stores", label: "↳ Mağaza Entegrasyonları", description: "Pazaryeri API bağlantıları ve mağaza yönetimi", category: "Ticari", parentKey: "ecommerce", isSubModule: true },
+  { key: "ecommerce_products", label: "↳ Ürün & Stok Senkronizasyonu", description: "Pazaryeri fiyat ve stok eşitleme", category: "Ticari", parentKey: "ecommerce", isSubModule: true },
+  { key: "ecommerce_finance", label: "↳ Komisyon & Hakediş Mutabakatı", description: "Komisyon, kargo kesintisi ve net hakediş kontrolü", category: "Ticari", parentKey: "ecommerce", isSubModule: true },
 
   // Üretim & Sektörler
   { key: "production", label: "Üretim & Reçete Yönetimi", description: "Yemek/İmalat reçeteleri, üretim emirleri ve sevkiyat", category: "Operasyon" },

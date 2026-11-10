@@ -52,11 +52,6 @@ export default defineConfig(() => {
         'react/jsx-dev-runtime',
         'lucide-react',
         'recharts',
-        'html2canvas',
-        'jspdf',
-        'jspdf-autotable',
-        'xlsx',
-        'exceljs',
       ],
     },
     build: {

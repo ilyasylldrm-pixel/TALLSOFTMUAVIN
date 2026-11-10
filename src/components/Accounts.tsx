@@ -80,6 +80,7 @@ import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { Logo } from "./Logo";
 import { useColumnVisibility, ColumnDef } from "../hooks/useColumnVisibility";
 import { ColumnManagementDropdown } from "./common/ColumnManagementDropdown";
+import { ChequeNoteSummaryReport } from "./common/ChequeNoteSummaryReport";
 
 const KASA_TABLE_COLUMNS: ColumnDef[] = [
   { id: "date", label: "Tarih", defaultVisible: true },
@@ -1331,7 +1332,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [accIban, setAccIban] = useState("");
   const [accInitialBalance, setAccInitialBalance] = useState(0);
 
-  // New Cheque Form State
+  // New Cheque Form State (Multi-Cheque Bordro Support)
   const [chqType, setChqType] = useState<"received" | "issued">("received");
   const [chqNumber, setChqNumber] = useState("");
   const [chqBankName, setChqBankName] = useState("");
@@ -1346,7 +1347,117 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [chqCurrency, setChqCurrency] = useState("TRY");
   const [chqNotes, setChqNotes] = useState("");
 
-  // New Note Form State
+  interface ChequeDraftRow {
+    rowId: string;
+    chequeNumber: string;
+    bankName: string;
+    branchName: string;
+    drawerName: string;
+    issueDate: string;
+    dueDate: string;
+    amount: number;
+    currency: string;
+    notes: string;
+  }
+
+  const createDefaultChequeDraftRow = (
+    indexOffset = 0,
+    baseRow?: Partial<ChequeDraftRow>
+  ): ChequeDraftRow => {
+    const baseDueMs = baseRow?.dueDate
+      ? new Date(baseRow.dueDate).getTime()
+      : Date.now() + 30 * 24 * 60 * 60 * 1000;
+    const nextDueDate = new Date(
+      baseDueMs + indexOffset * 30 * 24 * 60 * 60 * 1000
+    )
+      .toISOString()
+      .split("T")[0];
+
+    let nextChequeNumber = baseRow?.chequeNumber || "";
+    if (nextChequeNumber && indexOffset > 0) {
+      nextChequeNumber = nextChequeNumber.replace(/(\d+)$/, (match) => {
+        const incremented = String(parseInt(match, 10) + indexOffset);
+        return incremented.padStart(match.length, "0");
+      });
+    }
+
+    return {
+      rowId: `chq_row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      chequeNumber: nextChequeNumber,
+      bankName: baseRow?.bankName ?? chqBankName,
+      branchName: baseRow?.branchName ?? chqBranchName,
+      drawerName: baseRow?.drawerName ?? chqDrawerName,
+      issueDate: baseRow?.issueDate ?? new Date().toISOString().split("T")[0],
+      dueDate: nextDueDate,
+      amount: baseRow?.amount ?? 5000,
+      currency: baseRow?.currency ?? chqCurrency,
+      notes: baseRow?.notes ?? chqNotes,
+    };
+  };
+
+  const [chqBatchRows, setChqBatchRows] = useState<ChequeDraftRow[]>(() => [
+    {
+      rowId: "chq_row_init_1",
+      chequeNumber: "",
+      bankName: "",
+      branchName: "",
+      drawerName: "",
+      issueDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      amount: 5000,
+      currency: "TRY",
+      notes: "",
+    },
+  ]);
+
+  const handleAddChequeDraftRow = (duplicateLast = false) => {
+    setChqBatchRows((prev) => {
+      const lastRow = prev[prev.length - 1];
+      if (duplicateLast && lastRow) {
+        return [...prev, createDefaultChequeDraftRow(1, lastRow)];
+      }
+      return [
+        ...prev,
+        createDefaultChequeDraftRow(1, {
+          bankName: lastRow?.bankName || chqBankName,
+          branchName: lastRow?.branchName || chqBranchName,
+          drawerName: lastRow?.drawerName || chqDrawerName,
+          issueDate: lastRow?.issueDate || chqIssueDate,
+          dueDate: lastRow?.dueDate || chqDueDate,
+          amount: lastRow?.amount || chqAmount,
+          currency: lastRow?.currency || chqCurrency,
+          notes: lastRow?.notes || chqNotes,
+        }),
+      ];
+    });
+  };
+
+  const handleGenerateInstallmentCheques = (count: number) => {
+    setChqBatchRows((prev) => {
+      const seedRow = prev[prev.length - 1] || createDefaultChequeDraftRow(0);
+      const generated: ChequeDraftRow[] = [];
+      for (let i = 1; i <= count; i++) {
+        generated.push(createDefaultChequeDraftRow(i, seedRow));
+      }
+      return [...prev, ...generated];
+    });
+  };
+
+  const handleUpdateChequeDraftRow = <K extends keyof ChequeDraftRow>(
+    rowId: string,
+    field: K,
+    value: ChequeDraftRow[K]
+  ) => {
+    setChqBatchRows((prev) =>
+      prev.map((row) => (row.rowId === rowId ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const handleRemoveChequeDraftRow = (rowId: string) => {
+    setChqBatchRows((prev) => (prev.length > 1 ? prev.filter((r) => r.rowId !== rowId) : prev));
+  };
+
+  // New Note Form State (Multi-Note Bordro Support)
   const [ntType, setNtType] = useState<"received" | "issued">("received");
   const [ntNumber, setNtNumber] = useState("");
   const [ntDebtorName, setNtDebtorName] = useState("");
@@ -1358,6 +1469,108 @@ export const Accounts: React.FC<AccountsProps> = ({
   const [ntAmount, setNtAmount] = useState<number>(10000);
   const [ntCurrency, setNtCurrency] = useState("TRY");
   const [ntNotes, setNtNotes] = useState("");
+
+  interface NoteDraftRow {
+    rowId: string;
+    noteNumber: string;
+    debtorName: string;
+    issueDate: string;
+    dueDate: string;
+    amount: number;
+    currency: string;
+    notes: string;
+  }
+
+  const createDefaultNoteDraftRow = (
+    indexOffset = 0,
+    baseRow?: Partial<NoteDraftRow>
+  ): NoteDraftRow => {
+    const baseDueMs = baseRow?.dueDate
+      ? new Date(baseRow.dueDate).getTime()
+      : Date.now() + 60 * 24 * 60 * 60 * 1000;
+    const nextDueDate = new Date(
+      baseDueMs + indexOffset * 30 * 24 * 60 * 60 * 1000
+    )
+      .toISOString()
+      .split("T")[0];
+
+    let nextNoteNumber = baseRow?.noteNumber || "";
+    if (nextNoteNumber && indexOffset > 0) {
+      nextNoteNumber = nextNoteNumber.replace(/(\d+)$/, (match) => {
+        const incremented = String(parseInt(match, 10) + indexOffset);
+        return incremented.padStart(match.length, "0");
+      });
+    }
+
+    return {
+      rowId: `nt_row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      noteNumber: nextNoteNumber,
+      debtorName: baseRow?.debtorName ?? ntDebtorName,
+      issueDate: baseRow?.issueDate ?? new Date().toISOString().split("T")[0],
+      dueDate: nextDueDate,
+      amount: baseRow?.amount ?? 10000,
+      currency: baseRow?.currency ?? ntCurrency,
+      notes: baseRow?.notes ?? ntNotes,
+    };
+  };
+
+  const [ntBatchRows, setNtBatchRows] = useState<NoteDraftRow[]>(() => [
+    {
+      rowId: "nt_row_init_1",
+      noteNumber: "",
+      debtorName: "",
+      issueDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      amount: 10000,
+      currency: "TRY",
+      notes: "",
+    },
+  ]);
+
+  const handleAddNoteDraftRow = (duplicateLast = false) => {
+    setNtBatchRows((prev) => {
+      const lastRow = prev[prev.length - 1];
+      if (duplicateLast && lastRow) {
+        return [...prev, createDefaultNoteDraftRow(1, lastRow)];
+      }
+      return [
+        ...prev,
+        createDefaultNoteDraftRow(1, {
+          debtorName: lastRow?.debtorName || ntDebtorName,
+          issueDate: lastRow?.issueDate || ntIssueDate,
+          dueDate: lastRow?.dueDate || ntDueDate,
+          amount: lastRow?.amount || ntAmount,
+          currency: lastRow?.currency || ntCurrency,
+          notes: lastRow?.notes || ntNotes,
+        }),
+      ];
+    });
+  };
+
+  const handleGenerateInstallmentNotes = (count: number) => {
+    setNtBatchRows((prev) => {
+      const seedRow = prev[prev.length - 1] || createDefaultNoteDraftRow(0);
+      const generated: NoteDraftRow[] = [];
+      for (let i = 1; i <= count; i++) {
+        generated.push(createDefaultNoteDraftRow(i, seedRow));
+      }
+      return [...prev, ...generated];
+    });
+  };
+
+  const handleUpdateNoteDraftRow = <K extends keyof NoteDraftRow>(
+    rowId: string,
+    field: K,
+    value: NoteDraftRow[K]
+  ) => {
+    setNtBatchRows((prev) =>
+      prev.map((row) => (row.rowId === rowId ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const handleRemoveNoteDraftRow = (rowId: string) => {
+    setNtBatchRows((prev) => (prev.length > 1 ? prev.filter((r) => r.rowId !== rowId) : prev));
+  };
 
   // Totals
   const totalCashBalance = accounts
@@ -1442,76 +1655,174 @@ export const Accounts: React.FC<AccountsProps> = ({
 
   const handleSaveCheque = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!String(chqNumber || "").trim()) {
-      triggerFormErrorNotification("Lütfen çek numarasını girin.", "Çek Uyarısı", "Çek No");
+
+    if (chqBatchRows.length === 0) {
+      triggerFormErrorNotification("Lütfen en az bir çek satırı ekleyin.", "Çek Uyarısı");
       return;
     }
-    if (chqAmount <= 0) {
-      triggerFormErrorNotification("Lütfen geçerli bir çek tutarı girin.", "Çek Uyarısı", "Tutar");
-      return;
+
+    for (let i = 0; i < chqBatchRows.length; i++) {
+      const row = chqBatchRows[i];
+      if (!String(row.chequeNumber || "").trim()) {
+        triggerFormErrorNotification(
+          `Lütfen ${i + 1}. sıradaki çekin numarasını girin.`,
+          "Çek Uyarısı",
+          `#${i + 1} Çek No`
+        );
+        return;
+      }
+      if (!row.amount || row.amount <= 0) {
+        triggerFormErrorNotification(
+          `Lütfen ${i + 1}. sıradaki çek için geçerli bir tutar girin.`,
+          "Çek Uyarısı",
+          `#${i + 1} Tutar`
+        );
+        return;
+      }
+      if (!row.dueDate) {
+        triggerFormErrorNotification(
+          `Lütfen ${i + 1}. sıradaki çekin vade tarihini seçin.`,
+          "Çek Uyarısı",
+          `#${i + 1} Vade Tarihi`
+        );
+        return;
+      }
     }
 
     const selectedContact = contacts.find((c) => c.id === chqContactId);
+    const baseTime = Date.now();
 
-    const newChq: Cheque = {
-      id: "chq_" + Date.now(),
-      type: chqType,
-      chequeNumber: chqNumber,
-      bankName: chqBankName || "Garanti BBVA",
-      branchName: chqBranchName,
-      drawerName: chqDrawerName || selectedContact?.name || "Bilinmiyor",
-      contactId: chqContactId || undefined,
-      contactName: selectedContact?.name || chqDrawerName || "Genel Cari",
-      issueDate: chqIssueDate,
-      dueDate: chqDueDate,
-      amount: chqAmount,
-      currency: chqCurrency,
-      status: "portfolio",
-      notes: chqNotes,
-    };
+    chqBatchRows.forEach((row, idx) => {
+      const resolvedBank = String(row.bankName || chqBankName || "").trim() || "Garanti BBVA";
+      const resolvedBranch = String(row.branchName || chqBranchName || "").trim();
+      const resolvedDrawer =
+        String(row.drawerName || chqDrawerName || "").trim() ||
+        selectedContact?.name ||
+        "Bilinmiyor";
+      const resolvedNotes = String(row.notes || chqNotes || "").trim();
 
-    if (onAddCheque) onAddCheque(newChq);
+      const newChq: Cheque = {
+        id: `chq_${baseTime}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        type: chqType,
+        chequeNumber: row.chequeNumber.trim(),
+        bankName: resolvedBank,
+        branchName: resolvedBranch,
+        drawerName: resolvedDrawer,
+        contactId: chqContactId || undefined,
+        contactName: selectedContact?.name || resolvedDrawer || "Genel Cari",
+        issueDate: row.issueDate || chqIssueDate,
+        dueDate: row.dueDate,
+        amount: Number(row.amount) || 0,
+        currency: row.currency || chqCurrency || "TRY",
+        status: "portfolio",
+        notes: resolvedNotes,
+      };
+
+      if (onAddCheque) onAddCheque(newChq);
+    });
+
     setIsChequeModalOpen(false);
     setChqNumber("");
     setChqBankName("");
     setChqBranchName("");
     setChqDrawerName("");
     setChqNotes("");
+    setChqBatchRows([
+      {
+        rowId: `chq_row_reset_${Date.now()}`,
+        chequeNumber: "",
+        bankName: "",
+        branchName: "",
+        drawerName: "",
+        issueDate: new Date().toISOString().split("T")[0],
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        amount: 5000,
+        currency: "TRY",
+        notes: "",
+      },
+    ]);
   };
 
   const handleSaveNote = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!String(ntNumber || "").trim()) {
-      triggerFormErrorNotification("Lütfen senet numarasını girin.", "Senet Uyarısı", "Senet No");
+
+    if (ntBatchRows.length === 0) {
+      triggerFormErrorNotification("Lütfen en az bir senet satırı ekleyin.", "Senet Uyarısı");
       return;
     }
-    if (ntAmount <= 0) {
-      triggerFormErrorNotification("Lütfen geçerli bir senet tutarı girin.", "Senet Uyarısı", "Tutar");
-      return;
+
+    for (let i = 0; i < ntBatchRows.length; i++) {
+      const row = ntBatchRows[i];
+      if (!String(row.noteNumber || "").trim()) {
+        triggerFormErrorNotification(
+          `Lütfen ${i + 1}. sıradaki senedin numarasını girin.`,
+          "Senet Uyarısı",
+          `#${i + 1} Senet No`
+        );
+        return;
+      }
+      if (!row.amount || row.amount <= 0) {
+        triggerFormErrorNotification(
+          `Lütfen ${i + 1}. sıradaki senet için geçerli bir tutar girin.`,
+          "Senet Uyarısı",
+          `#${i + 1} Tutar`
+        );
+        return;
+      }
+      if (!row.dueDate) {
+        triggerFormErrorNotification(
+          `Lütfen ${i + 1}. sıradaki senedin vade tarihini seçin.`,
+          "Senet Uyarısı",
+          `#${i + 1} Vade Tarihi`
+        );
+        return;
+      }
     }
 
     const selectedContact = contacts.find((c) => c.id === ntContactId);
+    const baseTime = Date.now();
 
-    const newNt: PromissoryNote = {
-      id: "nt_" + Date.now(),
-      type: ntType,
-      noteNumber: ntNumber,
-      debtorName: ntDebtorName || selectedContact?.name || "Bilinmiyor",
-      contactId: ntContactId || undefined,
-      contactName: selectedContact?.name || ntDebtorName || "Genel Cari",
-      issueDate: ntIssueDate,
-      dueDate: ntDueDate,
-      amount: ntAmount,
-      currency: ntCurrency,
-      status: "portfolio",
-      notes: ntNotes,
-    };
+    ntBatchRows.forEach((row, idx) => {
+      const resolvedDebtor =
+        String(row.debtorName || ntDebtorName || "").trim() ||
+        selectedContact?.name ||
+        "Bilinmiyor";
+      const resolvedNotes = String(row.notes || ntNotes || "").trim();
 
-    if (onAddPromissoryNote) onAddPromissoryNote(newNt);
+      const newNt: PromissoryNote = {
+        id: `nt_${baseTime}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        type: ntType,
+        noteNumber: row.noteNumber.trim(),
+        debtorName: resolvedDebtor,
+        contactId: ntContactId || undefined,
+        contactName: selectedContact?.name || resolvedDebtor || "Genel Cari",
+        issueDate: row.issueDate || ntIssueDate,
+        dueDate: row.dueDate,
+        amount: Number(row.amount) || 0,
+        currency: row.currency || ntCurrency || "TRY",
+        status: "portfolio",
+        notes: resolvedNotes,
+      };
+
+      if (onAddPromissoryNote) onAddPromissoryNote(newNt);
+    });
+
     setIsNoteModalOpen(false);
     setNtNumber("");
     setNtDebtorName("");
     setNtNotes("");
+    setNtBatchRows([
+      {
+        rowId: `nt_row_reset_${Date.now()}`,
+        noteNumber: "",
+        debtorName: "",
+        issueDate: new Date().toISOString().split("T")[0],
+        dueDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        amount: 10000,
+        currency: "TRY",
+        notes: "",
+      },
+    ]);
   };
 
   // Filtered lists with Date Range & Search filtering
@@ -4120,208 +4431,467 @@ export const Accounts: React.FC<AccountsProps> = ({
   }
 
   if (isChequeModalOpen) {
+    const totalBatchAmount = chqBatchRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const selectedChequeContact = contacts.find((c) => c.id === chqContactId);
+
     return (
-        <DetailPageLayout
-          title="Yeni Finansal Çek Kaydı"
-          subtitle="Müşteri çeki (tahsilat) veya firma borç çeki (ödeme) portföy girişi"
-          breadcrumbs={[
-            { label: "Finans Yönetimi", onClick: handleBackToList },
-            { label: "Çek & Senet Portföyü", onClick: handleBackToList },
-            { label: "Yeni Çek Kaydı", active: true },
-          ]}
-          onBack={handleBackToList}
-          statusBadge={
+      <DetailPageLayout
+        title="Yeni Finansal Çek Kaydı (Çoklu Çek / Bordro Girişi)"
+        subtitle="Tek seferde bir veya birden fazla müşteri çeki (tahsilat) ya da firma borç çeki (ödeme) portföy girişi yapabilirsiniz"
+        breadcrumbs={[
+          { label: "Finans Yönetimi", onClick: handleBackToList },
+          { label: "Çek & Senet Portföyü", onClick: handleBackToList },
+          { label: "Yeni Çek Kaydı", active: true },
+        ]}
+        onBack={handleBackToList}
+        statusBadge={
+          <div className="flex items-center gap-2">
             <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-indigo-50 text-indigo-700 border-indigo-200">
               {chqType === "received" ? "Alınan Müşteri Çeki" : "Verilen Borç Çeki"}
             </span>
-          }
-          headerIcon={<FileCheck2 className="w-5 h-5 text-indigo-600" />}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="submit"
-                form="add-cheque-form"
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
-              >
-                <span>Çek Kaydını Oluştur</span>
-              </button>
-            </div>
-          }
-        >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-            <form id="add-cheque-form" onSubmit={handleSaveCheque} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Çek Tipi *</label>
-                  <select
-                    value={chqType}
-                    onChange={(e) => setChqType(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  >
-                    <option value="received">Müşteri Çeki (Alınan)</option>
-                    <option value="issued">Borç / Firma Çeki (Verilen)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Çek Numarası *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: CHK-991028"
-                    value={chqNumber}
-                    onChange={(e) => setChqNumber(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Banka Adı *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ör: Garanti BBVA"
-                    value={chqBankName}
-                    onChange={(e) => setChqBankName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube</label>
-                  <input
-                    type="text"
-                    placeholder="ör: Levent Şubesi"
-                    value={chqBranchName}
-                    onChange={(e) => setChqBranchName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">İlişkili Cari Hesap</label>
-                <select
-                  value={chqContactId}
-                  onChange={(e) => setChqContactId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                >
-                  <option value="">-- Cari Seçin --</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Keşideci / Düzenleyen</label>
-                <input
-                  type="text"
-                  placeholder="ör: Anadolu Marketler Zinciri A.Ş."
-                  value={chqDrawerName}
-                  onChange={(e) => setChqDrawerName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Keşide Tarihi</label>
-                  <input
-                    type="date"
-                    value={chqIssueDate}
-                    onChange={(e) => setChqIssueDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
-                  <input
-                    type="date"
-                    required
-                    value={chqDueDate}
-                    onChange={(e) => setChqDueDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Çek Tutarı *</label>
-                  <input
-                    type="number"
-                    required
-                    value={chqAmount}
-                    onChange={(e) => setChqAmount(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Para Birimi</label>
-                  <select
-                    value={chqCurrency}
-                    onChange={(e) => setChqCurrency(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                  >
-                    <option value="TRY">TRY (₺)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
-                <input
-                  type="text"
-                  placeholder="Örn: Fatura tahsilatına istinaden alınan çek"
-                  value={chqNotes}
-                  onChange={(e) => setChqNotes(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-                />
-              </div>
-
-              <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={handleBackToList}
-                  className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer text-xs"
-                >
-                  Çek Kaydını Oluştur
-                </button>
-              </div>
-            </form>
+            <span className="px-3 py-1 text-xs font-black rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200 font-mono">
+              {chqBatchRows.length} Adet Çek • Toplam: {formatCurrency(totalBatchAmount, chqCurrency)}
+            </span>
           </div>
-        </DetailPageLayout>
+        }
+        headerIcon={<FileCheck2 className="w-5 h-5 text-indigo-600" />}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleAddChequeDraftRow(false)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Çek Satırı Ekle</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer shadow-2xs"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="submit"
+              form="add-cheque-form"
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>
+                {chqBatchRows.length > 1
+                  ? `${chqBatchRows.length} Adet Çek Kaydını Oluştur`
+                  : "Çek Kaydını Oluştur"}
+              </span>
+            </button>
+          </div>
+        }
+      >
+        <div className="max-w-6xl w-full mx-auto space-y-5">
+          <form id="add-cheque-form" onSubmit={handleSaveCheque} className="space-y-5 text-xs">
+            {/* BİRLEŞTİRİLMİŞ ÇOKLU ÇEK LİSTESİ TABLOSU & ORTAK BORDRO / CARİ HESAP BİLGİLERİ */}
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-5">
+              {/* Tablo Üst Başlık ve Satır Ekleme Aksiyonları */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <FileCheck2 className="w-4 h-4 text-emerald-600" />
+                    <span>Çoklu Çek Listesi Tablosu &amp; Ortak Bordro / Cari Hesap Bilgileri ({chqBatchRows.length} Satır)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Ortak bordro ve cari hesap bilgilerini tablo üst barından seçebilir, <strong>&quot;+ Satır Ekle&quot;</strong> ile birden fazla çek girişi yapabilirsiniz.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleAddChequeDraftRow(false)}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Satır Ekle</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddChequeDraftRow(true)}
+                    className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                    title="Son çekin bilgilerini kopyalar, çek numarasını 1 artırır ve vadesini 30 gün ileri atar"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Son Satırı Çoğalt (+1 Ay Vade)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateInstallmentCheques(3)}
+                    className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold cursor-pointer transition-all"
+                    title="Aylık sıralı 3 adet daha çek satırı ekler"
+                  >
+                    +3 Sıralı Satır
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateInstallmentCheques(6)}
+                    className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold cursor-pointer transition-all"
+                    title="Aylık sıralı 6 adet daha çek satırı ekler"
+                  >
+                    +6 Sıralı Satır
+                  </button>
+                </div>
+              </div>
+
+              {/* Çoklu Çek Giriş Tablosu (Ortak Bordro & Cari Hesap Bilgileri Tablo İçinde Gösterilir) */}
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left border-collapse min-w-[680px]">
+                  <thead>
+                    {/* TABLO İÇİ ORTAK BORDRO & CARİ HESAP BİLGİLERİ BÖLÜMÜ */}
+                    <tr className="bg-indigo-50/60 border-b-2 border-indigo-200/80">
+                      <th colSpan={6} className="p-4">
+                        <div className="space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Landmark className="w-4 h-4 text-indigo-700" />
+                              <span className="text-xs font-extrabold text-indigo-950 uppercase tracking-wide">
+                                Ortak Bordro &amp; Cari Hesap Bilgileri (Tablo Genel Varsayılanları)
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setChqBatchRows((prev) =>
+                                  prev.map((r) => ({
+                                    ...r,
+                                    bankName: chqBankName || r.bankName,
+                                    branchName: chqBranchName || r.branchName,
+                                    drawerName: chqDrawerName || selectedChequeContact?.name || r.drawerName,
+                                    issueDate: chqIssueDate || r.issueDate,
+                                    currency: chqCurrency || r.currency,
+                                    notes: chqNotes || r.notes,
+                                  }))
+                                );
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors cursor-pointer"
+                            >
+                              Ortak Bilgileri Tablodaki Tüm Satırlara Uygula
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-normal normal-case">
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Çek Bordro Tipi *</label>
+                              <select
+                                value={chqType}
+                                onChange={(e) => setChqType(e.target.value as any)}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-xs"
+                              >
+                                <option value="received">Müşteri Çeki (Alınan)</option>
+                                <option value="issued">Borç / Firma Çeki (Verilen)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">İlişkili Cari Hesap</label>
+                              <select
+                                value={chqContactId}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setChqContactId(val);
+                                  const found = contacts.find((c) => c.id === val);
+                                  if (found && !chqDrawerName) {
+                                    setChqDrawerName(found.name);
+                                    setChqBatchRows((prev) =>
+                                      prev.map((r) => (r.drawerName ? r : { ...r, drawerName: found.name }))
+                                    );
+                                  }
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-xs"
+                              >
+                                <option value="">-- Cari Seçin --</option>
+                                {contacts.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Varsayılan Banka Adı</label>
+                              <input
+                                type="text"
+                                placeholder="ör: Garanti BBVA"
+                                value={chqBankName}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setChqBankName(val);
+                                  setChqBatchRows((prev) =>
+                                    prev.map((r, i) => (i === 0 && !r.bankName ? { ...r, bankName: val } : r))
+                                  );
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 text-slate-900 text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Varsayılan Şube</label>
+                              <input
+                                type="text"
+                                placeholder="ör: Levent Şubesi"
+                                value={chqBranchName}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setChqBranchName(val);
+                                  setChqBatchRows((prev) =>
+                                    prev.map((r, i) => (i === 0 && !r.branchName ? { ...r, branchName: val } : r))
+                                  );
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 text-slate-900 text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Varsayılan Keşideci / Düzenleyen</label>
+                              <input
+                                type="text"
+                                placeholder="ör: Anadolu Marketler Zinciri A.Ş."
+                                value={chqDrawerName}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setChqDrawerName(val);
+                                  setChqBatchRows((prev) =>
+                                    prev.map((r, i) => (i === 0 && !r.drawerName ? { ...r, drawerName: val } : r))
+                                  );
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 text-slate-900 text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Varsayılan Keşide Tarihi</label>
+                              <input
+                                type="date"
+                                value={chqIssueDate}
+                                onChange={(e) => setChqIssueDate(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 text-slate-900 font-mono text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Varsayılan Para Birimi</label>
+                              <select
+                                value={chqCurrency}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setChqCurrency(val);
+                                  setChqBatchRows((prev) => prev.map((r) => ({ ...r, currency: val })));
+                                }}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 font-bold text-slate-900 text-xs"
+                              >
+                                <option value="TRY">TRY (₺)</option>
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (€)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">Ortak Açıklama / Bordro Notu</label>
+                              <input
+                                type="text"
+                                placeholder="Örn: Fatura tahsilatına istinaden alınan çekler"
+                                value={chqNotes}
+                                onChange={(e) => setChqNotes(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl p-2 text-slate-900 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </th>
+                    </tr>
+                    <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                      <th className="py-2.5 px-3 w-10 text-center">#</th>
+                      <th className="py-2.5 px-2.5 w-44">Çek Numarası *</th>
+                      <th className="py-2.5 px-2.5 w-40">Vade Tarihi *</th>
+                      <th className="py-2.5 px-2.5 w-44 text-right">Tutar ({chqCurrency}) *</th>
+                      <th className="py-2.5 px-2.5">Açıklama / Not</th>
+                      <th className="py-2.5 px-3 w-24 text-center">İşlem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {chqBatchRows.map((row, idx) => (
+                      <tr
+                        key={row.rowId}
+                        className="hover:bg-indigo-50/30 transition-colors group"
+                      >
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="inline-flex w-6 h-6 rounded-lg bg-indigo-600 text-white font-black text-[11px] items-center justify-center shadow-2xs">
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder={`CHK-${1001 + idx}`}
+                            value={row.chequeNumber}
+                            onChange={(e) =>
+                              handleUpdateChequeDraftRow(row.rowId, "chequeNumber", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:border-indigo-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="date"
+                            required
+                            value={row.dueDate}
+                            onChange={(e) =>
+                              handleUpdateChequeDraftRow(row.rowId, "dueDate", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-900 font-mono font-bold focus:border-indigo-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={row.amount}
+                            onChange={(e) =>
+                              handleUpdateChequeDraftRow(
+                                row.rowId,
+                                "amount",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono font-bold text-right text-slate-900 focus:border-indigo-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="text"
+                            placeholder={chqNotes || "Açıklama..."}
+                            value={row.notes}
+                            onChange={(e) =>
+                              handleUpdateChequeDraftRow(row.rowId, "notes", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:border-indigo-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setChqBatchRows((prev) => {
+                                  const copy = createDefaultChequeDraftRow(1, row);
+                                  const next = [...prev];
+                                  next.splice(idx + 1, 0, copy);
+                                  return next;
+                                });
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 border border-slate-200 cursor-pointer transition-colors"
+                              title="Bu satırı 1 ay sonraki vadeyle altına kopyala"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={chqBatchRows.length <= 1}
+                              onClick={() => handleRemoveChequeDraftRow(row.rowId)}
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Satırı Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900">
+                      <td colSpan={3} className="py-3 px-4 text-right uppercase text-[11px] tracking-wider text-slate-600">
+                        Toplam Çek Bordrosu ({chqBatchRows.length} Adet Çek):
+                      </td>
+                      <td className="py-3 px-2.5 text-right font-mono text-sm font-black text-indigo-700">
+                        {formatCurrency(totalBatchAmount, chqCurrency)}
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Alt Özet ve Hızlı Satır Ekleme Barı */}
+              <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleAddChequeDraftRow(false)}
+                    className="px-4 py-2 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Satır Ekle</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddChequeDraftRow(true)}
+                    className="px-4 py-2 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Son Satırı Çoğalt (+1 Ay Vade)</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-4 justify-end">
+                  <div className="text-right">
+                    <div className="text-[11px] font-semibold text-slate-500">
+                      Toplam Girilen Çek ({chqBatchRows.length} Adet)
+                    </div>
+                    <div className="text-base font-black font-mono text-indigo-700">
+                      {formatCurrency(totalBatchAmount, chqCurrency)}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleBackToList}
+                    className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer rounded-xl font-bold text-xs"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer text-xs shadow-xs flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {chqBatchRows.length > 1
+                        ? `${chqBatchRows.length} Adet Çeki Portföye Kaydet`
+                        : "Çek Kaydını Oluştur"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </DetailPageLayout>
     );
   }
 
-  /* FULL-PAGE DETAIL VIEW: ADD PROMISSORY NOTE */
+  /* FULL-PAGE DETAIL VIEW: ADD PROMISSORY NOTE (MULTI-ROW TABLE SUPPORT) */
   if (isNoteModalOpen) {
+    const totalNoteBatchAmount = ntBatchRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const selectedNoteContact = contacts.find((c) => c.id === ntContactId);
+
     return (
       <DetailPageLayout
-        title="Yeni Finansal Senet Kaydı"
-        subtitle="Müşteri senedi (alınan) veya borç senedi (verilen) portföy kaydı"
+        title="Yeni Finansal Senet Kaydı (Çoklu Senet / Bordro Girişi)"
+        subtitle="Tek seferde bir veya birden fazla müşteri senedi (alınan) ya da borç senedi (verilen) portföy kaydı yapabilirsiniz"
         breadcrumbs={[
           { label: "Finans Yönetimi", onClick: handleBackToList },
           { label: "Çek & Senet Portföyü", onClick: handleBackToList },
@@ -4329,13 +4899,26 @@ export const Accounts: React.FC<AccountsProps> = ({
         ]}
         onBack={handleBackToList}
         statusBadge={
-          <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
-            {ntType === "received" ? "Alınan Müşteri Senedi" : "Verilen Borç Senedi"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 text-xs font-bold rounded-xl border bg-purple-50 text-purple-700 border-purple-200">
+              {ntType === "received" ? "Alınan Müşteri Senedi" : "Verilen Borç Senedi"}
+            </span>
+            <span className="px-3 py-1 text-xs font-black rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200 font-mono">
+              {ntBatchRows.length} Adet Senet • Toplam: {formatCurrency(totalNoteBatchAmount, ntCurrency)}
+            </span>
+          </div>
         }
         headerIcon={<Stamp className="w-5 h-5 text-purple-600" />}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleAddNoteDraftRow(false)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Satır Ekle</span>
+            </button>
             <button
               type="button"
               onClick={handleBackToList}
@@ -4348,140 +4931,385 @@ export const Accounts: React.FC<AccountsProps> = ({
               form="add-note-form"
               className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-2 active:scale-95"
             >
-              <span>Senet Kaydını Oluştur</span>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>
+                {ntBatchRows.length > 1
+                  ? `${ntBatchRows.length} Adet Senet Kaydını Oluştur`
+                  : "Senet Kaydını Oluştur"}
+              </span>
             </button>
           </div>
         }
       >
-        <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6 mx-auto">
-          <form id="add-note-form" onSubmit={handleSaveNote} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Senet Tipi *</label>
-                <select
-                  value={ntType}
-                  onChange={(e) => setNtType(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+        <div className="max-w-6xl w-full mx-auto space-y-5">
+          <form id="add-note-form" onSubmit={handleSaveNote} className="space-y-5 text-xs">
+            {/* 1. ÜST ORTAK SENET BORDRO BİLGİLERİ */}
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <Stamp className="w-4 h-4 text-purple-600" />
+                    <span>Ortak Senet Bordrosu &amp; Cari Hesap Bilgileri</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Seçtiğiniz cari hesap ve varsayılan borçlu/düzenleme bilgileri eklenen tüm senet satırlarına uygulanır.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNtBatchRows((prev) =>
+                      prev.map((r) => ({
+                        ...r,
+                        debtorName: ntDebtorName || selectedNoteContact?.name || r.debtorName,
+                        issueDate: ntIssueDate || r.issueDate,
+                        currency: ntCurrency || r.currency,
+                        notes: ntNotes || r.notes,
+                      }))
+                    );
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-colors cursor-pointer"
                 >
-                  <option value="received">Müşteri Senedi (Alınan)</option>
-                  <option value="issued">Borç Senedi (Verilen)</option>
-                </select>
+                  Ortak Bilgileri Tüm Satırlara Uygula
+                </button>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Senet Numarası *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ör: SNT-2026-088"
-                  value={ntNumber}
-                  onChange={(e) => setNtNumber(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono text-slate-900"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Senet Tipi *</label>
+                  <select
+                    value={ntType}
+                    onChange={(e) => setNtType(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                  >
+                    <option value="received">Müşteri Senedi (Alınan)</option>
+                    <option value="issued">Borç Senedi (Verilen)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">İlişkili Cari Hesap</label>
+                  <select
+                    value={ntContactId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNtContactId(val);
+                      const found = contacts.find((c) => c.id === val);
+                      if (found && !ntDebtorName) {
+                        setNtDebtorName(found.name);
+                        setNtBatchRows((prev) =>
+                          prev.map((r) => (r.debtorName ? r : { ...r, debtorName: found.name }))
+                        );
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                  >
+                    <option value="">-- Cari Seçin --</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Varsayılan Borçlu / Keşideci Adı</label>
+                  <input
+                    type="text"
+                    placeholder="ör: Mavi Derinlik Yayıncılık A.Ş."
+                    value={ntDebtorName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNtDebtorName(val);
+                      setNtBatchRows((prev) =>
+                        prev.map((r, i) => (i === 0 && !r.debtorName ? { ...r, debtorName: val } : r))
+                      );
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Varsayılan Düzenleme Tarihi</label>
+                  <input
+                    type="date"
+                    value={ntIssueDate}
+                    onChange={(e) => setNtIssueDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Varsayılan Para Birimi</label>
+                  <select
+                    value={ntCurrency}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNtCurrency(val);
+                      setNtBatchRows((prev) => prev.map((r) => ({ ...r, currency: val })));
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
+                  >
+                    <option value="TRY">TRY (₺)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Ortak Açıklama / Notlar</label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Vadeli satışa istinaden alınan sıralı senetler"
+                    value={ntNotes}
+                    onChange={(e) => setNtNotes(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
+                  />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">İlişkili Cari Hesap</label>
-              <select
-                value={ntContactId}
-                onChange={(e) => setNtContactId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-              >
-                <option value="">-- Cari Seçin --</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* 2. ÇOKLU SENET LİSTESİ TABLOSU KARTI */}
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <Stamp className="w-4 h-4 text-purple-600" />
+                    <span>Çoklu Senet Listesi Tablosu ({ntBatchRows.length} Satır)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Tablodaki her satır ayrı bir finansal senet olarak kaydedilir. Yeni senet eklemek için <strong>&quot;+ Satır Ekle&quot;</strong> butonunu kullanabilirsiniz.
+                  </p>
+                </div>
 
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Borçlu / Keşideci Adı</label>
-              <input
-                type="text"
-                placeholder="ör: Mavi Derinlik Yayıncılık A.Ş."
-                value={ntDebtorName}
-                onChange={(e) => setNtDebtorName(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-              />
-            </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleAddNoteDraftRow(false)}
+                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Satır Ekle</span>
+                  </button>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Düzenleme Tarihi</label>
-                <input
-                  type="date"
-                  value={ntIssueDate}
-                  onChange={(e) => setNtIssueDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono"
-                />
+                  <button
+                    type="button"
+                    onClick={() => handleAddNoteDraftRow(true)}
+                    className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Son Satırı Çoğalt (+1 Ay Vade)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateInstallmentNotes(3)}
+                    className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold cursor-pointer transition-all"
+                  >
+                    +3 Sıralı Satır
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateInstallmentNotes(6)}
+                    className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold cursor-pointer transition-all"
+                  >
+                    +6 Sıralı Satır
+                  </button>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Vade Tarihi *</label>
-                <input
-                  type="date"
-                  required
-                  value={ntDueDate}
-                  onChange={(e) => setNtDueDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900 font-mono font-bold"
-                />
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left border-collapse min-w-[860px]">
+                  <thead>
+                    <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                      <th className="py-2.5 px-3 w-10 text-center">#</th>
+                      <th className="py-2.5 px-2.5 w-40">Senet Numarası *</th>
+                      <th className="py-2.5 px-2.5 w-48">Borçlu / Keşideci Adı</th>
+                      <th className="py-2.5 px-2.5 w-36">Düzenleme Tarihi</th>
+                      <th className="py-2.5 px-2.5 w-36">Vade Tarihi *</th>
+                      <th className="py-2.5 px-2.5 w-40 text-right">Tutar ({ntCurrency}) *</th>
+                      <th className="py-2.5 px-2.5">Açıklama / Not</th>
+                      <th className="py-2.5 px-3 w-24 text-center">İşlem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {ntBatchRows.map((row, idx) => (
+                      <tr key={row.rowId} className="hover:bg-purple-50/30 transition-colors">
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="inline-flex w-6 h-6 rounded-lg bg-purple-600 text-white font-black text-[11px] items-center justify-center shadow-2xs">
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="text"
+                            required
+                            placeholder={`SNT-2026-0${idx + 1}`}
+                            value={row.noteNumber}
+                            onChange={(e) =>
+                              handleUpdateNoteDraftRow(row.rowId, "noteNumber", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:border-purple-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="text"
+                            placeholder={
+                              ntDebtorName || selectedNoteContact?.name || "Borçlu Adı"
+                            }
+                            value={row.debtorName}
+                            onChange={(e) =>
+                              handleUpdateNoteDraftRow(row.rowId, "debtorName", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-900 focus:border-purple-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="date"
+                            value={row.issueDate}
+                            onChange={(e) =>
+                              handleUpdateNoteDraftRow(row.rowId, "issueDate", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-800 font-mono focus:border-purple-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="date"
+                            required
+                            value={row.dueDate}
+                            onChange={(e) =>
+                              handleUpdateNoteDraftRow(row.rowId, "dueDate", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-slate-900 font-mono font-bold focus:border-purple-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={row.amount}
+                            onChange={(e) =>
+                              handleUpdateNoteDraftRow(
+                                row.rowId,
+                                "amount",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono font-bold text-right text-slate-900 focus:border-purple-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="text"
+                            placeholder={ntNotes || "Açıklama..."}
+                            value={row.notes}
+                            onChange={(e) =>
+                              handleUpdateNoteDraftRow(row.rowId, "notes", e.target.value)
+                            }
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:border-purple-500 outline-none"
+                          />
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNtBatchRows((prev) => {
+                                  const copy = createDefaultNoteDraftRow(1, row);
+                                  const next = [...prev];
+                                  next.splice(idx + 1, 0, copy);
+                                  return next;
+                                });
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-700 border border-slate-200 cursor-pointer transition-colors"
+                              title="Bu satırı 1 ay sonraki vadeyle altına kopyala"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={ntBatchRows.length <= 1}
+                              onClick={() => handleRemoveNoteDraftRow(row.rowId)}
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Satırı Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900">
+                      <td colSpan={5} className="py-3 px-4 text-right uppercase text-[11px] tracking-wider text-slate-600">
+                        Toplam Senet Bordrosu ({ntBatchRows.length} Adet Senet):
+                      </td>
+                      <td className="py-3 px-2.5 text-right font-mono text-sm font-black text-purple-700">
+                        {formatCurrency(totalNoteBatchAmount, ntCurrency)}
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Senet Tutarı *</label>
-                <input
-                  type="number"
-                  required
-                  value={ntAmount}
-                  onChange={(e) => setNtAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold text-slate-900"
-                />
+              <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleAddNoteDraftRow(false)}
+                    className="px-4 py-2 rounded-xl border border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-50 text-purple-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Satır Ekle</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddNoteDraftRow(true)}
+                    className="px-4 py-2 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Son Satırı Çoğalt (+1 Ay Vade)</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-4 justify-end">
+                  <div className="text-right">
+                    <div className="text-[11px] font-semibold text-slate-500">
+                      Toplam Girilen Senet ({ntBatchRows.length} Adet)
+                    </div>
+                    <div className="text-base font-black font-mono text-purple-700">
+                      {formatCurrency(totalNoteBatchAmount, ntCurrency)}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleBackToList}
+                    className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 border border-slate-200 cursor-pointer rounded-xl font-bold text-xs"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl cursor-pointer text-xs shadow-xs flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {ntBatchRows.length > 1
+                        ? `${ntBatchRows.length} Adet Senedi Portföye Kaydet`
+                        : "Senet Kaydını Oluştur"}
+                    </span>
+                  </button>
+                </div>
               </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Para Birimi</label>
-                <select
-                  value={ntCurrency}
-                  onChange={(e) => setNtCurrency(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-900"
-                >
-                  <option value="TRY">TRY (₺)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Açıklama / Notlar</label>
-              <input
-                type="text"
-                placeholder="Örn: Vadeli satışa istinaden alınan senet"
-                value={ntNotes}
-                onChange={(e) => setNtNotes(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-900"
-              />
-            </div>
-
-            <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-4 py-2 text-slate-500 hover:bg-slate-100 cursor-pointer rounded-xl font-semibold text-xs"
-              >
-                İptal
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl cursor-pointer text-xs"
-              >
-                Senet Kaydını Oluştur
-              </button>
             </div>
           </form>
         </div>
@@ -8007,6 +8835,11 @@ export const Accounts: React.FC<AccountsProps> = ({
       {/* SUB-MODULE 3: ÇEK */}
       {activeSubModule === "cek" && (
         <div className="space-y-6 animate-fadeIn">
+          <ChequeNoteSummaryReport
+            cheques={cheques}
+            promissoryNotes={promissoryNotes}
+            contacts={contacts}
+          />
           {renderDateFilterBar("Çek Portföyü")}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-slate-200 pb-4">
@@ -8513,6 +9346,11 @@ export const Accounts: React.FC<AccountsProps> = ({
       {/* SUB-MODULE 4: SENET */}
       {activeSubModule === "senet" && (
         <div className="space-y-6 animate-fadeIn">
+          <ChequeNoteSummaryReport
+            cheques={cheques}
+            promissoryNotes={promissoryNotes}
+            contacts={contacts}
+          />
           {renderDateFilterBar("Senet Portföyü")}
           <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-slate-200 pb-4">

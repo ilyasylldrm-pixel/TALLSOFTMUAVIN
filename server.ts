@@ -37,11 +37,26 @@ function loadServerEnv() {
     path.join(cwd, "..", ".env"),
     path.join(cwd, "..", "muavin.env"),
   ]) {
-    dotenv.config({ path: candidate });
+    if (fs.existsSync(candidate)) {
+      dotenv.config({ path: candidate, quiet: true } as any);
+    }
   }
 }
 
 loadServerEnv();
+
+// Prevent transient background socket/network errors (e.g., WhatsApp Baileys or DB idle timeouts) from crashing the Node process
+process.on("uncaughtException", (err: any) => {
+  if (err?.code === "EADDRINUSE") {
+    console.error("[FATAL] Port already in use:", err.message);
+    process.exit(1);
+  }
+  console.warn("[Server UncaughtException Guard]:", err?.message || err);
+});
+
+process.on("unhandledRejection", (reason: any) => {
+  console.warn("[Server UnhandledRejection Guard]:", reason?.message || reason);
+});
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.K_SERVICE);

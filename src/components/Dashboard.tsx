@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { GeometricHoneycombBackground } from "./common/GeometricHoneycombBackground";
+import { ChequeNoteSummaryReport } from "./common/ChequeNoteSummaryReport";
 import { useTheme } from "../context/ThemeContext";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 
@@ -1042,6 +1043,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 4.5. ÇEK / SENET DURUM ÖZET RAPORU (DURUM, VADE TARİHİ VE CARİ HESAP BAZLI GRAFİKSEL ANALİZ) */}
+      <ChequeNoteSummaryReport
+        cheques={cheques}
+        promissoryNotes={promissoryNotes}
+        contacts={contacts}
+        onNavigateToPortfolio={() => onSelectTab("accounts")}
+      />
 
       {/* 5. DÖRDÜNCÜ KATMAN: KASA VE BANKA DETAY HESAPLARI & TCMB DÖVİZ KURLARI */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

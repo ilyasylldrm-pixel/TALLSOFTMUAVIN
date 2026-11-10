@@ -88,6 +88,11 @@ export type NavItem =
   | "fixed_assets"
   | "orders"
   | "orders_module"
+  | "ecommerce"
+  | "ecommerce_orders"
+  | "ecommerce_stores"
+  | "ecommerce_products"
+  | "ecommerce_finance"
   | "auto_service"
   | "it_service"
   | "appliance_service"
@@ -184,6 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const [isOrdersExpanded, setIsOrdersExpanded] = useState(true);
+  const [isEcommerceExpanded, setIsEcommerceExpanded] = useState(true);
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(true);
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState(true);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
@@ -201,6 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "e_services" as NavItem, label: "E-İşlemler", icon: ShieldCheck, badge: "Resmi" },
     { id: "invoices" as NavItem, label: "E-Belgeler", icon: FileText, hasSubItems: true },
     { id: "orders_module" as NavItem, label: "Sipariş & Proforma", icon: ShoppingCart, hasSubItems: true },
+    { id: "ecommerce" as NavItem, label: "E-Ticaret Modülü", icon: Globe, hasSubItems: true },
     { id: "production" as NavItem, label: "Üretim", icon: CookingPot, badge: "Yemek" },
     { id: "sectors" as NavItem, label: "Sektörler", icon: Layers },
     { id: "auto_service" as NavItem, label: "Oto Servis & Araç Bakım", icon: Wrench, badge: "Oto" },
@@ -253,6 +260,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
   const orderSubModules = allOrderSubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.id, "orders_module", currentUser, activeCompany)
+  );
+
+  const allEcommerceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
+    { id: "ecommerce_orders", label: "Pazaryeri Siparişleri", icon: ShoppingCart },
+    { id: "ecommerce_stores", label: "Mağaza Entegrasyonları", icon: Store },
+    { id: "ecommerce_products", label: "Ürün & Stok Eşleştirme", icon: PackageIcon },
+    { id: "ecommerce_finance", label: "Komisyon & Hakediş", icon: TrendingUp },
+  ];
+  const ecommerceSubModules = allEcommerceSubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.id, "ecommerce", currentUser, activeCompany)
   );
 
   const allFinanceSubModules: { id: FinanceSubModule; moduleKey: string; label: string; icon: React.ElementType }[] = [
@@ -353,6 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isOrderItem = item.id === "orders_module" || item.id === "orders";
+          const isEcommerceItem = item.id === "ecommerce";
           const isInvoiceItem = item.id === "invoices";
           const isFinanceItem = item.id === "accounts";
           const isCompanyItem = item.id === "company";
@@ -362,6 +380,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
+            : isEcommerceItem
+            ? ["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
             : isInvoiceItem
             ? [
                 "invoices",
@@ -413,6 +433,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     setIsOrdersExpanded((prev) => !prev);
                     if (!["orders", "orders_module", "quotes"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("orders");
+                    }
+                  } else if (isEcommerceItem) {
+                    setIsEcommerceExpanded((prev) => !prev);
+                    if (!["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)) {
+                      handleSelectTabWithMobileClose("ecommerce_orders");
                     }
                   } else if (isInvoiceItem) {
                     setIsInvoicesExpanded((prev) => !prev);
@@ -505,6 +530,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ) : (
                     <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                   )
+                ) : isEcommerceItem ? (
+                  isEcommerceExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  )
                 ) : isInvoiceItem ? (
                   isInvoicesExpanded ? (
                     <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
@@ -550,7 +581,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     return (
                       <button
                         key={sub.id}
-                        onClick={() => onSelectTab(sub.id)}
+                        onClick={() => handleSelectTabWithMobileClose(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
+                          isSubActive
+                            ? "active shadow-2xs font-semibold"
+                            : ""
+                        }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
+                      >
+                        <SubIcon
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
+                        />
+                        <span className="truncate text-left flex-1">{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Sub-modules for E-Ticaret Modülü */}
+              {isEcommerceItem && isEcommerceExpanded && (
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
+                  {ecommerceSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive =
+                      currentTab === sub.id ||
+                      (sub.id === "ecommerce_orders" && currentTab === "ecommerce");
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => handleSelectTabWithMobileClose(sub.id)}
                         className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
                           isSubActive
                             ? "active shadow-2xs font-semibold"
@@ -854,6 +920,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isOrderItem = item.id === "orders_module" || item.id === "orders";
+          const isEcommerceItem = item.id === "ecommerce";
           const isInvoiceItem = item.id === "invoices";
           const isFinanceItem = item.id === "accounts";
           const isCompanyItem = item.id === "company";
@@ -863,6 +930,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
+            : isEcommerceItem
+            ? ["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
             : isInvoiceItem
             ? [
                 "invoices",
@@ -909,6 +978,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const handleCollapsedClick = () => {
             if (isOrderItem) {
               onSelectTab("orders");
+            } else if (isEcommerceItem) {
+              onSelectTab("ecommerce_orders");
             } else if (isInvoiceItem) {
               onSelectTab("invoices_sales");
             } else if (isFinanceItem) {
@@ -924,6 +995,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           const subList = isOrderItem
             ? orderSubModules
+            : isEcommerceItem
+            ? ecommerceSubModules
             : isInvoiceItem
             ? invoiceSubModules
             : isFinanceItem

@@ -1531,7 +1531,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const parents = ["dashboard", "company", "e_services", "invoices", "orders_module", "contacts", "accounts", "products", "whatsapp"];
+                            const parents = ["dashboard", "company", "e_services", "invoices", "orders_module", "ecommerce", "contacts", "accounts", "products", "whatsapp"];
                             const withSubs = SYSTEM_COMPANY_MODULES.filter(
                               (m) => parents.includes(m.id) || (m.parentId && parents.includes(m.parentId))
                             ).map((m) => m.id);

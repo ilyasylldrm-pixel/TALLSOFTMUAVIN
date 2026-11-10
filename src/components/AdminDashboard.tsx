@@ -50,9 +50,11 @@ import {
   ArrowRight,
   Edit2,
   Terminal,
+  Store,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { UserProfile, BRAND_LOGOS } from "./AuthModal";
+import { AdminEcommerceMatchPanel } from "./AdminEcommerceMatchPanel";
 import { CompanyModal } from "./CompanyModal";
 import {
   getCompaniesList,
@@ -179,6 +181,7 @@ export const STAFF_ROLE_PRESETS: RolePreset[] = [
       "dashboard",
       "invoices",
       "orders_module",
+      "ecommerce",
       "contacts",
       "accounts",
       "products",
@@ -206,7 +209,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteCompany,
 }) => {
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<"overview" | "credentials" | "matrix" | "users" | "companies" | "files" | "payroll" | "broadcast" | "audit" | "mysoft_logs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "credentials" | "matrix" | "users" | "companies" | "ecommerce_match" | "files" | "payroll" | "broadcast" | "audit" | "mysoft_logs">("overview");
+  const [ecommerceMatchCompanyId, setEcommerceMatchCompanyId] = useState<string | null>(null);
   const [users, setUsers] = useState<UserProfileData[]>([]);
   const [allFiles, setAllFiles] = useState<UserFileMetadata[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1293,6 +1297,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <Building2 className={`w-4 h-4 ${activeTab === "companies" ? "text-slate-950" : "text-cyan-300"}`} />
             <span>Şirketler & Mysoft Eşleştirme ({adminCompanies.length})</span>
+          </button>
+
+          {/* 6.5. E-Ticaret Eşleştirme Modülü */}
+          <button
+            onClick={() => setActiveTab("ecommerce_match")}
+            className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              activeTab === "ecommerce_match"
+                ? "bg-orange-500 text-white font-extrabold border-2 border-white shadow-md"
+                : "bg-orange-900 hover:bg-orange-800 text-orange-100 font-bold border border-orange-600 shadow-xs"
+            }`}
+          >
+            <Store className={`w-4 h-4 ${activeTab === "ecommerce_match" ? "text-white" : "text-orange-300"}`} />
+            <span>E-Ticaret Eşleştirme</span>
           </button>
 
           {/* 7. Şirket & Kullanıcı Şifreleri */}
@@ -2752,7 +2769,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 title="Mysoft VKN & TCKN Eşleştirmesini Yap"
                               >
                                 <Globe className="w-3.5 h-3.5" />
-                                <span>Eşleştir</span>
+                                <span>Mysoft Eşleştir</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEcommerceMatchCompanyId(comp.id);
+                                  setActiveTab("ecommerce_match");
+                                }}
+                                className="px-2.5 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 font-bold text-xs rounded-xl flex items-center gap-1 transition-all cursor-pointer"
+                                title="E-Ticaret & Pazaryeri Eşleştirmesini Yap"
+                              >
+                                <Store className="w-3.5 h-3.5" />
+                                <span>E-Ticaret Eşleştir</span>
                               </button>
 
                               <button
@@ -2794,6 +2824,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🛒 TAB 2.5: E-TİCARET & PAZARYERİ EŞLEŞTİRME MODÜLÜ */}
+      {/* ========================================================================= */}
+      {activeTab === "ecommerce_match" && (
+        <AdminEcommerceMatchPanel
+          companies={adminCompanies}
+          activeCompanyId={adminActiveCompId}
+          initialSelectedCompanyId={ecommerceMatchCompanyId}
+          onSwitchCompany={handleSwitchCompany}
+          onNotifySuccess={(msg) => {
+            setDeleteUserSuccessMessage(msg);
+            setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
+          }}
+        />
       )}
 
       {/* ========================================================================= */}
