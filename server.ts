@@ -26,7 +26,6 @@ import {
   type SessionUser,
 } from "./src/lib/serverAuth.ts";
 import { adminAuth } from "./src/lib/firebase-admin.ts";
-import { createPool } from "./src/db/index.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import {
   getAllUserAccountingRecords,
@@ -1973,80 +1972,112 @@ function prepareIncomingRecord(incoming: any, pairs: Array<[string, string]>): a
 migrateStorePasswords(memoryCloudSyncStore);
 
 // ==========================================
-// KALICI DEPOLAMA (PostgreSQL / Cloud SQL)
-// Cloud Run örneklerinin dosya sistemi geçicidir; bulut deposu PostgreSQL'de saklanır,
-// böylece yeni yayınlarda veya örnekler arasında veri kaybolmaz.
+// KALICI DEPOLAMA (Google Cloud Storage, herkese kapalı bucket)
+// Cloud Run örneklerinin dosya sistemi geçicidir; bulut deposu Cloud Storage'da saklanır,
+// böylece yeni yayınlarda veya örnekler arasında veri kaybolmaz ve verinin repoda durmasına gerek kalmaz.
 // ==========================================
-const CLOUD_SYNC_PG_ENABLED = Boolean(process.env.SQL_HOST);
-let cloudSyncPgReady: Promise<void> | null = null;
-let cloudSyncPgLastCheck = 0;
-let cloudSyncPgWriteTimer: NodeJS.Timeout | null = null;
+const CLOUD_SYNC_BUCKET = process.env.CLOUD_SYNC_BUCKET || "ai-studio-bucket-147327928693-europe-west2";
+const CLOUD_SYNC_OBJECT = process.env.CLOUD_SYNC_OBJECT || "muavin/cloud_sync_store.json";
+const CLOUD_SYNC_REMOTE_ENABLED = Boolean(process.env.K_SERVICE) && process.env.CLOUD_SYNC_REMOTE !== "off";
+let cloudSyncRemoteReady: Promise<void> | null = null;
+let cloudSyncRemoteLastCheck = 0;
+let cloudSyncRemoteWriteTimer: NodeJS.Timeout | null = null;
+let cloudSyncRemoteGeneration = "";
+let cloudSyncAccessToken: { token: string; exp: number } | null = null;
 
-async function ensureCloudSyncTable(): Promise<void> {
-  const pool = createPool();
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS muavin_cloud_sync_store (
-       id TEXT PRIMARY KEY,
-       data JSONB NOT NULL,
-       version BIGINT NOT NULL,
-       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-     )`,
+async function getGcsAccessToken(): Promise<string> {
+  if (cloudSyncAccessToken && cloudSyncAccessToken.exp > Date.now() + 60_000) return cloudSyncAccessToken.token;
+  const resp = await fetch(
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+    { headers: { "Metadata-Flavor": "Google" }, signal: AbortSignal.timeout(5000) },
   );
+  if (!resp.ok) throw new Error(`metadata token ${resp.status}`);
+  const json: any = await resp.json();
+  cloudSyncAccessToken = { token: json.access_token, exp: Date.now() + Number(json.expires_in || 300) * 1000 };
+  return cloudSyncAccessToken.token;
 }
 
-async function loadCloudSyncStoreFromPostgres(): Promise<void> {
-  if (!CLOUD_SYNC_PG_ENABLED) return;
-  await ensureCloudSyncTable();
-  const pool = createPool();
-  const result = await pool.query("SELECT data, version FROM muavin_cloud_sync_store WHERE id = 'main'");
-  const row = result.rows?.[0];
-  if (row && Number(row.version) >= Number(memoryCloudSyncStore.version || 0)) {
-    const normalized = normalizeCloudSyncStore(row.data);
-    if (normalized) {
-      normalized.version = Number(row.version);
-      memoryCloudSyncStore = normalized;
-      if (migrateStorePasswords(memoryCloudSyncStore)) await writeCloudSyncStoreToPostgres();
+const gcsObjectUrl = () =>
+  `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(CLOUD_SYNC_BUCKET)}/o/${encodeURIComponent(CLOUD_SYNC_OBJECT)}`;
+
+async function fetchRemoteGeneration(): Promise<string | null> {
+  const token = await getGcsAccessToken();
+  const resp = await fetch(`${gcsObjectUrl()}?fields=generation`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error(`GCS metadata ${resp.status}`);
+  const json: any = await resp.json();
+  return String(json.generation || "");
+}
+
+async function loadCloudSyncStoreFromRemote(): Promise<void> {
+  if (!CLOUD_SYNC_REMOTE_ENABLED) return;
+  const token = await getGcsAccessToken();
+  const resp = await fetch(`${gcsObjectUrl()}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(20000),
+  });
+  if (resp.status === 404) {
+    // İlk geçiş: Cloud Storage'da henüz kayıt yok, mevcut depoyu (varsa) yaz.
+    if (memoryCloudSyncStore.usersRegistry.length || memoryCloudSyncStore.companiesRegistry.length) {
+      await writeCloudSyncStoreToRemote();
+      console.log("Bulut deposu Cloud Storage'a ilk kez yazıldı.");
     }
-  } else if (memoryCloudSyncStore.usersRegistry.length || memoryCloudSyncStore.companiesRegistry.length) {
-    // PostgreSQL'de henüz kayıt yok (ilk geçiş) veya daha eski: mevcut depoyu yaz.
-    await writeCloudSyncStoreToPostgres();
+    cloudSyncRemoteLastCheck = Date.now();
+    return;
   }
-  cloudSyncPgLastCheck = Date.now();
+  if (!resp.ok) throw new Error(`GCS indirme ${resp.status}`);
+  cloudSyncRemoteGeneration = resp.headers.get("x-goog-generation") || "";
+  const normalized = normalizeCloudSyncStore(await resp.json());
+  if (normalized && Number(normalized.version || 0) >= Number(memoryCloudSyncStore.version || 0)) {
+    memoryCloudSyncStore = normalized;
+    if (migrateStorePasswords(memoryCloudSyncStore)) await writeCloudSyncStoreToRemote();
+    console.log("Bulut deposu Cloud Storage'dan yüklendi.");
+  } else if (normalized) {
+    // Yerel kopya daha yeni (ör. bu örnekte yeni yazıldı): uzak kopyayı güncelle.
+    await writeCloudSyncStoreToRemote();
+  }
+  cloudSyncRemoteLastCheck = Date.now();
 }
 
-async function writeCloudSyncStoreToPostgres(): Promise<void> {
-  if (!CLOUD_SYNC_PG_ENABLED) return;
-  const pool = createPool();
-  await pool.query(
-    `INSERT INTO muavin_cloud_sync_store (id, data, version, updated_at)
-     VALUES ('main', $1::jsonb, $2, NOW())
-     ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, version = EXCLUDED.version, updated_at = NOW()
-     WHERE muavin_cloud_sync_store.version <= EXCLUDED.version`,
-    [JSON.stringify(memoryCloudSyncStore), Number(memoryCloudSyncStore.version || Date.now())],
-  );
+async function writeCloudSyncStoreToRemote(): Promise<void> {
+  if (!CLOUD_SYNC_REMOTE_ENABLED) return;
+  const token = await getGcsAccessToken();
+  const url =
+    `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(CLOUD_SYNC_BUCKET)}/o` +
+    `?uploadType=media&name=${encodeURIComponent(CLOUD_SYNC_OBJECT)}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(memoryCloudSyncStore),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!resp.ok) throw new Error(`GCS yükleme ${resp.status}`);
+  const json: any = await resp.json().catch(() => ({}));
+  if (json?.generation) cloudSyncRemoteGeneration = String(json.generation);
 }
 
 /** Başka bir örnek daha yeni veri yazdıysa (en fazla 5 sn'de bir kontrol) belleği tazeler. */
 async function refreshCloudSyncStoreIfStale(): Promise<void> {
-  if (!CLOUD_SYNC_PG_ENABLED) return;
+  if (!CLOUD_SYNC_REMOTE_ENABLED) return;
   try {
-    if (cloudSyncPgReady) await cloudSyncPgReady;
-    if (Date.now() - cloudSyncPgLastCheck < 5000) return;
-    cloudSyncPgLastCheck = Date.now();
-    const pool = createPool();
-    const result = await pool.query("SELECT version FROM muavin_cloud_sync_store WHERE id = 'main'");
-    const remoteVersion = Number(result.rows?.[0]?.version || 0);
-    if (remoteVersion > Number(memoryCloudSyncStore.version || 0)) {
-      await loadCloudSyncStoreFromPostgres();
+    if (cloudSyncRemoteReady) await cloudSyncRemoteReady;
+    if (Date.now() - cloudSyncRemoteLastCheck < 5000) return;
+    cloudSyncRemoteLastCheck = Date.now();
+    const remoteGeneration = await fetchRemoteGeneration();
+    if (remoteGeneration && remoteGeneration !== cloudSyncRemoteGeneration) {
+      await loadCloudSyncStoreFromRemote();
     }
   } catch (err) {
-    console.warn("Bulut deposu PostgreSQL tazeleme uyarısı:", (err as any)?.message || err);
+    console.warn("Bulut deposu tazeleme uyarısı:", (err as any)?.message || err);
   }
 }
 
-if (CLOUD_SYNC_PG_ENABLED) {
-  cloudSyncPgReady = loadCloudSyncStoreFromPostgres().catch((err) => {
-    console.warn("Bulut deposu PostgreSQL'den yüklenemedi, dosya/bellek deposu kullanılıyor:", err?.message || err);
+if (CLOUD_SYNC_REMOTE_ENABLED) {
+  cloudSyncRemoteReady = loadCloudSyncStoreFromRemote().catch((err) => {
+    console.warn("Bulut deposu Cloud Storage'dan yüklenemedi, dosya/bellek deposu kullanılıyor:", err?.message || err);
   });
 }
 
@@ -2060,12 +2091,12 @@ function persistServerCloudSyncStore() {
   } catch (err) {
     console.warn("Cloud sync store diske yazılamadı:", err);
   }
-  if (CLOUD_SYNC_PG_ENABLED) {
-    if (cloudSyncPgWriteTimer) clearTimeout(cloudSyncPgWriteTimer);
-    cloudSyncPgWriteTimer = setTimeout(() => {
-      cloudSyncPgWriteTimer = null;
-      writeCloudSyncStoreToPostgres().catch((err) =>
-        console.warn("Bulut deposu PostgreSQL'e yazılamadı:", err?.message || err),
+  if (CLOUD_SYNC_REMOTE_ENABLED) {
+    if (cloudSyncRemoteWriteTimer) clearTimeout(cloudSyncRemoteWriteTimer);
+    cloudSyncRemoteWriteTimer = setTimeout(() => {
+      cloudSyncRemoteWriteTimer = null;
+      writeCloudSyncStoreToRemote().catch((err) =>
+        console.warn("Bulut deposu Cloud Storage'a yazılamadı:", err?.message || err),
       );
     }, 1000);
   }
@@ -2156,7 +2187,7 @@ function issueSession(req: express.Request, res: express.Response, profile: any,
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    if (cloudSyncPgReady) await cloudSyncPgReady;
+    if (cloudSyncRemoteReady) await cloudSyncRemoteReady;
     await refreshCloudSyncStoreIfStale();
     const identifier = String(req.body?.identifier || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
@@ -2218,7 +2249,7 @@ app.post("/api/auth/login", async (req, res) => {
 // Yönetici tarafından açılmış ama henüz şifresi belirlenmemiş hesabın ilk şifresini belirler.
 app.post("/api/auth/activate", async (req, res) => {
   try {
-    if (cloudSyncPgReady) await cloudSyncPgReady;
+    if (cloudSyncRemoteReady) await cloudSyncRemoteReady;
     const identifier = String(req.body?.identifier || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
     if (!identifier || password.length < 8) {
@@ -2252,7 +2283,7 @@ app.post("/api/auth/activate", async (req, res) => {
 // Google ile giriş: Firebase ID token sunucuda doğrulanır, e-posta kayıtlı olmalıdır.
 app.post("/api/auth/google", async (req, res) => {
   try {
-    if (cloudSyncPgReady) await cloudSyncPgReady;
+    if (cloudSyncRemoteReady) await cloudSyncRemoteReady;
     const idToken = String(req.body?.idToken || "");
     if (!idToken) return res.status(400).json({ success: false, error: "Geçersiz Google oturumu." });
     const decoded = await adminAuth.verifyIdToken(idToken);

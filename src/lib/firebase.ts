@@ -269,6 +269,8 @@ export interface UserProfileData {
 }
 
 // Deeply remove any undefined fields before saving to Firestore to prevent "Unsupported field value: undefined" errors
+const FIRESTORE_FORBIDDEN_KEYS = new Set(["passwordPlain", "loginPasswordPlain", "passwordHash", "loginPasswordHash"]);
+
 export function sanitizeForFirestore<T>(data: T): T {
   if (data === null || data === undefined) {
     return data;
@@ -287,6 +289,8 @@ export function sanitizeForFirestore<T>(data: T): T {
     
     const cleanObj: Record<string, any> = {};
     for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      // Firestore'a hiçbir zaman kullanıcı/şirket giriş şifresi yazılmaz.
+      if (FIRESTORE_FORBIDDEN_KEYS.has(key)) continue;
       if (value !== undefined) {
         cleanObj[key] = sanitizeForFirestore(value);
       }
