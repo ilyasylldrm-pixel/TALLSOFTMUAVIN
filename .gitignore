@@ -58,3 +58,8 @@ bun.lockb
 
 # CI tarafından yayın sırasında üretilir
 public/version.txt
+
+# Canlı müşteri verisi: repoya asla eklenmez (sunucu Cloud Storage kullanır)
+data/cloud_sync_store.json
+data/whatsapp_logs.json
+data/whatsapp_sessions/
