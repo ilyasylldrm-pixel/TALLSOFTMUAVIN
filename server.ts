@@ -1905,7 +1905,8 @@ function emptyCloudSyncStore(): ServerCloudSyncStore {
     deletedUserKeys: [],
     companiesData: {},
     updatedAt: new Date().toISOString(),
-    version: Date.now(),
+    // 0: boş depo hiçbir zaman kalıcı kopyadan "daha yeni" sayılmamalı.
+    version: 0,
     lastActionSummary: "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
     lastUpdatedBy: "Sistem Yöneticisi",
   };
@@ -2031,7 +2032,8 @@ async function loadCloudSyncStoreFromRemote(): Promise<void> {
   if (!resp.ok) throw new Error(`GCS indirme ${resp.status}`);
   cloudSyncRemoteGeneration = resp.headers.get("x-goog-generation") || "";
   const normalized = normalizeCloudSyncStore(await resp.json());
-  if (normalized && Number(normalized.version || 0) >= Number(memoryCloudSyncStore.version || 0)) {
+  const memoryIsEmpty = !memoryCloudSyncStore.usersRegistry.length && !memoryCloudSyncStore.companiesRegistry.length;
+  if (normalized && (memoryIsEmpty || Number(normalized.version || 0) >= Number(memoryCloudSyncStore.version || 0))) {
     memoryCloudSyncStore = normalized;
     if (migrateStorePasswords(memoryCloudSyncStore)) await writeCloudSyncStoreToRemote();
     console.log("Bulut deposu Cloud Storage'dan yüklendi.");
@@ -2044,6 +2046,11 @@ async function loadCloudSyncStoreFromRemote(): Promise<void> {
 
 async function writeCloudSyncStoreToRemote(): Promise<void> {
   if (!CLOUD_SYNC_REMOTE_ENABLED) return;
+  // Güvenlik ağı: boş depo asla kalıcı kopyanın üzerine yazılmaz.
+  if (!memoryCloudSyncStore.usersRegistry.length && !memoryCloudSyncStore.companiesRegistry.length) {
+    console.warn("Bulut deposu boş; Cloud Storage'a yazma atlandı.");
+    return;
+  }
   const token = await getGcsAccessToken();
   const url =
     `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(CLOUD_SYNC_BUCKET)}/o` +
@@ -2054,7 +2061,7 @@ async function writeCloudSyncStoreToRemote(): Promise<void> {
     body: JSON.stringify(memoryCloudSyncStore),
     signal: AbortSignal.timeout(30000),
   });
-  if (!resp.ok) throw new Error(`GCS yükleme ${resp.status}`);
+  if (!resp.ok) throw new Error(`GCS yükleme ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
   const json: any = await resp.json().catch(() => ({}));
   if (json?.generation) cloudSyncRemoteGeneration = String(json.generation);
 }
@@ -2075,7 +2082,24 @@ async function refreshCloudSyncStoreIfStale(): Promise<void> {
   }
 }
 
+async function logCloudSyncBucketPermissions(): Promise<void> {
+  try {
+    const token = await getGcsAccessToken();
+    const perms = ["storage.objects.get", "storage.objects.create", "storage.objects.delete", "storage.objects.list"];
+    const qs = perms.map((p) => `permissions=${encodeURIComponent(p)}`).join("&");
+    const resp = await fetch(
+      `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(CLOUD_SYNC_BUCKET)}/iam/testPermissions?${qs}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) },
+    );
+    const json: any = await resp.json().catch(() => ({}));
+    console.log("Bulut deposu bucket izinleri:", JSON.stringify(json?.permissions || json));
+  } catch (err: any) {
+    console.warn("Bulut deposu izin testi yapılamadı:", err?.message || err);
+  }
+}
+
 if (CLOUD_SYNC_REMOTE_ENABLED) {
+  void logCloudSyncBucketPermissions();
   cloudSyncRemoteReady = loadCloudSyncStoreFromRemote().catch((err) => {
     console.warn("Bulut deposu Cloud Storage'dan yüklenemedi, dosya/bellek deposu kullanılıyor:", err?.message || err);
   });
