@@ -600,14 +600,10 @@ export function buildMysoftInvoiceOutboxPayload(
               });
             }
           }
-        } else {
-          noteList.push({
-            note: "Şube Adresi (Ankara Bölge Şubesi): Tunalı Hilmi Cad. No:88 Kat:4 D:8, Kavaklıdere, Çankaya / Ankara",
-          });
-          noteList.push({
-            note: "Şube Adresi (İzmir Şubesi): Atatürk Cad. No:142 Kat:3 D:6, Alsancak, Konak / İzmir",
-          });
         }
+        // Not: Şube tanımlı değilse faturaya hiçbir şube adresi yazılmaz.
+        // (Önceden burada sabit "Ankara / İzmir şubesi" demo adresleri ekleniyordu;
+        // bu, şubesi olmayan her firmanın resmi faturasına sahte adres basıyordu.)
       }
       if (company.tradeRegisterNo && !rawNoteText.includes("Ticaret Sicil No:")) {
         noteList.push({
