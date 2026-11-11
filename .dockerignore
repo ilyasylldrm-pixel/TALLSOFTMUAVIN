@@ -10,3 +10,7 @@ sessions
 !dist/**
 !build
 !build/**
+
+# Trendyol entegrasyonu: şifreli API bilgileri imaja girmesin
+data/trendyol_store.json
+data/.trendyol.key
