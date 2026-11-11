@@ -9,6 +9,7 @@ import { whatsAppService } from "./src/services/whatsappService.ts";
 import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
+import { getTrendyolFoodRouter } from "./src/services/trendyolFoodRoutes.ts";
 import { requireAuth, requireAdmin, canAccessCompany, resolveSessionUser, type AuthRequest } from "./src/middleware/auth.ts";
 import {
   SYSTEM_ADMIN_EMAILS,
@@ -124,6 +125,7 @@ const PUBLIC_API_PATHS = new Set([
   "/auth/activate",
   "/auth/google",
   "/auth/me",
+  "/trendyol-food/webhook",
 ]);
 app.use("/api", (req, res, next) => {
   if (PUBLIC_API_PATHS.has(req.path)) return next();
@@ -156,6 +158,7 @@ app.use("/api/whatsapp", getWhatsAppRouter());
 app.use("/api/portal-proxy", getPortalProxyRouter());
 app.use("/api/extension", getExtensionRouter());
 app.use("/api/github", getGitHubRouter());
+app.use("/api/trendyol-food", getTrendyolFoodRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;

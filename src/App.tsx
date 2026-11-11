@@ -74,6 +74,7 @@ import { Invoices } from "./components/Invoices";
 import { Quotes } from "./components/Quotes";
 import { Orders } from "./components/Orders";
 import { ECommerceModule } from "./components/ECommerceModule";
+import { TrendyolFoodModule } from "./components/TrendyolFoodModule";
 import { Waybills } from "./components/Waybills";
 import { Accounts } from "./components/Accounts";
 import { Transactions } from "./components/Transactions";
@@ -4560,6 +4561,21 @@ export default function App() {
               onAddInvoice={handleAddInvoice}
               onUpdateProduct={handleUpdateProduct}
               onAddContact={handleAddContact}
+            />
+          )}
+
+          {currentTab === "trendyol_food" && (
+            <TrendyolFoodModule
+              companySettings={data.settings}
+              activeCompanyId={activeCompanyId}
+              invoices={data.invoices || []}
+              contacts={data.contacts || []}
+              onAddInvoice={handleAddInvoice}
+              onAddContact={handleAddContact}
+              onViewInvoice={(inv) => {
+                setCurrentTab("invoices");
+              }}
+              onSelectTab={(tab) => setCurrentTab(tab)}
             />
           )}
 

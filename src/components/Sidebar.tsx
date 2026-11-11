@@ -51,6 +51,7 @@ import {
   CreditCard,
   Scale,
   Gift,
+  UtensilsCrossed,
 } from "lucide-react";
 import {
   CompanySettings,
@@ -90,6 +91,7 @@ export type NavItem =
   | "orders_module"
   | "ecommerce"
   | "ecommerce_orders"
+  | "trendyol_food"
   | "ecommerce_stores"
   | "ecommerce_products"
   | "ecommerce_finance"
@@ -264,6 +266,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allEcommerceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "ecommerce_orders", label: "Pazaryeri Siparişleri", icon: ShoppingCart },
+    { id: "trendyol_food", label: "🛵 Trendyol GO Yemek", icon: UtensilsCrossed },
     { id: "ecommerce_stores", label: "Mağaza Entegrasyonları", icon: Store },
     { id: "ecommerce_products", label: "Ürün & Stok Eşleştirme", icon: PackageIcon },
     { id: "ecommerce_finance", label: "Komisyon & Hakediş", icon: TrendingUp },
@@ -381,7 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
             : isEcommerceItem
-            ? ["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
+            ? ["ecommerce", "ecommerce_orders", "trendyol_food", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
             : isInvoiceItem
             ? [
                 "invoices",
@@ -436,7 +439,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }
                   } else if (isEcommerceItem) {
                     setIsEcommerceExpanded((prev) => !prev);
-                    if (!["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)) {
+                    if (!["ecommerce", "ecommerce_orders", "trendyol_food", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("ecommerce_orders");
                     }
                   } else if (isInvoiceItem) {

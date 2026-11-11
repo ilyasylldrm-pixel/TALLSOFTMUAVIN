@@ -46,6 +46,7 @@ import {
   Sliders,
   CheckCircle,
   Save,
+  UtensilsCrossed,
 } from "lucide-react";
 
 export type MarketplaceId =
@@ -474,7 +475,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
               Pazaryeri Platformu Seçin
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {(Object.keys(MARKETPLACE_META) as MarketplaceId[]).map((mpId) => {
                 const meta = MARKETPLACE_META[mpId];
                 const isSelected = selectedMarketplace === mpId;
@@ -1487,6 +1488,12 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
               label: "Pazaryeri Siparişleri & Kargo",
               icon: ShoppingCart,
               badge: `${ecoOrders.length}`,
+            },
+            {
+              id: "trendyol_food" as NavItem,
+              label: "🛵 Trendyol GO Yemek",
+              icon: UtensilsCrossed,
+              badge: "Canlı Fatura",
             },
             {
               id: "ecommerce_stores" as NavItem,

@@ -1,3 +1,4 @@
+export * from "./types/trendyolFood";
 import { getProvincePlateCode } from "./data/locationAndTaxData";
 
 export type ContactType = "customer" | "vendor" | "supplier" | "both";
@@ -929,6 +930,8 @@ export interface CompanySettings {
   manualBackupHistory?: ManualBackupLogEntry[];
   /** e-Fatura ve e-Arşiv Fatura Görsel XSLT / PDF Tasarım Ayarları */
   invoiceDesign?: InvoiceDesignSettings;
+  /** Trendyol GO Yemek / Hızlı Teslimat API ve Otomatik Fatura Ayarları */
+  trendyolFoodSettings?: import("./types/trendyolFood").TrendyolFoodSettings;
 }
 
 export type InvoiceTemplateStyle = "gib_standard" | "gib_modern" | "gib_compact";
