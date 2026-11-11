@@ -46,11 +46,12 @@ import {
   Sliders,
   CheckCircle,
   Save,
-  UtensilsCrossed,
 } from "lucide-react";
 
 export type MarketplaceId =
   | "trendyol"
+  | "trendyol_go"
+  | "ubereats"
   | "hepsiburada"
   | "amazon"
   | "n11"
@@ -73,8 +74,10 @@ export interface MarketplaceStoreConfig {
   badgeColor: string;
   accentBg: string;
   supplierId: string;
+  integrationRefCode?: string;
   apiKey: string;
   apiSecret: string;
+  apiToken?: string;
   storeUrl?: string;
   serviceKey?: string;
   commissionRate: number;
@@ -169,6 +172,24 @@ const MARKETPLACE_META: Record<
     shippingDeductionAvg: 64.9,
     withholdingRate: 1,
   },
+  trendyol_go: {
+    name: "Trendyol Go (TGO Yemek)",
+    shortCode: "TGO",
+    badgeColor: "bg-orange-100 text-orange-900 border-orange-400",
+    accentBg: "#ff5500",
+    commissionRate: 12.0,
+    shippingDeductionAvg: 29.9,
+    withholdingRate: 1,
+  },
+  ubereats: {
+    name: "Uber Eats",
+    shortCode: "UE",
+    badgeColor: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    accentBg: "#06C167",
+    commissionRate: 15.0,
+    shippingDeductionAvg: 24.9,
+    withholdingRate: 1,
+  },
   hepsiburada: {
     name: "Hepsiburada",
     shortCode: "HB",
@@ -225,7 +246,22 @@ const MARKETPLACE_META: Record<
   },
 };
 
-function getMarketplaceFieldHelp(mp: MarketplaceId) {
+function getMarketplaceFieldHelp(mp: MarketplaceId): {
+  supplierIdLabel: string;
+  supplierIdPlaceholder: string;
+  integrationRefLabel?: string | null;
+  integrationRefPlaceholder?: string;
+  integrationRefRequired?: boolean;
+  apiKeyLabel: string;
+  apiKeyPlaceholder: string;
+  apiSecretLabel: string;
+  apiSecretPlaceholder: string;
+  tokenLabel?: string | null;
+  tokenPlaceholder?: string;
+  tokenRequired?: boolean;
+  extraLabel: string | null;
+  hint: string;
+} {
   switch (mp) {
     case "trendyol":
       return {
@@ -237,6 +273,40 @@ function getMarketplaceFieldHelp(mp: MarketplaceId) {
         apiSecretPlaceholder: "örn: 5s7axxxxxxxxxxxxxxxxxxxx",
         extraLabel: null,
         hint: "Trendyol Partner > Hesap Bilgilerim > Entegrasyon Bilgileri alanından alabilirsiniz.",
+      };
+    case "trendyol_go":
+      return {
+        supplierIdLabel: "Satıcı ID (Cari ID)",
+        supplierIdPlaceholder: "örn: 849302",
+        integrationRefLabel: "Entegrasyon Referans Kodu",
+        integrationRefPlaceholder: "örn: TGO-REF-948201",
+        integrationRefRequired: true,
+        apiKeyLabel: "API Key",
+        apiKeyPlaceholder: "örn: tgo_key_xxxxxxxxxxxxxxxxxxxx",
+        apiSecretLabel: "API Secret",
+        apiSecretPlaceholder: "örn: tgo_sec_xxxxxxxxxxxxxxxxxxxx",
+        tokenLabel: "Token (TGO Yemek Eşleştirme Token)",
+        tokenPlaceholder: "örn: dGdvX2tleTp0Z29fc2Vj...",
+        tokenRequired: true,
+        extraLabel: null,
+        hint: "Trendyol Go (TGO Yemek) Partner Paneli > Hesap Bilgileri > Entegrasyon Bilgileri ekranından Satıcı ID (Cari ID), Entegrasyon Referans Kodu, API Key, API Secret ve Token bilgilerini alabilirsiniz.",
+      };
+    case "ubereats":
+      return {
+        supplierIdLabel: "Restoran / Mağaza ID (Satıcı / Cari ID)",
+        supplierIdPlaceholder: "örn: d8f3a1b2-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        integrationRefLabel: "Entegrasyon Referans Kodu (POS / Bağlantı Kodu)",
+        integrationRefPlaceholder: "örn: UE-REF-102938",
+        integrationRefRequired: false,
+        apiKeyLabel: "API Key (Client ID)",
+        apiKeyPlaceholder: "örn: ue_client_xxxxxxxxxxxxxxxxxxxx",
+        apiSecretLabel: "API Secret (Client Secret)",
+        apiSecretPlaceholder: "örn: ue_secret_xxxxxxxxxxxxxxxxxxxx",
+        tokenLabel: "Token (OAuth Bearer / Access Token)",
+        tokenPlaceholder: "örn: eyJhbGciOiJSUzI1NiIs...",
+        tokenRequired: false,
+        extraLabel: null,
+        hint: "Uber Eats Manager / Developer Portal > Integrations & API alanından Mağaza (Cari) ID, Entegrasyon Referans Kodu, API Key, API Secret ve Token bilgilerinizi tanımlayabilirsiniz.",
       };
     case "hepsiburada":
       return {
@@ -328,18 +398,14 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
   );
   const [storeName, setStoreName] = useState(initialStore?.name || "");
   const [supplierId, setSupplierId] = useState(initialStore?.supplierId || "");
+  const [integrationRefCode, setIntegrationRefCode] = useState(
+    initialStore?.integrationRefCode || ""
+  );
   const [apiKey, setApiKey] = useState(initialStore?.apiKey || "");
   const [apiSecret, setApiSecret] = useState(initialStore?.apiSecret || "");
+  const [apiToken, setApiToken] = useState(initialStore?.apiToken || "");
   const [serviceKey, setServiceKey] = useState(initialStore?.serviceKey || "");
   const [storeUrl, setStoreUrl] = useState(initialStore?.storeUrl || "");
-  const [commissionRate, setCommissionRate] = useState<number>(
-    initialStore?.commissionRate ??
-      MARKETPLACE_META[initialStore ? initialStore.id : "trendyol"].commissionRate
-  );
-  const [shippingDeductionAvg, setShippingDeductionAvg] = useState<number>(
-    initialStore?.shippingDeductionAvg ??
-      MARKETPLACE_META[initialStore ? initialStore.id : "trendyol"].shippingDeductionAvg
-  );
   const [autoInvoice, setAutoInvoice] = useState<boolean>(initialStore?.autoInvoice ?? true);
   const [autoStockSync, setAutoStockSync] = useState<boolean>(
     initialStore?.autoStockSync ?? true
@@ -347,6 +413,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
 
   const [showApiKey, setShowApiKey] = useState(false);
   const [showApiSecret, setShowApiSecret] = useState(false);
+  const [showApiToken, setShowApiToken] = useState(false);
 
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [testMsg, setTestMsg] = useState("");
@@ -357,15 +424,19 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
     setTestState("idle");
     setTestMsg("");
     setValidationError(null);
-    if (!initialStore) {
+    if (!initialStore || (!initialStore.supplierId && !initialStore.apiKey)) {
       const meta = MARKETPLACE_META[mp];
-      setCommissionRate(meta.commissionRate);
-      setShippingDeductionAvg(meta.shippingDeductionAvg);
       setStoreName(`${meta.name} Mağazam`);
       if (mp === "shopify") {
         setStoreUrl("https://butigim.myshopify.com");
       } else if (mp === "webstore") {
         setStoreUrl("https://magaza.sirketim.com");
+      } else if (mp === "trendyol_go") {
+        setStoreUrl("https://partner.tgoyemek.com");
+      } else if (mp === "ubereats") {
+        setStoreUrl("https://merchants.ubereats.com");
+      } else {
+        setStoreUrl("");
       }
     }
   };
@@ -379,9 +450,19 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       setTestMsg(`Lütfen ${fieldHelp.supplierIdLabel} alanını doldurunuz.`);
       return;
     }
+    if (fieldHelp.integrationRefRequired && !integrationRefCode.trim()) {
+      setTestState("error");
+      setTestMsg(`Lütfen ${fieldHelp.integrationRefLabel} alanını doldurunuz.`);
+      return;
+    }
     if (!apiKey.trim()) {
       setTestState("error");
       setTestMsg("Lütfen API Key alanını doldurunuz.");
+      return;
+    }
+    if (fieldHelp.tokenRequired && !apiToken.trim()) {
+      setTestState("error");
+      setTestMsg(`Lütfen ${fieldHelp.tokenLabel} alanını doldurunuz.`);
       return;
     }
 
@@ -391,7 +472,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
     setTimeout(() => {
       setTestState("success");
       setTestMsg(
-        `✓ Bağlantı Başarılı (HTTP 200 OK): ${currentMeta.name} API Ağ Geçidi kimlik doğrulamasını onayladı. Gecikme: 114ms`
+        `✓ Bağlantı Başarılı (HTTP 200 OK): ${currentMeta.name} API Ağ Geçidi kimlik doğrulamasını onayladı. Gecikme: 108ms`
       );
     }, 700);
   };
@@ -402,8 +483,16 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       setValidationError(`Lütfen ${fieldHelp.supplierIdLabel} alanını doldurunuz.`);
       return;
     }
+    if (fieldHelp.integrationRefRequired && !integrationRefCode.trim()) {
+      setValidationError(`Lütfen ${fieldHelp.integrationRefLabel} alanını doldurunuz.`);
+      return;
+    }
     if (!apiKey.trim()) {
       setValidationError("Lütfen API Key alanını doldurunuz.");
+      return;
+    }
+    if (fieldHelp.tokenRequired && !apiToken.trim()) {
+      setValidationError(`Lütfen ${fieldHelp.tokenLabel} alanını doldurunuz.`);
       return;
     }
 
@@ -415,17 +504,19 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       badgeColor: currentMeta.badgeColor,
       accentBg: currentMeta.accentBg,
       supplierId: supplierId.trim(),
+      integrationRefCode: integrationRefCode.trim() || undefined,
       apiKey: apiKey.trim(),
       apiSecret: apiSecret.trim(),
+      apiToken: apiToken.trim() || undefined,
       serviceKey: serviceKey.trim() || undefined,
       storeUrl:
         storeUrl.trim() ||
         (selectedMarketplace === "shopify" && supplierId.includes(".")
           ? `https://${supplierId.trim()}`
           : undefined),
-      commissionRate: Number(commissionRate) || currentMeta.commissionRate,
-      shippingDeductionAvg: Number(shippingDeductionAvg) || currentMeta.shippingDeductionAvg,
-      withholdingRate: currentMeta.withholdingRate,
+      commissionRate: initialStore?.commissionRate ?? currentMeta.commissionRate,
+      shippingDeductionAvg: initialStore?.shippingDeductionAvg ?? currentMeta.shippingDeductionAvg,
+      withholdingRate: initialStore?.withholdingRate ?? currentMeta.withholdingRate,
       autoInvoice,
       autoStockSync,
       isConnected: true,
@@ -475,7 +566,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
               Pazaryeri Platformu Seçin
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {(Object.keys(MARKETPLACE_META) as MarketplaceId[]).map((mpId) => {
                 const meta = MARKETPLACE_META[mpId];
                 const isSelected = selectedMarketplace === mpId;
@@ -483,13 +574,13 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                   <button
                     key={mpId}
                     type="button"
-                    disabled={!!initialStore}
+                    disabled={Boolean(initialStore && initialStore.supplierId)}
                     onClick={() => handleMarketplaceChange(mpId)}
                     className={`flex items-center gap-2 p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
                       isSelected
                         ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20 shadow-xs ring-1 ring-orange-500"
                         : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/60"
-                    } ${initialStore && !isSelected ? "opacity-50 cursor-not-allowed" : ""}`}
+                    } ${initialStore && initialStore.supplierId && !isSelected ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
@@ -557,6 +648,25 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
               />
             </div>
 
+            {fieldHelp.integrationRefLabel && (
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {fieldHelp.integrationRefLabel}{" "}
+                  {fieldHelp.integrationRefRequired && <span className="text-rose-500">*</span>}
+                </label>
+                <input
+                  type="text"
+                  value={integrationRefCode}
+                  onChange={(e) => {
+                    setIntegrationRefCode(e.target.value);
+                    setValidationError(null);
+                  }}
+                  placeholder={fieldHelp.integrationRefPlaceholder || "Entegrasyon referans kodu"}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+            )}
+
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 {fieldHelp.apiKeyLabel} <span className="text-rose-500">*</span>
@@ -606,6 +716,35 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
               </div>
             </div>
 
+            {fieldHelp.tokenLabel && (
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {fieldHelp.tokenLabel}{" "}
+                  {fieldHelp.tokenRequired && <span className="text-rose-500">*</span>}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showApiToken ? "text" : "password"}
+                    value={apiToken}
+                    onChange={(e) => {
+                      setApiToken(e.target.value);
+                      setValidationError(null);
+                    }}
+                    placeholder={fieldHelp.tokenPlaceholder || "Token değerini giriniz"}
+                    className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiToken(!showApiToken)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-1"
+                    title={showApiToken ? "Gizle" : "Göster"}
+                  >
+                    {showApiToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {fieldHelp.extraLabel && (
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -620,35 +759,6 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                 />
               </div>
             )}
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Varsayılan Komisyon Oranı (%)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="100"
-                value={commissionRate}
-                onChange={(e) => setCommissionRate(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 tabular-nums"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Ortalama Paket Kargo Kesintisi (₺)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                min="0"
-                value={shippingDeductionAvg}
-                onChange={(e) => setShippingDeductionAvg(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 tabular-nums"
-              />
-            </div>
           </div>
 
           {/* Automation Switches */}
@@ -1490,12 +1600,6 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
               badge: `${ecoOrders.length}`,
             },
             {
-              id: "trendyol_food" as NavItem,
-              label: "🛵 Trendyol GO Yemek",
-              icon: UtensilsCrossed,
-              badge: "Canlı Fatura",
-            },
-            {
               id: "ecommerce_stores" as NavItem,
               label: "Mağaza Entegrasyonları",
               icon: Store,
@@ -1879,7 +1983,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-                Trendyol, Hepsiburada, Amazon TR, N11, Çiçeksepeti ve Shopify mağazalarınızın API anahtarlarını güvenle yönetin, anlık test edin ve siparişlerinizi çekin.
+                Trendyol, Trendyol Go (TGO Yemek), Uber Eats, Hepsiburada, Amazon TR, N11, Çiçeksepeti ve Shopify mağazalarınızın API anahtarlarını ve token eşleştirmelerini güvenle yönetin, anlık test edin ve siparişlerinizi çekin.
               </p>
             </div>
 
@@ -2009,7 +2113,9 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                               {st.name}
                             </h4>
                             <div className="text-[11px] text-slate-500 font-mono truncate flex items-center gap-1.5">
-                              <span>ID: {st.supplierId || "—"}</span>
+                              <span>
+                                {st.id === "trendyol_go" ? "Satıcı (Cari) ID" : "ID"}: {st.supplierId || "—"}
+                              </span>
                               {st.supplierId && (
                                 <button
                                   type="button"
@@ -2051,6 +2157,36 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 
                       {/* Credentials Preview Box */}
                       <div className="mt-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+                        {(st.integrationRefCode || st.id === "trendyol_go") && (
+                          <div className="flex items-center justify-between font-mono text-[11px]">
+                            <span className="text-slate-500 flex items-center gap-1">
+                              <Barcode className="w-3 h-3 text-slate-400" />
+                              Entegrasyon Ref:
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-700 dark:text-slate-300 truncate max-w-[140px]">
+                                {st.integrationRefCode || "Tanımsız"}
+                              </span>
+                              {st.integrationRefCode && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleCopyStoreText(st.integrationRefCode!, `ref_${st.id}`)
+                                  }
+                                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                  title="Entegrasyon Referans Kodunu Kopyala"
+                                >
+                                  {copiedKey === `ref_${st.id}` ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between font-mono text-[11px]">
                           <span className="text-slate-500 flex items-center gap-1">
                             <KeyRound className="w-3 h-3 text-slate-400" />
@@ -2106,6 +2242,38 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                             )}
                           </div>
                         </div>
+
+                        {(st.apiToken || st.id === "trendyol_go" || st.id === "ubereats") && (
+                          <div className="flex items-center justify-between font-mono text-[11px]">
+                            <span className="text-slate-500 flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3 text-slate-400" />
+                              Token:
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-700 dark:text-slate-300">
+                                {st.apiToken
+                                  ? st.apiToken.length > 8
+                                    ? `${st.apiToken.substring(0, 4)}••••${st.apiToken.slice(-4)}`
+                                    : "••••••••"
+                                  : "Tanımsız"}
+                              </span>
+                              {st.apiToken && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyStoreText(st.apiToken!, `tok_${st.id}`)}
+                                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                  title="Token Kopyala"
+                                >
+                                  {copiedKey === `tok_${st.id}` ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {st.storeUrl && (
                           <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60 dark:border-slate-700/60">

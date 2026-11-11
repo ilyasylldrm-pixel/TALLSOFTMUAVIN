@@ -1,4 +1,3 @@
-export * from "./types/trendyolFood";
 import { getProvincePlateCode } from "./data/locationAndTaxData";
 
 export type ContactType = "customer" | "vendor" | "supplier" | "both";
@@ -362,7 +361,9 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "hr_zimmet", name: "↳ Zimmet & Demirbaş Takibi", description: "Personele zimmetlenen araç, cihaz ve ekipmanlar", category: "operations", parentId: "hr", isSubModule: true, badge: "Alt Modül" },
   { id: "hr_allowances", name: "↳ Yan Haklar & Ödenekler", description: "Yol, yemek ve sosyal yan hak parametreleri", category: "operations", parentId: "hr", isSubModule: true, badge: "Alt Modül" },
   { id: "files", name: "Bulut Dosya Deposu", description: "Şirket sözleşmeleri, evraklar ve dijital arşiv", category: "operations" },
-  { id: "reports", name: "Vergilendirme & Mali Raporlar", description: "KDV beyanname simülasyonu, gelir/gider tabloları", category: "financial" },
+  { id: "reports", name: "Vergilendirme & Mali Raporlar", description: "KDV beyanname simülasyonu, gelir/gider tabloları ve mali müşavir masası", category: "financial" },
+  { id: "reports_tax", name: "↳ Vergi & Beyanname Raporları", description: "KDV, Muhtasar, Geçici Vergi matrisi ve genel muavin dökümleri", category: "financial", parentId: "reports", isSubModule: true, badge: "Alt Modül" },
+  { id: "reports_advisor", name: "↳ Mali Müşavir", description: "SMMM/YMM danışmanlık kartı, resmi mahsup fişi aktarımı ve cari mutabakat", category: "financial", parentId: "reports", isSubModule: true, badge: "Alt Modül" },
   { id: "whatsapp", name: "WhatsApp İletişim Merkezi", description: "Müşterilere e-fatura ve bakiye bildirimi gönderme", category: "integrations", badge: "Canlı" },
 ];
 
@@ -930,8 +931,6 @@ export interface CompanySettings {
   manualBackupHistory?: ManualBackupLogEntry[];
   /** e-Fatura ve e-Arşiv Fatura Görsel XSLT / PDF Tasarım Ayarları */
   invoiceDesign?: InvoiceDesignSettings;
-  /** Trendyol GO Yemek / Hızlı Teslimat API ve Otomatik Fatura Ayarları */
-  trendyolFoodSettings?: import("./types/trendyolFood").TrendyolFoodSettings;
 }
 
 export type InvoiceTemplateStyle = "gib_standard" | "gib_modern" | "gib_compact";
@@ -1427,6 +1426,8 @@ export type AppModuleKey =
   | "hr"
   | "files"
   | "reports"
+  | "reports_tax"
+  | "reports_advisor"
   | "whatsapp"
   | "settings"
   | string;
@@ -2093,7 +2094,9 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "hr_zimmet", label: "↳ Zimmet & Demirbaş Takibi", description: "Personel zimmet ve emanet demirbaş yönetimi", category: "Yönetim", parentKey: "hr", isSubModule: true },
   { key: "hr_allowances", label: "↳ Yan Haklar & Ödenekler", description: "Yol, yemek ve yan hak ödenek tanımları", category: "Yönetim", parentKey: "hr", isSubModule: true },
   { key: "files", label: "Bulut Dosya Deposu", description: "Kullanıcı ve firma evrak arşivi", category: "Genel" },
-  { key: "reports", label: "Vergilendirme & Raporlar", description: "KDV, Muhtasar, Geçici Vergi ve mizan raporları", category: "Finans" },
+  { key: "reports", label: "Vergilendirme & Raporlar", description: "KDV, Muhtasar, Geçici Vergi, mizan ve mali müşavir işlemleri", category: "Finans" },
+  { key: "reports_tax", label: "↳ Vergi & Beyanname Raporları", description: "12 aylık vergi matrisi, geçici vergi ve genel muavin defteri", category: "Finans", parentKey: "reports", isSubModule: true },
+  { key: "reports_advisor", label: "↳ Mali Müşavir", description: "SMMM/YMM sözleşme, resmi fiş aktarımı ve cari mutabakat", category: "Finans", parentKey: "reports", isSubModule: true },
   { key: "whatsapp", label: "WhatsApp Merkezi", description: "Müşteri bildirimleri ve canlı WhatsApp iletişimi", category: "Genel" },
 ];
 

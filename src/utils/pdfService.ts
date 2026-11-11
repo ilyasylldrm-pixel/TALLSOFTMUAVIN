@@ -1915,3 +1915,330 @@ export async function generateOfficialGibInvoicePDF(
 
   return { pdf: doc, blob, fileName: cleanFilename };
 }
+
+export interface CariReconciliationPDFOptions {
+  companySettings?: CompanySettings | null;
+  periodLabel: string;
+  counterparty: {
+    formType: "BS" | "BA";
+    contactName: string;
+    taxNumber: string;
+    phone?: string;
+    docCount: number;
+    netBaseTotal: number;
+    vatTotal: number;
+    grandTotal: number;
+  };
+  invoices?: {
+    date?: string;
+    docNo?: string;
+    description?: string;
+    netBase: number;
+    vat: number;
+    grandTotal: number;
+  }[];
+  status?: "pending" | "agreed" | "discrepancy";
+  advisorName?: string;
+  fileName?: string;
+}
+
+/**
+ * Generates an authentic, vector-sharp Turkish Official Cari Mutabakat Mektubu (Cari Reconciliation Letter)
+ * Includes official legal clause (TTK M.94), summary comparison boxes, breakdown table, and mutual approval signature blocks.
+ */
+export async function generateCariReconciliationPDF({
+  companySettings,
+  periodLabel,
+  counterparty,
+  invoices = [],
+  status = "pending",
+  advisorName,
+  fileName,
+}: CariReconciliationPDFOptions): Promise<{ pdf: jsPDF; blob: Blob; fileName: string }> {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const hasUnicode = await loadTurkishFontIntoPDF(doc);
+  const activeFont = hasUnicode ? "Roboto" : "helvetica";
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2;
+  const currencyStr = companySettings?.currency || "TRY";
+  const currencySym = getCurrencySymbol(currencyStr);
+
+  const companyTitle = companySettings?.companyTitle || companySettings?.companyName || "FİRMA YÖNETİMİ";
+  const companyTaxInfo = [
+    companySettings?.taxOffice ? `${companySettings.taxOffice} V.D.` : "",
+    companySettings?.taxNumber ? `VKN: ${companySettings.taxNumber}` : "",
+  ]
+    .filter(Boolean)
+    .join(" - ");
+  const companyContactInfo = [companySettings?.phone, companySettings?.email].filter(Boolean).join(" | ");
+
+  const todayStr = new Date().toLocaleDateString("tr-TR");
+  const isSales = counterparty.formType === "BS";
+  const operationTypeLabel = isSales ? "SATIŞ / GELİR" : "ALIŞ / GİDER";
+
+  // --- 1. HEADER BANNER ---
+  let cursorY = margin;
+  doc.setFillColor(15, 107, 174); // Corporate Blue #0f6bae
+  doc.roundedRect(margin, cursorY, contentWidth, 22, 2, 2, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(13);
+  doc.setFont(activeFont, "bold");
+  doc.text(toPdfText(companyTitle.toUpperCase(), hasUnicode), margin + 5, cursorY + 7);
+
+  doc.setFontSize(8);
+  doc.setFont(activeFont, "normal");
+  doc.setTextColor(224, 242, 254);
+  const subText = [companyTaxInfo, companyContactInfo].filter(Boolean).join(" • ") || "Mali Müşavirlik & Cari Mutabakat Masası";
+  doc.text(toPdfText(subText, hasUnicode), margin + 5, cursorY + 12);
+  doc.text(
+    toPdfText(`RESMİ CARİ HESAP MUTABAKAT MEKTUBU  •  Dönem: ${periodLabel}  •  Tarih: ${todayStr}`, hasUnicode),
+    margin + 5,
+    cursorY + 17
+  );
+
+  cursorY += 26;
+
+  // --- 2. RECIPIENT & OVERVIEW 2-COLUMN BOX ---
+  const boxHeight = 34;
+  const colWidth = (contentWidth - 4) / 2;
+
+  // Left Box: Muhatap Cari Bilgileri
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, cursorY, colWidth, boxHeight, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text(toPdfText("SAYIN MUHATAP CARİ / FİRMA BİLGİLERİ", hasUnicode), margin + 3.5, cursorY + 5.5);
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 107, 174);
+  const splitContactName = doc.splitTextToSize(toPdfText(counterparty.contactName || "Cari", hasUnicode), colWidth - 8);
+  doc.text(splitContactName.slice(0, 2), margin + 3.5, cursorY + 11);
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfText(`Vergi Kimlik No (VKN/TCKN): ${counterparty.taxNumber || "—"}`, hasUnicode), margin + 3.5, cursorY + 20);
+  if (counterparty.phone) {
+    doc.text(toPdfText(`İletişim / Tel: ${counterparty.phone}`, hasUnicode), margin + 3.5, cursorY + 25);
+  }
+
+  // Right Box: Mutabakat Dönemi Finansal İcmali
+  const rightBoxX = margin + colWidth + 4;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(rightBoxX, cursorY, colWidth, boxHeight, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text(toPdfText("DÖNEM MUTABAKAT ÖZETİ", hasUnicode), rightBoxX + 3.5, cursorY + 5.5);
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfText(`İşlem Türü: ${operationTypeLabel}`, hasUnicode), rightBoxX + 3.5, cursorY + 11);
+  doc.text(toPdfText(`Dönem İçi Belge Adedi: ${counterparty.docCount} Adet`, hasUnicode), rightBoxX + 3.5, cursorY + 16);
+  doc.text(
+    toPdfText(`KDV Hariç Matrah Toplamı: ${Number(counterparty.netBaseTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`, hasUnicode),
+    rightBoxX + 3.5,
+    cursorY + 21
+  );
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 107, 174);
+  doc.text(
+    toPdfText(`KDV Dahil Genel Toplam: ${Number(counterparty.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`, hasUnicode),
+    rightBoxX + 3.5,
+    cursorY + 27
+  );
+
+  cursorY += boxHeight + 5;
+
+  // --- 3. FORMAL MUTABAKAT CLAUSE / LETTER TEXT ---
+  doc.setFillColor(254, 252, 232); // Light yellow warm notice #fefce8
+  doc.setDrawColor(254, 240, 138); // Border yellow #fef08a
+  doc.roundedRect(margin, cursorY, contentWidth, 18, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(133, 77, 14); // Dark amber
+  doc.text(toPdfText("RESMİ MUTABAKAT BİLDİRİMİ VE MEVZUAT HÜKMÜ (TTK M.94)", hasUnicode), margin + 3.5, cursorY + 4.5);
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(113, 63, 18);
+  const clauseText =
+    `Firmamız muhasebe kayıtlarına göre ${periodLabel} dönemi sonu itibariyle aramızdaki ${operationTypeLabel.toLowerCase()} faturaları kapsamında ` +
+    `toplam ${counterparty.docCount} adet belge karşılığında KDV hariç ₺${Number(counterparty.netBaseTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ` +
+    `(KDV Dahil: ₺${Number(counterparty.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}) bakiyemiz bulunmaktadır. ` +
+    `İşbu bakiyede mutabık olup olmadığınızı kaşe ve imzalayarak tarafımıza iletmenizi rica ederiz. ` +
+    `Türk Ticaret Kanunu (TTK) 94. maddesi gereğince tebliğ tarihinden itibaren 8 gün içinde itiraz edilmeyen hesap özetleri kabul edilmiş sayılır.`;
+
+  const clauseLines = doc.splitTextToSize(toPdfText(clauseText, hasUnicode), contentWidth - 7);
+  doc.text(clauseLines.slice(0, 3), margin + 3.5, cursorY + 8.5);
+
+  cursorY += 22;
+
+  // --- 4. INVOICES BREAKDOWN TABLE (jspdf-autotable) ---
+  const headers = ["S.No", "Tarih", "Belge No", "Açıklama", "KDV Hariç Tutar", "KDV Tutarı", "KDV Dahil Toplam"];
+  const tableRows =
+    invoices.length > 0
+      ? invoices.map((inv, idx) => [
+          String(idx + 1),
+          inv.date || `${periodLabel}`,
+          inv.docNo || "—",
+          inv.description || `${counterparty.contactName} - Fatura`,
+          `${Number(inv.netBase || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+          `${Number(inv.vat || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+          `${Number(inv.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+        ])
+      : [
+          [
+            "1",
+            todayStr,
+            `${counterparty.formType}-${counterparty.docCount} Belge`,
+            `${periodLabel} Dönemi İcmal Fatura Kayıtları (${counterparty.docCount} Belge)`,
+            `${Number(counterparty.netBaseTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+            `${Number(counterparty.vatTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+            `${Number(counterparty.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+          ],
+        ];
+
+  autoTable(doc, {
+    startY: cursorY,
+    head: [headers.map((h) => toPdfText(h, hasUnicode))],
+    body: tableRows.map((r) => r.map((c) => toPdfText(c, hasUnicode))),
+    foot: [
+      [
+        toPdfText("GENEL TOPLAM", hasUnicode),
+        "",
+        "",
+        toPdfText(`${counterparty.docCount} Adet Fatura`, hasUnicode),
+        `${Number(counterparty.netBaseTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+        `${Number(counterparty.vatTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+        `${Number(counterparty.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${currencySym}`,
+      ],
+    ],
+    theme: "grid",
+    margin: { left: margin, right: margin, bottom: 35 },
+    styles: {
+      font: activeFont,
+      fontSize: 7.5,
+      cellPadding: 2,
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+      overflow: "linebreak",
+    },
+    headStyles: {
+      font: activeFont,
+      fillColor: [15, 107, 174], // Corporate Blue
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 7.5,
+    },
+    footStyles: {
+      font: activeFont,
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+      fontSize: 7.5,
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 10 },
+      1: { halign: "center", cellWidth: 20 },
+      2: { halign: "center", cellWidth: 28 },
+      3: { halign: "left" },
+      4: { halign: "right", cellWidth: 28 },
+      5: { halign: "right", cellWidth: 22 },
+      6: { halign: "right", cellWidth: 28 },
+    },
+  });
+
+  const finalTableY = (doc as any).lastAutoTable?.finalY || cursorY + 40;
+
+  // --- 5. MUTABAKAT ONAY VE İMZA KUTULARI ---
+  const signatureY = Math.max(finalTableY + 8, pageHeight - 38);
+  const sigColWidth = (contentWidth - 10) / 2;
+
+  // Left Sign: Bildiren Firma (Düzenleyen)
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, signatureY, sigColWidth, 24, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(toPdfText("BİLDİREN FİRMA / MALİ MÜŞAVİR", hasUnicode), margin + sigColWidth / 2, signatureY + 4.5, { align: "center" });
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(toPdfText(advisorName || companyTitle, hasUnicode), margin + sigColWidth / 2, signatureY + 8, { align: "center" });
+  doc.text(toPdfText("Yetkili Kaşe / İmza", hasUnicode), margin + sigColWidth / 2, signatureY + 11.5, { align: "center" });
+
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(margin + 8, signatureY + 20, margin + sigColWidth - 8, signatureY + 20);
+
+  // Right Sign: Muhatap Cari Onay Kutusu
+  const sigRightX = margin + sigColWidth + 10;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(sigRightX, signatureY, sigColWidth, 24, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(toPdfText("MUHATAP CARİ MUTABAKAT ONAYI", hasUnicode), sigRightX + sigColWidth / 2, signatureY + 4.5, { align: "center" });
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(15, 107, 174);
+  const statusLabel = status === "agreed" ? "[X] MUTABIKIZ" : status === "discrepancy" ? "[X] MUTABIK DEĞİLİZ" : "[ ] MUTABIKIZ      [ ] MUTABIK DEĞİLİZ";
+  doc.text(toPdfText(statusLabel, hasUnicode), sigRightX + sigColWidth / 2, signatureY + 8, { align: "center" });
+
+  doc.setFont(activeFont, "normal");
+  doc.setTextColor(100, 116, 139);
+  doc.text(toPdfText("Yetkili Kaşe / İmza / Tarih", hasUnicode), sigRightX + sigColWidth / 2, signatureY + 11.5, { align: "center" });
+
+  doc.line(sigRightX + 8, signatureY + 20, sigRightX + sigColWidth - 8, signatureY + 20);
+  doc.setLineDashPattern([], 0);
+
+  // --- 6. FOOTER NOTICE ---
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    toPdfText("Bu mutabakat formu sistem üzerinden elektronik olarak üretilmiş olup 213 sayılı VUK ve 6102 sayılı TTK hükümleri kapsamındadır.", hasUnicode),
+    pageWidth / 2,
+    pageHeight - 5,
+    { align: "center" }
+  );
+
+  const cleanPartyName = (counterparty.contactName || "Cari").replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "_");
+  const cleanPeriod = periodLabel.replace(/\s+/g, "_");
+  const finalFileName =
+    fileName || `Cari_Mutabakat_${cleanPartyName}_${cleanPeriod}.pdf`;
+  const blob = doc.output("blob");
+
+  return { pdf: doc, blob, fileName: finalFileName };
+}
+

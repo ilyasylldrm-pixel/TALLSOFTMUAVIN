@@ -74,7 +74,6 @@ import { Invoices } from "./components/Invoices";
 import { Quotes } from "./components/Quotes";
 import { Orders } from "./components/Orders";
 import { ECommerceModule } from "./components/ECommerceModule";
-import { TrendyolFoodModule } from "./components/TrendyolFoodModule";
 import { Waybills } from "./components/Waybills";
 import { Accounts } from "./components/Accounts";
 import { Transactions } from "./components/Transactions";
@@ -813,33 +812,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
     localStorage.removeItem("muavin_active_user");
     sessionStorage.removeItem("muavin_active_user");
     setCurrentUser(null);
     setAuthModalMode("login");
     setAuthModalOpen(true);
   };
-
-  // Sunucu oturumu yoksa veya süresi dolduysa (çerez silinmiş, 12 saat geçmiş) giriş ekranına dön.
-  useEffect(() => {
-    if (!currentUser) return;
-    let cancelled = false;
-    fetch("/api/auth/me", { credentials: "same-origin" })
-      .then((resp) => {
-        if (cancelled) return;
-        if (resp.status === 401) handleLogout();
-        else if (resp.ok) window.dispatchEvent(new Event("muavin:auth-changed"));
-      })
-      .catch(() => {});
-    const onExpired = () => handleLogout();
-    window.addEventListener("muavin:session-expired", onExpired);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("muavin:session-expired", onExpired);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
 
   // Sync state changes with localStorage per slice (scoped to activeCompanyId)
   useEffect(() => { saveStoredData("SETTINGS", data.settings, activeCompanyId); }, [data.settings, activeCompanyId]);
@@ -4052,7 +4030,9 @@ export default function App() {
       case "hr_allowances":
         return "İnsan Kaynakları - Yan Haklar & Ödenekler";
       case "reports":
-        return "Vergilendirme";
+        return "Vergilendirme - Vergi & Beyanname Raporları";
+      case "reports_advisor":
+        return "Vergilendirme - Mali Müşavir";
       case "company":
       case "company_profile":
         return "Firma Profili & Adres";
@@ -4142,7 +4122,8 @@ export default function App() {
       hr_zimmet: { key: "hr_zimmet", parent: "hr" },
       hr_allowances: { key: "hr_allowances", parent: "hr" },
       files: { key: "files" },
-      reports: { key: "reports" },
+      reports: { key: "reports_tax", parent: "reports" },
+      reports_advisor: { key: "reports_advisor", parent: "reports" },
       e_services: { key: "e_services" },
       company_e_services: { key: "e_services" },
       whatsapp: { key: "whatsapp" },
@@ -4564,21 +4545,6 @@ export default function App() {
             />
           )}
 
-          {currentTab === "trendyol_food" && (
-            <TrendyolFoodModule
-              companySettings={data.settings}
-              activeCompanyId={activeCompanyId}
-              invoices={data.invoices || []}
-              contacts={data.contacts || []}
-              onAddInvoice={handleAddInvoice}
-              onAddContact={handleAddContact}
-              onViewInvoice={(inv) => {
-                setCurrentTab("invoices");
-              }}
-              onSelectTab={(tab) => setCurrentTab(tab)}
-            />
-          )}
-
           {currentTab === "production" && (
             <ProductionModule
               sectors={data.sectors || []}
@@ -4833,8 +4799,13 @@ export default function App() {
             )
           )}
 
-          {currentTab === "reports" && (
+          {(currentTab === "reports" || currentTab === "reports_advisor") && (
             <Reports
+              activeCompanyId={activeCompanyId}
+              currentUser={currentUser}
+              onSelectTab={(tab) => setCurrentTab(tab as any)}
+              activeSubTab={currentTab === "reports_advisor" ? "reports_advisor" : "reports"}
+              onSelectSubTab={(subTab) => setCurrentTab(subTab)}
               contacts={data.contacts}
               invoices={data.invoices}
               transactions={data.transactions}

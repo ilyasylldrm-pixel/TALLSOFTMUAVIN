@@ -6,6 +6,7 @@ import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
 import { AIReportInsights } from "./AIReportInsights";
+import { FinancialAdvisorModule } from "./FinancialAdvisorModule";
 import {
   Contact,
   Invoice,
@@ -58,7 +59,12 @@ interface ReportsProps {
   cheques?: any[];
   promissoryNotes?: any[];
   employees?: any[];
-  initialTab?: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights";
+  activeCompanyId?: string;
+  currentUser?: any;
+  onSelectTab?: (tab: string) => void;
+  activeSubTab?: "reports" | "reports_advisor";
+  onSelectSubTab?: (subTab: "reports" | "reports_advisor") => void;
+  initialTab?: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor";
 }
 
 // 2026 Gelir Vergisi Tarifesi (GVK M.103) - Progressive Tax Bracket Calculation
@@ -127,16 +133,44 @@ export const Reports: React.FC<ReportsProps> = ({
   transactions,
   companySettings,
   employees = [],
+  activeCompanyId,
+  currentUser,
+  onSelectTab,
+  activeSubTab,
+  onSelectSubTab,
   initialTab,
 }) => {
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<"monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights">(initialTab || "monthly");
+  const [activeTab, setActiveTab] = useState<
+    "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor"
+  >(activeSubTab === "reports_advisor" ? "advisor" : initialTab || "monthly");
+
+  React.useEffect(() => {
+    if (activeSubTab === "reports_advisor") {
+      setActiveTab("advisor");
+    } else if (activeSubTab === "reports" && activeTab === "advisor") {
+      setActiveTab("monthly");
+    }
+  }, [activeSubTab]);
 
   React.useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  const handleSelectReportTab = (
+    tab: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor"
+  ) => {
+    setActiveTab(tab);
+    if (onSelectSubTab) {
+      if (tab === "advisor") {
+        onSelectSubTab("reports_advisor");
+      } else if (activeSubTab === "reports_advisor") {
+        onSelectSubTab("reports");
+      }
+    }
+  };
 
   // Selected Taxpayer Type (Mükellefiyet Türü)
   const [activeTaxpayerType, setActiveTaxpayerType] = useState<string>(
@@ -895,7 +929,7 @@ export const Reports: React.FC<ReportsProps> = ({
         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
       >
         <button
-          onClick={() => setActiveTab("monthly")}
+          onClick={() => handleSelectReportTab("monthly")}
           className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "monthly"
               ? "bg-[#0f6bae] text-white shadow-xs"
@@ -907,7 +941,7 @@ export const Reports: React.FC<ReportsProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab("periodic")}
+          onClick={() => handleSelectReportTab("periodic")}
           className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "periodic"
               ? "bg-[#0f6bae] text-white shadow-xs"
@@ -919,7 +953,7 @@ export const Reports: React.FC<ReportsProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab("ledger")}
+          onClick={() => handleSelectReportTab("ledger")}
           className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "ledger"
               ? "bg-[#0f6bae] text-white shadow-xs"
@@ -931,7 +965,7 @@ export const Reports: React.FC<ReportsProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab("guidelines")}
+          onClick={() => handleSelectReportTab("guidelines")}
           className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "guidelines"
               ? "bg-[#0f6bae] text-white shadow-xs"
@@ -943,7 +977,19 @@ export const Reports: React.FC<ReportsProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab("ai_insights")}
+          onClick={() => handleSelectReportTab("advisor")}
+          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "advisor"
+              ? "bg-[#0f6bae] text-white shadow-xs"
+              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+          }`}
+        >
+          <Scale className="w-3.5 h-3.5" />
+          <span>Mali Müşavir</span>
+        </button>
+
+        <button
+          onClick={() => handleSelectReportTab("ai_insights")}
           className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "ai_insights"
               ? "bg-gradient-to-r from-[#0f6bae] to-[#005289] text-white shadow-xs font-black"
@@ -2543,9 +2589,27 @@ export const Reports: React.FC<ReportsProps> = ({
           selectedYear={selectedYear}
           onNavigateToTab={(tab) => {
             if (tab === "monthly" || tab === "periodic" || tab === "ledger" || tab === "guidelines") {
-              setActiveTab(tab);
+              handleSelectReportTab(tab);
             }
           }}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: MALİ MÜŞAVİR (SMMM / YMM) DANIŞMANLIK & BEYANNAME MASASI */}
+      {/* ========================================================================= */}
+      {activeTab === "advisor" && (
+        <FinancialAdvisorModule
+          activeCompanyId={activeCompanyId}
+          currentUser={currentUser}
+          onSelectTab={onSelectTab}
+          contacts={contacts}
+          invoices={invoices}
+          transactions={transactions}
+          employees={employees}
+          companySettings={companySettings}
+          selectedYear={selectedYear}
+          onChangeYear={setSelectedYear}
         />
       )}
     </div>

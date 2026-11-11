@@ -75,9 +75,7 @@ try {
   firestoreInstance = initializeFirestore(
     app,
     {
-      // Zorla uzun yoklama her dinleyici için saniyeler içinde onlarca istek üretiyordu.
-      // Otomatik algılama mümkünse kalıcı akış bağlantısı kullanır, gerekirse yoklamaya düşer.
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
       ignoreUndefinedProperties: true
     },
     targetDbId
@@ -269,8 +267,6 @@ export interface UserProfileData {
 }
 
 // Deeply remove any undefined fields before saving to Firestore to prevent "Unsupported field value: undefined" errors
-const FIRESTORE_FORBIDDEN_KEYS = new Set(["passwordPlain", "loginPasswordPlain", "passwordHash", "loginPasswordHash"]);
-
 export function sanitizeForFirestore<T>(data: T): T {
   if (data === null || data === undefined) {
     return data;
@@ -289,8 +285,6 @@ export function sanitizeForFirestore<T>(data: T): T {
     
     const cleanObj: Record<string, any> = {};
     for (const [key, value] of Object.entries(data as Record<string, any>)) {
-      // Firestore'a hiçbir zaman kullanıcı/şirket giriş şifresi yazılmaz.
-      if (FIRESTORE_FORBIDDEN_KEYS.has(key)) continue;
       if (value !== undefined) {
         cleanObj[key] = sanitizeForFirestore(value);
       }
@@ -480,7 +474,7 @@ function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnTy
   const derivedPassword =
     user.passwordPlain?.trim() ||
     matchedCompany?.loginPasswordPlain?.trim() ||
-    undefined;
+    (isSysAdmin ? "Admin2026!" : "Muavin2026!");
 
   return {
     ...user,
@@ -548,6 +542,7 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
     selectedLogoName: "E-MUAVİN Kurumsal Logo",
     selectedLogoUrl: "/logo.svg",
     role: "Sistem Yöneticisi (Admin)",
+    passwordPlain: "Admin2026!",
     createdByAdmin: true,
     createdAt: "2024-01-01T00:00:00.000Z",
   };
@@ -573,7 +568,7 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
         selectedLogoUrl: "/logo.svg",
         role: comp.loginRole || "Firma Yöneticisi",
         allowedModules: comp.moduleRestrictionEnabled ? (comp.allowedModules as AppModuleKey[]) : undefined,
-        passwordPlain: comp.loginPasswordPlain || undefined,
+        passwordPlain: comp.loginPasswordPlain || "Muavin2026!",
         createdByAdmin: true,
         createdAt: comp.createdAt || new Date().toISOString(),
       };

@@ -57,6 +57,26 @@ const MARKETPLACE_TEMPLATES: Record<
     defaultWithholding: 1,
     storeUrl: "https://partner.trendyol.com",
   },
+  trendyol_go: {
+    name: "Trendyol Go (TGO Yemek)",
+    shortCode: "TGO",
+    badgeColor: "bg-orange-100 text-orange-900 border-orange-400",
+    accentBg: "#ff5500",
+    defaultCommission: 12.0,
+    defaultCargo: 29.9,
+    defaultWithholding: 1,
+    storeUrl: "https://partner.tgoyemek.com",
+  },
+  ubereats: {
+    name: "Uber Eats",
+    shortCode: "UE",
+    badgeColor: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    accentBg: "#06C167",
+    defaultCommission: 15.0,
+    defaultCargo: 24.9,
+    defaultWithholding: 1,
+    storeUrl: "https://merchants.ubereats.com",
+  },
   hepsiburada: {
     name: "Hepsiburada Merchant",
     shortCode: "HB",
@@ -198,8 +218,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   const [formState, setFormState] = useState<{
     id: MarketplaceId;
     supplierId: string;
+    integrationRefCode: string;
     apiKey: string;
     apiSecret: string;
+    apiToken: string;
     commissionRate: number;
     shippingDeductionAvg: number;
     withholdingRate: number;
@@ -209,8 +231,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   }>({
     id: "trendyol",
     supplierId: "",
+    integrationRefCode: "",
     apiKey: "",
     apiSecret: "",
+    apiToken: "",
     commissionRate: 18.5,
     shippingDeductionAvg: 64.9,
     withholdingRate: 1,
@@ -236,8 +260,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       setFormState({
         id: existing.id,
         supplierId: existing.supplierId,
+        integrationRefCode: existing.integrationRefCode || "",
         apiKey: existing.apiKey,
         apiSecret: existing.apiSecret,
+        apiToken: existing.apiToken || "",
         commissionRate: existing.commissionRate,
         shippingDeductionAvg: existing.shippingDeductionAvg,
         withholdingRate: existing.withholdingRate,
@@ -249,8 +275,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       setFormState({
         id: mpId,
         supplierId: "",
+        integrationRefCode: "",
         apiKey: "",
         apiSecret: "",
+        apiToken: "",
         commissionRate: tpl.defaultCommission,
         shippingDeductionAvg: tpl.defaultCargo,
         withholdingRate: tpl.defaultWithholding,
@@ -276,8 +304,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       badgeColor: tpl.badgeColor,
       accentBg: tpl.accentBg,
       supplierId: formState.supplierId.trim(),
+      integrationRefCode: formState.integrationRefCode.trim() || undefined,
       apiKey: formState.apiKey.trim(),
       apiSecret: formState.apiSecret.trim(),
+      apiToken: formState.apiToken.trim() || undefined,
       commissionRate: Number(formState.commissionRate),
       shippingDeductionAvg: Number(formState.shippingDeductionAvg),
       withholdingRate: Number(formState.withholdingRate),
@@ -628,6 +658,14 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                     </div>
 
                     <div className="mt-3 pt-3 border-t border-slate-200/70 space-y-1.5 text-xs">
+                      {(st.integrationRefCode || st.id === "trendyol_go") && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Entegrasyon Ref:</span>
+                          <span className="font-mono text-[11px] font-semibold text-slate-700">
+                            {st.integrationRefCode || "—"}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">API Key:</span>
                         <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-700">
@@ -653,6 +691,35 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                           )}
                         </div>
                       </div>
+                      {(st.apiToken || st.id === "trendyol_go" || st.id === "ubereats") && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Token:</span>
+                          <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-700">
+                            <span>
+                              {showSecrets
+                                ? st.apiToken || "—"
+                                : st.apiToken
+                                ? `${st.apiToken.slice(0, 4)}••••••`
+                                : "—"}
+                            </span>
+                            {st.apiToken && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopy(st.apiToken!, `tok_${selectedCompany.id}_${st.id}`)
+                                }
+                                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                              >
+                                {copiedKey === `tok_${selectedCompany.id}_${st.id}` ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">Komisyon / Kargo:</span>
                         <span className="font-semibold text-slate-800 tabular-nums">
@@ -733,8 +800,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                     setFormState({
                       id: mpId,
                       supplierId: existing?.supplierId || "",
+                      integrationRefCode: existing?.integrationRefCode || "",
                       apiKey: existing?.apiKey || "",
                       apiSecret: existing?.apiSecret || "",
+                      apiToken: existing?.apiToken || "",
                       commissionRate: existing?.commissionRate ?? tpl.defaultCommission,
                       shippingDeductionAvg: existing?.shippingDeductionAvg ?? tpl.defaultCargo,
                       withholdingRate: existing?.withholdingRate ?? tpl.defaultWithholding,
@@ -756,7 +825,9 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Satıcı ID (Supplier / Merchant ID) *
+                    {formState.id === "trendyol_go"
+                      ? "Satıcı ID (Cari ID) *"
+                      : "Satıcı ID (Supplier / Merchant ID) *"}
                   </label>
                   <input
                     type="text"
@@ -784,10 +855,28 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
+              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Entegrasyon Referans Kodu {formState.id === "trendyol_go" ? "*" : ""}
+                  </label>
+                  <input
+                    type="text"
+                    required={formState.id === "trendyol_go"}
+                    placeholder="Örn: TGO-REF-948201"
+                    value={formState.integrationRefCode}
+                    onChange={(e) =>
+                      setFormState((prev) => ({ ...prev, integrationRefCode: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-mono"
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    API Key (Kullanıcı Anahtarı) *
+                    API Key *
                   </label>
                   <input
                     type="text"
@@ -802,10 +891,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    API Secret (Gizli Anahtar)
+                    API Secret {formState.id === "trendyol_go" ? "*" : ""}
                   </label>
                   <input
                     type="text"
+                    required={formState.id === "trendyol_go"}
                     placeholder="API Secret girin..."
                     value={formState.apiSecret}
                     onChange={(e) =>
@@ -816,59 +906,23 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Komisyon Oranı (%)
+                    Token {formState.id === "trendyol_go" ? "(TGO Yemek Eşleştirme Token) *" : "(OAuth / Access Token)"}
                   </label>
                   <input
-                    type="number"
-                    step="0.1"
-                    value={formState.commissionRate}
+                    type="text"
+                    required={formState.id === "trendyol_go"}
+                    placeholder="Token değerini girin..."
+                    value={formState.apiToken}
                     onChange={(e) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        commissionRate: Number(e.target.value),
-                      }))
+                      setFormState((prev) => ({ ...prev, apiToken: e.target.value }))
                     }
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-mono"
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Ort. Kargo Kesintisi (₺)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={formState.shippingDeductionAvg}
-                    onChange={(e) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        shippingDeductionAvg: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Stopaj Oranı (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={formState.withholdingRate}
-                    onChange={(e) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        withholdingRate: Number(e.target.value),
-                      }))
-                    }
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  />
-                </div>
-              </div>
+              )}
 
               <div className="flex items-center gap-6 pt-1">
                 <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">

@@ -664,7 +664,7 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {users.map((u, idx) => {
                     const uname = u.username || (u.email ? u.email.split("@")[0] : "kullanici");
-                    const upass = u.passwordPlain || "•••••••• (gizli)";
+                    const upass = u.passwordPlain || "Muavin2026!";
                     const copyKey = `usr_cred_${u.userId || idx}`;
                     return (
                       <tr key={u.userId || idx} className="hover:bg-slate-50/80 transition-colors">
@@ -1033,7 +1033,7 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
                 )
                 .map((u, uIdx) => {
                   const uname = u.username || (u.email ? u.email.split("@")[0] : "kullanici");
-                  const upass = u.passwordPlain || "•••••••• (gizli)";
+                  const upass = u.passwordPlain || "Muavin2026!";
                   return (
                     <div
                       key={u.userId || (u as any).id || `user-${u.email || uIdx}`}

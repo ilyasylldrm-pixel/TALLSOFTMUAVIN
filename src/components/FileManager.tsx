@@ -62,6 +62,7 @@ interface FileManagerProps {
 const FILE_CATEGORIES = [
   "Tümü",
   "Fatura & Fişler",
+  "Cari Mutabakat",
   "Sözleşmeler & Protokoller",
   "Vergi Beyannameleri",
   "Banka & Dekontlar",
@@ -615,10 +616,10 @@ export const FileManager: React.FC<FileManagerProps> = ({
       <div className="flex flex-col items-center justify-center text-center gap-4">
         <div className="flex-1 text-center max-w-3xl mx-auto">
           <h1 className="text-2xl font-editorial font-medium tracking-tight text-center" style={{ color: theme.pageText }}>
-            Bulut Dosya Deposu & Fiş/Fatura Ayrıştırıcı
+            Belge Merkezi & Bulut Dosya Deposu
           </h1>
           <p className="text-xs font-medium mt-1 text-center" style={{ color: theme.pageTextMuted }}>
-            Yüklediğiniz fiş veya faturalar yapay zeka ile okunur ve tek tıkla muhasebeleştirilir
+            Yüklediğiniz fiş, fatura ve cari mutabakat belgeleri güvenle arşivlenir, yapay zeka ile okunur ve tek tıkla muhasebeleştirilir
           </p>
         </div>
 

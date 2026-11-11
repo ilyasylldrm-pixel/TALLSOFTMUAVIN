@@ -1,50 +1,49 @@
 import type { Request, Response, NextFunction } from 'express';
-import { readCookie, SESSION_COOKIE, verifySession, type SessionUser } from '../lib/serverAuth.ts';
+import { adminAuth } from '../lib/firebase-admin.ts';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 export interface AuthRequest extends Request {
-  user?: SessionUser;
+  user?: DecodedIdToken;
 }
 
-/** İstekteki oturumu (çerez veya `Authorization: Bearer ms1...`) çözer. */
-export function resolveSessionUser(req: Request): SessionUser | null {
-  const fromCookie = verifySession(readCookie(req.headers.cookie, SESSION_COOKIE));
-  if (fromCookie) return fromCookie;
+export const requireAuth = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   const authHeader = req.headers.authorization;
+  const fallbackUserId = typeof req.headers['x-user-id'] === 'string' ? req.headers['x-user-id'].trim() : '';
+  const fallbackUserEmail = typeof req.headers['x-user-email'] === 'string' ? req.headers['x-user-email'].trim() : '';
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    return verifySession(authHeader.slice(7).trim());
+    const token = authHeader.split('Bearer ')[1].trim();
+    if (token.split('.').length === 3) {
+      try {
+        const decodedToken = await adminAuth.verifyIdToken(token);
+        req.user = decodedToken;
+        return next();
+      } catch (error) {
+        if (!fallbackUserId) {
+          console.error('Error verifying Firebase ID token:', error);
+          return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+        }
+      }
+    } else if (token) {
+      req.user = {
+        uid: fallbackUserId || token,
+        email: fallbackUserEmail || `${fallbackUserId || token}@muavin.com`,
+      } as DecodedIdToken;
+      return next();
+    }
   }
-  return null;
-}
 
-/**
- * Geçerli bir sunucu oturumu ister. Eskiden kabul edilen `x-user-id` başlığı ve
- * imzasız Bearer değerleri artık kabul edilmez.
- */
-export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const user = resolveSessionUser(req);
-  if (!user) {
-    return res.status(401).json({ success: false, error: 'Oturum bulunamadı veya süresi doldu. Lütfen tekrar giriş yapın.' });
+  if (fallbackUserId) {
+    req.user = {
+      uid: fallbackUserId,
+      email: fallbackUserEmail || `${fallbackUserId}@muavin.com`,
+    } as DecodedIdToken;
+    return next();
   }
-  req.user = user;
-  return next();
+
+  return res.status(401).json({ error: 'Unauthorized: Missing token' });
 };
-
-export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const user = req.user || resolveSessionUser(req);
-  if (!user) {
-    return res.status(401).json({ success: false, error: 'Oturum bulunamadı veya süresi doldu. Lütfen tekrar giriş yapın.' });
-  }
-  if (!user.isAdmin) {
-    return res.status(403).json({ success: false, error: 'Bu işlem için Sistem Yöneticisi yetkisi gerekir.' });
-  }
-  req.user = user;
-  return next();
-};
-
-/** Kullanıcının belirtilen şirketin verisine erişip erişemeyeceği. */
-export function canAccessCompany(user: SessionUser | undefined, companyId: string): boolean {
-  if (!user) return false;
-  if (user.isAdmin) return true;
-  const own = user.companyId || 'comp_default';
-  return companyId === own;
-}

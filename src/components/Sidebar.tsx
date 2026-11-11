@@ -51,7 +51,6 @@ import {
   CreditCard,
   Scale,
   Gift,
-  UtensilsCrossed,
 } from "lucide-react";
 import {
   CompanySettings,
@@ -91,7 +90,6 @@ export type NavItem =
   | "orders_module"
   | "ecommerce"
   | "ecommerce_orders"
-  | "trendyol_food"
   | "ecommerce_stores"
   | "ecommerce_products"
   | "ecommerce_finance"
@@ -110,6 +108,7 @@ export type NavItem =
   | "hr_allowances"
   | "files"
   | "reports"
+  | "reports_advisor"
   | "company"
   | "company_profile"
   | "company_companies"
@@ -197,6 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(true);
   const [isConstructionExpanded, setIsConstructionExpanded] = useState(true);
   const [isHrExpanded, setIsHrExpanded] = useState(true);
+  const [isReportsExpanded, setIsReportsExpanded] = useState(true);
 
   const isAdmin = isAdminOrSysAdmin(currentUser);
 
@@ -222,7 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "fixed_assets" as NavItem, label: "Demirbaşlar", icon: Boxes, badge: "VUK" },
     { id: "hr" as NavItem, label: "İnsan Kaynakları", icon: UserCheck, hasSubItems: true },
     { id: "files" as NavItem, label: "Bulut Dosya Deposu", icon: HardDrive },
-    { id: "reports" as NavItem, label: "Vergilendirme", icon: BarChart3 },
+    { id: "reports" as NavItem, label: "Vergilendirme", icon: BarChart3, hasSubItems: true },
     { id: "whatsapp" as NavItem, label: "WhatsApp Merkezi", icon: MessageSquare, badge: "Canlı" },
   ];
 
@@ -266,7 +266,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const allEcommerceSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "ecommerce_orders", label: "Pazaryeri Siparişleri", icon: ShoppingCart },
-    { id: "trendyol_food", label: "🛵 Trendyol GO Yemek", icon: UtensilsCrossed },
     { id: "ecommerce_stores", label: "Mağaza Entegrasyonları", icon: Store },
     { id: "ecommerce_products", label: "Ürün & Stok Eşleştirme", icon: PackageIcon },
     { id: "ecommerce_finance", label: "Komisyon & Hakediş", icon: TrendingUp },
@@ -298,6 +297,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
   const hrSubModules = allHrSubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.id, "hr", currentUser, activeCompany)
+  );
+
+  const allReportSubModules: { id: NavItem; moduleKey: string; label: string; icon: React.ElementType }[] = [
+    { id: "reports", moduleKey: "reports_tax", label: "Vergi & Beyanname Raporları", icon: Receipt },
+    { id: "reports_advisor", moduleKey: "reports_advisor", label: "Mali Müşavir", icon: Scale },
+  ];
+  const reportSubModules = allReportSubModules.filter((sub) =>
+    isModuleOrSubModuleAllowed(sub.moduleKey, "reports", currentUser, activeCompany)
   );
 
   const handleSelectTabWithMobileClose = (tab: NavItem) => {
@@ -380,11 +387,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isProductItem = item.id === "products";
           const isConstructionItem = item.id === "construction_costing";
           const isHrItem = item.id === "hr";
+          const isReportsItem = item.id === "reports";
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
             : isEcommerceItem
-            ? ["ecommerce", "ecommerce_orders", "trendyol_food", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
+            ? ["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
             : isInvoiceItem
             ? [
                 "invoices",
@@ -424,6 +432,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "hr_zimmet",
                 "hr_allowances",
               ].includes(currentTab)
+            : isReportsItem
+            ? ["reports", "reports_advisor"].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -439,7 +449,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }
                   } else if (isEcommerceItem) {
                     setIsEcommerceExpanded((prev) => !prev);
-                    if (!["ecommerce", "ecommerce_orders", "trendyol_food", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)) {
+                    if (!["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("ecommerce_orders");
                     }
                   } else if (isInvoiceItem) {
@@ -497,6 +507,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       ].includes(currentTab)
                     ) {
                       handleSelectTabWithMobileClose("hr_employees");
+                    }
+                  } else if (isReportsItem) {
+                    setIsReportsExpanded((prev) => !prev);
+                    if (!["reports", "reports_advisor"].includes(currentTab)) {
+                      handleSelectTabWithMobileClose("reports");
                     }
                   } else if (isConstructionItem) {
                     setIsConstructionExpanded((prev) => !prev);
@@ -559,6 +574,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )
                 ) : isHrItem ? (
                   isHrExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  )
+                ) : isReportsItem ? (
+                  isReportsExpanded ? (
                     <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                   ) : (
                     <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
@@ -837,6 +858,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
 
+              {/* Sub-modules for Vergilendirme */}
+              {isReportsItem && isReportsExpanded && (
+                <div className="pl-3.5 space-y-1 my-1 border-l-2 ml-4 box-border" style={{ borderColor: theme.sidebarBorder }}>
+                  {reportSubModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isSubActive = currentTab === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => handleSelectTabWithMobileClose(sub.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer sidebar-subnav-item box-border ${
+                          isSubActive
+                            ? "active shadow-2xs font-semibold"
+                            : ""
+                        }`}
+                        style={
+                          isSubActive
+                            ? { backgroundColor: theme.sidebarActiveBg, color: theme.sidebarActiveText }
+                            : { color: theme.sidebarText }
+                        }
+                      >
+                        <SubIcon
+                          className="w-3.5 h-3.5 shrink-0 transition-transform"
+                          style={{ color: isSubActive ? theme.sidebarActiveText : undefined, opacity: isSubActive ? 1 : 0.7 }}
+                        />
+                        <span className="truncate text-left flex-1">{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
             </div>
           );
         })}
@@ -930,6 +984,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isProductItem = item.id === "products";
           const isConstructionItem = item.id === "construction_costing";
           const isHrItem = item.id === "hr";
+          const isReportsItem = item.id === "reports";
 
           const isActive = isOrderItem
             ? ["orders", "orders_module", "quotes"].includes(currentTab)
@@ -974,6 +1029,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 "hr_zimmet",
                 "hr_allowances",
               ].includes(currentTab)
+            : isReportsItem
+            ? ["reports", "reports_advisor"].includes(currentTab)
             : isProductItem
             ? ["products", "products_list"].includes(currentTab)
             : currentTab === item.id;
@@ -991,6 +1048,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onSelectTab("company_profile");
             } else if (isHrItem) {
               onSelectTab("hr_employees");
+            } else if (isReportsItem) {
+              onSelectTab("reports");
             } else {
               onSelectTab(item.id as NavItem);
             }
@@ -1008,6 +1067,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? companySubModules
             : isHrItem
             ? hrSubModules
+            : isReportsItem
+            ? reportSubModules
             : isConstructionItem && constructionProjects && constructionProjects.length > 0
             ? constructionProjects.map((proj) => ({
                 id: proj.id as any,

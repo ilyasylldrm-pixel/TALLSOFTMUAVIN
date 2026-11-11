@@ -13,7 +13,3 @@ sessions/
 !dist/**
 !build/
 !build/**
-
-data/cloud_sync_store.json
-data/whatsapp_logs.json
-data/whatsapp_sessions
