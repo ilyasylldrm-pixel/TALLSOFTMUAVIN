@@ -9,6 +9,7 @@ import { whatsAppService } from "./src/services/whatsappService.ts";
 import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
+import { createTrendyolModule } from "./src/services/trendyol/trendyolRoutes.ts";
 import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import {
@@ -101,6 +102,19 @@ app.use("/api/whatsapp", getWhatsAppRouter());
 app.use("/api/portal-proxy", getPortalProxyRouter());
 app.use("/api/extension", getExtensionRouter());
 app.use("/api/github", getGitHubRouter());
+
+// Trendyol pazaryeri entegrasyonu: sipariş çekme + otomatik e-Fatura/e-Arşiv (Mysoft).
+// Firma bilgisi, istemcinin senkronladığı cloud-sync deposundan okunur (aşağıda tanımlı).
+const trendyolModule = createTrendyolModule({
+  resolveCompanySettings: (companyId) => {
+    try {
+      return memoryCloudSyncStore.companiesData[companyId]?.data?.settings || null;
+    } catch {
+      return null;
+    }
+  },
+});
+app.use("/api/marketplace/trendyol", trendyolModule.router);
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;
@@ -2521,6 +2535,9 @@ async function startServer() {
     console.log(`  ➜  Local:   http://localhost:${PORT}/`);
     console.log(`  ➜  Network: http://0.0.0.0:${PORT}/`);
     console.log(`Muavin Muhasebe sunucusu çalışıyor: http://0.0.0.0:${PORT}`);
+
+    // Trendyol otomatik faturalama (TRENDYOL_AUTO_SYNC=true ise)
+    trendyolModule.startScheduler();
 
     // WhatsApp otomatik yeniden bağlanma kontrolü
     try {

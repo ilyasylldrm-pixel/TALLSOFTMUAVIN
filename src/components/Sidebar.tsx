@@ -88,6 +88,7 @@ export type NavItem =
   | "fixed_assets"
   | "orders"
   | "orders_module"
+  | "marketplace_trendyol"
   | "ecommerce"
   | "ecommerce_orders"
   | "ecommerce_stores"
@@ -259,6 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const allOrderSubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "orders", label: "Siparişler & Sipariş Oluştur", icon: ShoppingCart },
     { id: "quotes", label: "Proforma Faturalar", icon: FileSpreadsheet },
+    { id: "marketplace_trendyol", label: "Trendyol Entegrasyonu", icon: Store },
   ];
   const orderSubModules = allOrderSubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.id, "orders_module", currentUser, activeCompany)
@@ -390,7 +392,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isReportsItem = item.id === "reports";
 
           const isActive = isOrderItem
-            ? ["orders", "orders_module", "quotes"].includes(currentTab)
+            ? ["orders", "orders_module", "quotes", "marketplace_trendyol"].includes(currentTab)
             : isEcommerceItem
             ? ["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
             : isInvoiceItem
@@ -444,7 +446,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => {
                   if (isOrderItem) {
                     setIsOrdersExpanded((prev) => !prev);
-                    if (!["orders", "orders_module", "quotes"].includes(currentTab)) {
+                    if (!["orders", "orders_module", "quotes", "marketplace_trendyol"].includes(currentTab)) {
                       handleSelectTabWithMobileClose("orders");
                     }
                   } else if (isEcommerceItem) {
@@ -987,7 +989,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const isReportsItem = item.id === "reports";
 
           const isActive = isOrderItem
-            ? ["orders", "orders_module", "quotes"].includes(currentTab)
+            ? ["orders", "orders_module", "quotes", "marketplace_trendyol"].includes(currentTab)
             : isEcommerceItem
             ? ["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)
             : isInvoiceItem

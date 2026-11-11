@@ -313,6 +313,7 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "orders_module", name: "Sipariş & Proforma Fatura", description: "Alınan/verilen siparişler ve proforma teklifler ana modülü", category: "commercial" },
   { id: "orders", name: "↳ Siparişler & Sipariş Oluştur", description: "Satış ve satınalma siparişleri yönetimi", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
   { id: "quotes", name: "↳ Proforma Faturalar & Teklifler", description: "Proforma fatura hazırlama ve siparişe/faturaya dönüştürme", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
+  { id: "marketplace_trendyol", name: "↳ Trendyol Entegrasyonu", description: "Trendyol siparişlerini çekme ve otomatik e-Fatura / e-Arşiv kesme", category: "commercial", parentId: "orders_module", isSubModule: true, badge: "Alt Modül" },
 
   // Ana Modül: E-Ticaret Modülü & Alt Modülleri
   { id: "ecommerce", name: "E-Ticaret Modülü", description: "Pazaryeri mağazaları, online siparişler, stok eşleştirme ve komisyon/hakediş yönetimi", category: "commercial", badge: "E-Ticaret" },
@@ -1400,6 +1401,7 @@ export type AppModuleKey =
   | "orders_module"
   | "orders"
   | "quotes"
+  | "marketplace_trendyol"
   | "ecommerce"
   | "ecommerce_orders"
   | "ecommerce_stores"
@@ -2047,6 +2049,7 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "orders_module", label: "Sipariş & Proforma", description: "Müşteri siparişleri ve proforma teklifler (Ana Modül)", category: "Ticari" },
   { key: "orders", label: "↳ Siparişler & Sipariş Oluştur", description: "Alınan ve verilen siparişlerin takibi", category: "Ticari", parentKey: "orders_module", isSubModule: true },
   { key: "quotes", label: "↳ Proforma Faturalar", description: "Fiyat teklifi ve proforma fatura yönetimi", category: "Ticari", parentKey: "orders_module", isSubModule: true },
+  { key: "marketplace_trendyol", label: "↳ Trendyol Entegrasyonu", description: "Trendyol siparişleri ve otomatik fatura", category: "Ticari", parentKey: "orders_module", isSubModule: true },
 
   // E-Ticaret Modülü & Alt Modülleri
   { key: "ecommerce", label: "E-Ticaret Modülü", description: "Pazaryeri mağazaları, siparişler, stok senkronizasyonu ve komisyon hakediş yönetimi", category: "Ticari" },

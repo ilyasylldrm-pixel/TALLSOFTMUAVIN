@@ -55,3 +55,8 @@ data/github-config.json
 bun.lock
 bun.lockb
 
+
+# Trendyol entegrasyonu: şifreli API bilgileri ve fatura defteri (asla commit edilmez)
+data/trendyol_store.json
+data/trendyol_store.json.*.tmp
+data/.trendyol.key

@@ -73,6 +73,7 @@ import { Contacts } from "./components/Contacts";
 import { Invoices } from "./components/Invoices";
 import { Quotes } from "./components/Quotes";
 import { Orders } from "./components/Orders";
+import { TrendyolIntegration } from "./components/Marketplace/TrendyolIntegration";
 import { ECommerceModule } from "./components/ECommerceModule";
 import { Waybills } from "./components/Waybills";
 import { Accounts } from "./components/Accounts";
@@ -3972,6 +3973,8 @@ export default function App() {
         return "Gelir & Gider Fişleri";
       case "orders":
         return "Siparişler & Sipariş Oluştur";
+      case "marketplace_trendyol":
+        return "Trendyol Entegrasyonu";
       case "orders_module":
         return "Sipariş & Proforma";
       case "ecommerce":
@@ -4504,6 +4507,10 @@ export default function App() {
               onUpdateMaintenances={handleUpdateAssetMaintenances}
               onUpdateDisposals={handleUpdateAssetDisposals}
             />
+          )}
+
+          {currentTab === "marketplace_trendyol" && (
+            <TrendyolIntegration companyId={activeCompanyId} companySettings={data.settings} />
           )}
 
           {currentTab === "orders" && (
