@@ -2242,3 +2242,566 @@ export async function generateCariReconciliationPDF({
   return { pdf: doc, blob, fileName: finalFileName };
 }
 
+export interface BalanceSheetPDFOptions {
+  companySettings?: CompanySettings | null;
+  periodLabel: string;
+  selectedYear: number;
+  advisorName?: string;
+  advisorType?: string;
+  advisorLicenseNo?: string;
+  advisorChamber?: string;
+  // Summary Metrics
+  salesGrandTotal: number;
+  salesNetTotal: number;
+  salesVat: number;
+  salesCount: number;
+  purchaseGrandTotal: number;
+  purchaseNetTotal: number;
+  purchaseVat: number;
+  purchaseCount: number;
+  collectionsTotal: number;
+  paymentsTotal: number;
+  payableKdv1: number;
+  deferredKdv1: number;
+  totalMuhtasar: number;
+  estimatedProfit: number;
+  // Balances
+  bankBalance?: number;
+  cashBalance?: number;
+  receivablesBalance?: number;
+  payablesBalance?: number;
+  fileName?: string;
+}
+
+/**
+ * Resmi Bilanço & Gelir Tablosu Dönem İcmali PDF Raporu Üretir.
+ */
+export async function generateBalanceSheetPDF(
+  options: BalanceSheetPDFOptions
+): Promise<{ pdf: jsPDF; blob: Blob; fileName: string }> {
+  const {
+    companySettings,
+    periodLabel,
+    selectedYear,
+    advisorName,
+    advisorType = "SMMM",
+    advisorLicenseNo,
+    advisorChamber,
+    salesGrandTotal,
+    salesNetTotal,
+    salesVat,
+    salesCount,
+    purchaseGrandTotal,
+    purchaseNetTotal,
+    purchaseVat,
+    purchaseCount,
+    collectionsTotal,
+    paymentsTotal,
+    payableKdv1,
+    deferredKdv1,
+    totalMuhtasar,
+    estimatedProfit,
+    bankBalance = 0,
+    cashBalance = 0,
+    receivablesBalance = 0,
+    payablesBalance = 0,
+    fileName,
+  } = options;
+
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const hasUnicode = await loadTurkishFontIntoPDF(doc);
+  const activeFont = hasUnicode ? "Roboto" : "helvetica";
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+
+  // Header band
+  doc.setFillColor(15, 107, 174);
+  doc.rect(0, 0, pageWidth, 22, "F");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    toPdfText("DÖNEM BİLANÇO VE ÖN MUHASEBE İCMAL RAPORU", hasUnicode),
+    margin,
+    11
+  );
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(224, 242, 254);
+  doc.text(
+    toPdfText(`Çalışma Dönemi: ${periodLabel} ${selectedYear} · Resmi Muhasebe İcmali`, hasUnicode),
+    margin,
+    17
+  );
+
+  // Company and Advisor Header Cards
+  let cursorY = 28;
+  const colWidth = (contentWidth - 6) / 2;
+
+  // Company Box (Left)
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, cursorY, colWidth, 24, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  const companyTitle = companySettings?.companyName || "FİRMA TANIMLANMADI";
+  doc.text(toPdfText(companyTitle.toUpperCase(), hasUnicode), margin + 3.5, cursorY + 5.5, {
+    maxWidth: colWidth - 7,
+  });
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    toPdfText(
+      `VKN/TCKN: ${companySettings?.taxNumber || "—"}  |  V.D.: ${companySettings?.taxOffice || "—"}`,
+      hasUnicode
+    ),
+    margin + 3.5,
+    cursorY + 11.5
+  );
+  doc.text(
+    toPdfText(`Adres: ${companySettings?.address || "Belirtilmedi"}`, hasUnicode),
+    margin + 3.5,
+    cursorY + 16.5,
+    { maxWidth: colWidth - 7 }
+  );
+
+  // Advisor Box (Right)
+  const rightColX = margin + colWidth + 6;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(rightColX, cursorY, colWidth, 24, 1.5, 1.5, "FD");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 107, 174);
+  doc.text(
+    toPdfText(`${advisorType} DANIŞMANLIK & MASASI`, hasUnicode),
+    rightColX + 3.5,
+    cursorY + 5.5
+  );
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    toPdfText(`Müşavir: ${advisorName || "Müşavir Tanımlanmadı"}`, hasUnicode),
+    rightColX + 3.5,
+    cursorY + 11.5
+  );
+  doc.text(
+    toPdfText(
+      `Oda / Sicil: ${advisorChamber || "İSMMMO"} ${advisorLicenseNo ? `/ ${advisorLicenseNo}` : ""}`,
+      hasUnicode
+    ),
+    rightColX + 3.5,
+    cursorY + 16.5
+  );
+
+  cursorY += 28;
+
+  // Section 1: KPI Indicator Cards (4 items)
+  const kpiWidth = (contentWidth - 9) / 4;
+  const kpis = [
+    { label: "DÖNEM SATIŞ GELİRİ", val: `₺${salesGrandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, sub: `${salesCount} Adet Fatura`, color: [16, 185, 129] },
+    { label: "DÖNEM ALIŞ & GİDER", val: `₺${purchaseGrandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, sub: `${purchaseCount} Adet Belge`, color: [244, 63, 94] },
+    {
+      label: "KDV-1 BEYAN DURUMU",
+      val: payableKdv1 > 0 ? `₺${payableKdv1.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : `₺${deferredKdv1.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`,
+      sub: payableKdv1 > 0 ? "Ödenecek KDV" : "Sonraki Döneme Devreden",
+      color: payableKdv1 > 0 ? [217, 119, 6] : [15, 107, 174],
+    },
+    {
+      label: "TAHMİNİ NET KÂR/ZARAR",
+      val: `₺${estimatedProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`,
+      sub: estimatedProfit >= 0 ? "Dönem Brüt Kârı" : "Dönem Zararı",
+      color: estimatedProfit >= 0 ? [16, 185, 129] : [225, 29, 72],
+    },
+  ];
+
+  kpis.forEach((kpi, idx) => {
+    const kpiX = margin + idx * (kpiWidth + 3);
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(kpiX, cursorY, kpiWidth, 18, 1.2, 1.2, "FD");
+
+    doc.setFont(activeFont, "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(toPdfText(kpi.label, hasUnicode), kpiX + 2.5, cursorY + 4.5);
+
+    doc.setFont(activeFont, "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+    doc.text(toPdfText(kpi.val, hasUnicode), kpiX + 2.5, cursorY + 10.5);
+
+    doc.setFont(activeFont, "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text(toPdfText(kpi.sub, hasUnicode), kpiX + 2.5, cursorY + 15);
+  });
+
+  cursorY += 23;
+
+  // Table 1: Bilanço Varlıklar ve Kaynaklar Dengesi
+  const balanceRows = [
+    [
+      toPdfText("100 / 102 Kasa & Bankalar Mevcudu", hasUnicode),
+      toPdfText(`₺${(cashBalance + bankBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText("300 Kısa Vadeli Banka Kredileri / Borçlar", hasUnicode),
+      toPdfText("₺0,00", hasUnicode),
+    ],
+    [
+      toPdfText("120 Alıcılar (Müşteri Cari Alacakları)", hasUnicode),
+      toPdfText(`₺${receivablesBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText("320 Satıcılar (Tedarikçi Borçları)", hasUnicode),
+      toPdfText(`₺${payablesBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+    ],
+    [
+      toPdfText("190 Devreden KDV Bakiyesi", hasUnicode),
+      toPdfText(`₺${deferredKdv1.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText("360 / 361 Ödenecek Vergi & Fonlar (Stopaj)", hasUnicode),
+      toPdfText(`₺${totalMuhtasar.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+    ],
+    [
+      toPdfText("153 Ticari Mallar / Stok Envanteri", hasUnicode),
+      toPdfText("Dönem Sonu Envanter", hasUnicode),
+      toPdfText("391 Hesaplanan KDV (Dönem Kapanış)", hasUnicode),
+      toPdfText(`₺${salesVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+    ],
+    [
+      toPdfText("DÖNEN VARLIKLAR TOPLAMI", hasUnicode),
+      toPdfText(`₺${(cashBalance + bankBalance + receivablesBalance + deferredKdv1).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText("KISA VADELİ YABANCI KAYNAKLAR", hasUnicode),
+      toPdfText(`₺${(payablesBalance + totalMuhtasar + (payableKdv1 > 0 ? payableKdv1 : 0)).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+    ],
+  ];
+
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: margin, right: margin },
+    head: [[
+      toPdfText("AKTİF (VARLIKLAR - 1xx / 2xx)", hasUnicode),
+      toPdfText("TUTAR", hasUnicode),
+      toPdfText("PASİF (KAYNAKLAR - 3xx / 4xx / 5xx)", hasUnicode),
+      toPdfText("TUTAR", hasUnicode),
+    ]],
+    body: balanceRows,
+    theme: "grid",
+    styles: {
+      font: activeFont,
+      fontSize: 7.5,
+      cellPadding: 2.2,
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      font: activeFont,
+      fillColor: [15, 107, 174],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 7.5,
+    },
+    columnStyles: {
+      0: { cellWidth: 55 },
+      1: { cellWidth: 35, halign: "right", fontStyle: "bold" },
+      2: { cellWidth: 55 },
+      3: { cellWidth: 35, halign: "right", fontStyle: "bold" },
+    },
+  });
+
+  cursorY = (doc as any).lastAutoTable?.finalY + 6;
+
+  // Table 2: Gelir Tablosu & KDV Durumu
+  const incomeStatementRows = [
+    [toPdfText("600 Yurtiçi Satışlar (KDV Hariç Net Hasılat)", hasUnicode), toPdfText(`${salesCount} Adet Fatura`, hasUnicode), toPdfText(`₺${salesNetTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("391 Hesaplanan KDV (%10, %20)", hasUnicode), toPdfText("Satış KDV Toplamı", hasUnicode), toPdfText(`₺${salesVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("770 / 150 Satılan Mal / Hizmet & Genel Yönetim Giderleri", hasUnicode), toPdfText(`${purchaseCount} Adet Fatura/Fiş`, hasUnicode), toPdfText(`₺${purchaseNetTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("191 İndirilecek KDV Toplamı", hasUnicode), toPdfText("Gider KDV Toplamı", hasUnicode), toPdfText(`₺${purchaseVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("Kasa & Banka Nakit Tahsilat Hareketi", hasUnicode), toPdfText("Dönem İçi Giriş", hasUnicode), toPdfText(`+₺${collectionsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("Kasa & Banka Nakit Ödeme Hareketi", hasUnicode), toPdfText("Dönem İçi Çıkış", hasUnicode), toPdfText(`-₺${paymentsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("Muhtasar & Stopaj Kesintileri (Gider Pusulası + SMM + Kira)", hasUnicode), toPdfText("Tevkifat Matrahı", hasUnicode), toPdfText(`₺${totalMuhtasar.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+    [toPdfText("DÖNEM NET İŞLETME SONUCU (FAALİYET KÂRI / ZARARI)", hasUnicode), toPdfText("Brüt Gelir - Brüt Gider", hasUnicode), toPdfText(`₺${estimatedProfit.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode)],
+  ];
+
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: margin, right: margin },
+    head: [[
+      toPdfText("GELİR TABLOSU VE NAKİT AKIŞI HAREKETİ", hasUnicode),
+      toPdfText("AÇIKLAMA / ADET", hasUnicode),
+      toPdfText("DÖNEM TUTARI", hasUnicode),
+    ]],
+    body: incomeStatementRows,
+    theme: "striped",
+    styles: {
+      font: activeFont,
+      fontSize: 7.5,
+      cellPadding: 2.2,
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      font: activeFont,
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 7.5,
+    },
+    columnStyles: {
+      0: { cellWidth: 105 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 40, halign: "right", fontStyle: "bold" },
+    },
+  });
+
+  cursorY = (doc as any).lastAutoTable?.finalY + 8;
+
+  // Signature Block
+  const sigBoxY = Math.max(cursorY, pageHeight - 34);
+  const sigWidth = (contentWidth - 8) / 2;
+
+  // Left Sign: Firma Yetkilisi
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, sigBoxY, sigWidth, 20, 1.2, 1.2, "FD");
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(toPdfText("FİRMA YETKİLİSİ / TAAHHÜT", hasUnicode), margin + sigWidth / 2, sigBoxY + 4.5, { align: "center" });
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(toPdfText(companyTitle, hasUnicode), margin + sigWidth / 2, sigBoxY + 8.5, { align: "center" });
+  doc.text(toPdfText("İmza / Kaşe", hasUnicode), margin + sigWidth / 2, sigBoxY + 12, { align: "center" });
+
+  // Right Sign: Mali Müşavir
+  const sigRightX2 = margin + sigWidth + 8;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(sigRightX2, sigBoxY, sigWidth, 20, 1.2, 1.2, "FD");
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 107, 174);
+  doc.text(toPdfText("MALİ MÜŞAVİR TASDİK VE İNCELEME", hasUnicode), sigRightX2 + sigWidth / 2, sigBoxY + 4.5, { align: "center" });
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(toPdfText(advisorName || "SMMM Yetkili", hasUnicode), sigRightX2 + sigWidth / 2, sigBoxY + 8.5, { align: "center" });
+  doc.text(toPdfText("Mühür / Ruhsat No / İmza", hasUnicode), sigRightX2 + sigWidth / 2, sigBoxY + 12, { align: "center" });
+
+  // Footer notice
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(6);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    toPdfText("İşbu bilanço ve icmal raporu ön muhasebe hareketlerine istinaden 213 sayılı VUK hükümlerine uygun olarak düzenlenmiştir.", hasUnicode),
+    pageWidth / 2,
+    pageHeight - 5,
+    { align: "center" }
+  );
+
+  const cleanPeriod = periodLabel.replace(/\s+/g, "_");
+  const finalFileName =
+    fileName || `Bilanco_Icmal_${cleanPeriod}_${selectedYear}.pdf`;
+  const blob = doc.output("blob");
+
+  return { pdf: doc, blob, fileName: finalFileName };
+}
+
+export interface IncomeExpenseItemPDF {
+  date: string;
+  documentNo: string;
+  partyName: string;
+  vknTckn: string;
+  categoryOrType: string;
+  netBase: number;
+  vatRate: number;
+  vatAmount: number;
+  withholdingOrStopaj: number;
+  grandTotal: number;
+  currency: string;
+}
+
+export interface IncomeExpenseListPDFOptions {
+  companySettings?: CompanySettings | null;
+  periodLabel: string;
+  type: "income" | "expense";
+  items: IncomeExpenseItemPDF[];
+  advisorName?: string;
+  fileName?: string;
+}
+
+/**
+ * Resmi Gelirler veya Giderler Listesi PDF Raporu (VKN/TCKN Sütunlu) Üretir.
+ */
+export async function generateIncomeExpenseListPDF(
+  options: IncomeExpenseListPDFOptions
+): Promise<{ pdf: jsPDF; blob: Blob; fileName: string }> {
+  const {
+    companySettings,
+    periodLabel,
+    type,
+    items,
+    advisorName,
+    fileName,
+  } = options;
+
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const hasUnicode = await loadTurkishFontIntoPDF(doc);
+  const activeFont = hasUnicode ? "Roboto" : "helvetica";
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+
+  const isIncome = type === "income";
+  const titleText = isIncome
+    ? "DÖNEM GELİRLERİ (SATIŞ FATURALARI) LİSTESİ"
+    : "DÖNEM GİDERLERİ (ALIŞ VE MASRAF BELGELERİ) LİSTESİ";
+  const headerBgColor = isIncome ? [16, 185, 129] : [225, 29, 72];
+
+  // Header band
+  doc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
+  doc.rect(0, 0, pageWidth, 20, "F");
+
+  doc.setFont(activeFont, "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(255, 255, 255);
+  doc.text(toPdfText(titleText, hasUnicode), margin, 9);
+
+  doc.setFont(activeFont, "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  const companyTitle = companySettings?.companyName || "FİRMA TANIMLANMADI";
+  const companyVkn = companySettings?.taxNumber || "—";
+  doc.text(
+    toPdfText(
+      `Firma: ${companyTitle} (VKN: ${companyVkn}) · Dönem: ${periodLabel} · Toplam ${items.length} Kayıt (VKN / TCKN Belgeli)`,
+      hasUnicode
+    ),
+    margin,
+    15
+  );
+
+  let totalNet = 0;
+  let totalVat = 0;
+  let totalWithholding = 0;
+  let totalGrand = 0;
+
+  const rows = items.map((it, idx) => {
+    totalNet += it.netBase;
+    totalVat += it.vatAmount;
+    totalWithholding += it.withholdingOrStopaj;
+    totalGrand += it.grandTotal;
+
+    return [
+      String(idx + 1),
+      toPdfText(it.date, hasUnicode),
+      toPdfText(it.documentNo, hasUnicode),
+      toPdfText(it.partyName, hasUnicode),
+      toPdfText(it.vknTckn || "—", hasUnicode),
+      toPdfText(it.categoryOrType, hasUnicode),
+      toPdfText(`₺${it.netBase.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText(`%${it.vatRate}`, hasUnicode),
+      toPdfText(`₺${it.vatAmount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText(`₺${it.withholdingOrStopaj.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText(`₺${it.grandTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 24,
+    margin: { left: margin, right: margin },
+    head: [[
+      toPdfText("NO", hasUnicode),
+      toPdfText("TARİH", hasUnicode),
+      toPdfText("BELGE NO", hasUnicode),
+      toPdfText(isIncome ? "ALICI / MÜŞTERİ CARİ" : "SATICI / TEDARİKÇİ CARİ", hasUnicode),
+      toPdfText("VKN / TCKN", hasUnicode),
+      toPdfText("TÜR / KATEGORİ", hasUnicode),
+      toPdfText("MATRAH", hasUnicode),
+      toPdfText("KDV %", hasUnicode),
+      toPdfText("KDV TUTARI", hasUnicode),
+      toPdfText(isIncome ? "TEVKİFAT" : "TEVK./STOPAJ", hasUnicode),
+      toPdfText("GENEL TOPLAM", hasUnicode),
+    ]],
+    body: rows,
+    foot: [[
+      "",
+      "",
+      "",
+      toPdfText("GENEL TOPLAM DÖKÜMÜ", hasUnicode),
+      toPdfText(`${items.length} Kalem`, hasUnicode),
+      "",
+      toPdfText(`₺${totalNet.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      "",
+      toPdfText(`₺${totalVat.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText(`₺${totalWithholding.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+      toPdfText(`₺${totalGrand.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, hasUnicode),
+    ]],
+    theme: "striped",
+    styles: {
+      font: activeFont,
+      fontSize: 7,
+      cellPadding: 1.8,
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+      overflow: "linebreak",
+    },
+    headStyles: {
+      font: activeFont,
+      fillColor: isIncome ? [15, 118, 110] : [190, 24, 93],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 7,
+    },
+    footStyles: {
+      font: activeFont,
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+      fontSize: 7.2,
+    },
+    columnStyles: {
+      0: { halign: "center", cellWidth: 8 },
+      1: { halign: "center", cellWidth: 18 },
+      2: { halign: "center", cellWidth: 26 },
+      3: { halign: "left", cellWidth: 60 },
+      4: { halign: "center", cellWidth: 26, fontStyle: "bold" },
+      5: { halign: "left", cellWidth: 32 },
+      6: { halign: "right", cellWidth: 24 },
+      7: { halign: "center", cellWidth: 12 },
+      8: { halign: "right", cellWidth: 22 },
+      9: { halign: "right", cellWidth: 20 },
+      10: { halign: "right", cellWidth: 25, fontStyle: "bold" },
+    },
+  });
+
+  const cleanPeriod = periodLabel.replace(/\s+/g, "_");
+  const kindName = isIncome ? "Gelirler_Listesi" : "Giderler_Listesi";
+  const finalFileName = fileName || `${kindName}_VKN_${cleanPeriod}.pdf`;
+  const blob = doc.output("blob");
+
+  return { pdf: doc, blob, fileName: finalFileName };
+}
+
+

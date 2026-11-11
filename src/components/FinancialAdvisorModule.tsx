@@ -18,11 +18,19 @@ import {
   ArrowDownLeft,
   Loader2,
   FolderOpen,
+  ChevronDown,
+  Building2,
+  Receipt,
 } from "lucide-react";
 import { Contact, Invoice, Transaction, CompanySettings } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { UniversalWhatsAppModal } from "./common/UniversalWhatsAppModal";
-import { generateCariReconciliationPDF } from "../utils/pdfService";
+import {
+  generateCariReconciliationPDF,
+  generateBalanceSheetPDF,
+  generateIncomeExpenseListPDF,
+  IncomeExpenseItemPDF,
+} from "../utils/pdfService";
 import { saveUserFile, uploadFileToStorage } from "../lib/firebase";
 
 export interface FinancialAdvisorProfile {
@@ -270,6 +278,7 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
     "Beyanname" | "Evrak" | "Mevzuat" | "Mutabakat"
   >("Beyanname");
   const [noteContent, setNoteContent] = useState("");
+  const [isBilancoMenuOpen, setIsBilancoMenuOpen] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -708,6 +717,501 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
     showToast(`${periodLabel} fatura ve KDV icmal listesi (.CSV) indirildi.`);
   };
 
+  /**
+   * Fatura veya Cari Kart üzerinden VKN / TCKN bilgisini çözer.
+   */
+  const getResolvedVknTckn = (inv: Invoice): string => {
+    if (inv.taxNumber && inv.taxNumber.trim() && inv.taxNumber !== "—") {
+      return inv.taxNumber.trim();
+    }
+    const found = contacts.find(
+      (c) =>
+        c.id === inv.contactId ||
+        (inv.contactName && c.name?.toLowerCase() === inv.contactName.toLowerCase()) ||
+        (inv.contactName && c.companyTitle?.toLowerCase() === inv.contactName.toLowerCase())
+    );
+    if (found?.taxNumber && found.taxNumber.trim() && found.taxNumber !== "—") {
+      return found.taxNumber.trim();
+    }
+    return "—";
+  };
+
+  const formatDbsDate = (isoDate?: string): string => {
+    if (!isoDate) return "";
+    const p = isoDate.split("T")[0].split("-");
+    if (p.length === 3) return `${p[2]}.${p[1]}.${p[0]}`;
+    return isoDate;
+  };
+
+  // 1. Bilanço & Ön Muhasebe İcmali İndir (Resmi PDF)
+  const handleDownloadBalanceSheetPdf = async () => {
+    try {
+      showToast("Bilanço ve gelir tablosu PDF raporu hazırlanıyor...");
+      const estimatedProfit =
+        periodData.salesGrandTotal - periodData.purchaseGrandTotal;
+      const res = await generateBalanceSheetPDF({
+        companySettings,
+        periodLabel,
+        selectedYear,
+        advisorName: persisted.profile.fullName || persisted.profile.officeTitle || "SMMM Yetkili",
+        advisorType: persisted.profile.advisorType || "SMMM",
+        advisorLicenseNo: persisted.profile.licenseNo,
+        advisorChamber: persisted.profile.chamberName,
+        salesGrandTotal: periodData.salesGrandTotal,
+        salesNetTotal: periodData.salesSubtotal,
+        salesVat: periodData.salesVat,
+        salesCount: periodData.salesInvoices.length,
+        purchaseGrandTotal: periodData.purchaseGrandTotal,
+        purchaseNetTotal: periodData.purchaseSubtotal,
+        purchaseVat: periodData.purchaseVat,
+        purchaseCount: periodData.purchaseInvoices.length,
+        collectionsTotal: periodData.collectionsTotal,
+        paymentsTotal: periodData.paymentsTotal,
+        payableKdv1: periodData.payableKdv1,
+        deferredKdv1: periodData.deferredKdv1,
+        totalMuhtasar: periodData.totalMuhtasar,
+        estimatedProfit,
+      });
+
+      const blobUrl = URL.createObjectURL(res.blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = blobUrl;
+      downloadLink.download = res.fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+      showToast(`✓ ${periodLabel} Bilanço ve Dönem İcmali PDF olarak indirildi.`);
+    } catch (err) {
+      console.error("Bilanço PDF oluşturma hatası:", err);
+      showToast("Bilanço PDF oluşturulurken bir hata meydana geldi.");
+    }
+  };
+
+  // 2. Bilanço & Ön Muhasebe İcmali İndir (Excel / CSV)
+  const handleDownloadBalanceSheetCsv = () => {
+    const estimatedProfit =
+      periodData.salesGrandTotal - periodData.purchaseGrandTotal;
+    const rows = [
+      ["DÖNEM BİLANÇO VE ÖN MUHASEBE İCMALİ", ""],
+      ["Çalışma Dönemi", `${periodLabel} ${selectedYear}`],
+      ["Firma Unvanı", companySettings.companyName || "—"],
+      ["Firma VKN/TCKN", companySettings.taxNumber || "—"],
+      ["Vergi Dairesi", companySettings.taxOffice || "—"],
+      ["Mali Müşavir", `${persisted.profile.advisorType} ${persisted.profile.fullName || "—"}`],
+      ["", ""],
+      ["AKTİF - DÖNEN VARLIKLAR (TL)", ""],
+      ["100/102 Kasa & Bankalar Mevcudu (Net Nakit Hareketi)", (periodData.collectionsTotal - periodData.paymentsTotal).toFixed(2)],
+      ["120 Alıcılar (Dönem Satış Alacakları)", periodData.salesGrandTotal.toFixed(2)],
+      ["190 Devreden KDV Bakiyesi", periodData.deferredKdv1.toFixed(2)],
+      ["DÖNEN VARLIKLAR TOPLAMI", (periodData.collectionsTotal + periodData.salesGrandTotal + periodData.deferredKdv1).toFixed(2)],
+      ["", ""],
+      ["PASİF - KISA VADELİ KAYNAKLAR & BORÇLAR (TL)", ""],
+      ["320 Satıcılar (Dönem Tedarikçi Borçları)", periodData.purchaseGrandTotal.toFixed(2)],
+      ["360 Ödenecek Vergi ve Fonlar (Muhtasar / Stopaj)", periodData.totalMuhtasar.toFixed(2)],
+      ["391 Hesaplanan KDV (Ödenecek KDV-1)", periodData.payableKdv1.toFixed(2)],
+      ["KISA VADELİ YABANCI KAYNAKLAR TOPLAMI", (periodData.purchaseGrandTotal + periodData.totalMuhtasar + periodData.payableKdv1).toFixed(2)],
+      ["", ""],
+      ["GELİR TABLOSU VE DÖNEM FAALİYET SONUCU (TL)", ""],
+      ["600 Yurtiçi Satışlar (Net Hasılat)", periodData.salesSubtotal.toFixed(2)],
+      ["391 Hesaplanan KDV", periodData.salesVat.toFixed(2)],
+      ["770 Genel Yönetim / Mal ve Hizmet Giderleri", periodData.purchaseSubtotal.toFixed(2)],
+      ["191 İndirilecek KDV", periodData.purchaseVat.toFixed(2)],
+      ["DÖNEM NET FAALİYET SONUCU (KÂR / ZARAR)", estimatedProfit.toFixed(2)],
+    ];
+
+    const csvContent =
+      "\uFEFF" +
+      rows
+        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))
+        .join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Bilanco_Icmali_${periodKey}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`✓ ${periodLabel} Bilanço ve Dönem İcmali (.CSV) indirildi.`);
+  };
+
+  // 3. Gelirler Listesi İndir (VKN / TCKN Gösterimli - Excel / CSV)
+  const handleDownloadIncomeListCsv = () => {
+    const headers = [
+      "Tarih",
+      "Belge No",
+      "Müşteri / Cari Ünvanı",
+      "VKN / TCKN",
+      "Fatura Türü",
+      "KDV Oranı (%)",
+      "Matrah (KDV Hariç)",
+      "Hesaplanan KDV",
+      "Tevkifat Tutarı",
+      "Genel Toplam",
+      "Para Birimi",
+      "Durum",
+    ];
+
+    const rows = periodData.salesInvoices.map((inv) => {
+      const vkn = getResolvedVknTckn(inv);
+      const net =
+        inv.subtotal !== undefined
+          ? inv.subtotal
+          : Math.max(0, (inv.grandTotal || 0) - (inv.totalVat || 0));
+      const vatRate =
+        net > 0 && (inv.totalVat || 0) > 0
+          ? Math.round(((inv.totalVat || 0) / net) * 100)
+          : 20;
+
+      return [
+        inv.issueDate || "",
+        inv.invoiceNumber || inv.id,
+        (inv.contactName || "Müşteri").replace(/;/g, ","),
+        vkn,
+        inv.invoiceScenario || "e-Fatura / e-Arşiv",
+        String(vatRate),
+        net.toFixed(2),
+        (inv.totalVat || 0).toFixed(2),
+        (inv.totalWithholding || 0).toFixed(2),
+        (inv.grandTotal || 0).toFixed(2),
+        inv.currency || "TRY",
+        inv.status || "Onaylı",
+      ];
+    });
+
+    const csvContent =
+      "\uFEFF" +
+      [
+        headers.join(";"),
+        ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")),
+      ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Gelirler_Listesi_VKN_${periodKey}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`✓ ${periodLabel} Gelirler Listesi (VKN/TCKN) (.CSV) indirildi.`);
+  };
+
+  // 4. Gelirler Listesi İndir (VKN / TCKN Gösterimli - PDF)
+  const handleDownloadIncomeListPdf = async () => {
+    try {
+      showToast("Gelirler listesi PDF hazırlanıyor...");
+      const items: IncomeExpenseItemPDF[] = periodData.salesInvoices.map((inv) => {
+        const net =
+          inv.subtotal !== undefined
+            ? inv.subtotal
+            : Math.max(0, (inv.grandTotal || 0) - (inv.totalVat || 0));
+        const vatRate =
+          net > 0 && (inv.totalVat || 0) > 0
+            ? Math.round(((inv.totalVat || 0) / net) * 100)
+            : 20;
+        return {
+          date: inv.issueDate || "",
+          documentNo: inv.invoiceNumber || inv.id,
+          partyName: inv.contactName || "Müşteri",
+          vknTckn: getResolvedVknTckn(inv),
+          categoryOrType: inv.invoiceScenario || "Satış Faturası",
+          netBase: net,
+          vatRate,
+          vatAmount: inv.totalVat || 0,
+          withholdingOrStopaj: inv.totalWithholding || 0,
+          grandTotal: inv.grandTotal || 0,
+          currency: inv.currency || "TRY",
+        };
+      });
+
+      const res = await generateIncomeExpenseListPDF({
+        companySettings,
+        periodLabel,
+        type: "income",
+        items,
+        advisorName: persisted.profile.fullName,
+      });
+
+      const blobUrl = URL.createObjectURL(res.blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = blobUrl;
+      downloadLink.download = res.fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+      showToast(`✓ ${periodLabel} Gelirler Listesi PDF olarak indirildi.`);
+    } catch (err) {
+      console.error("Gelirler PDF hatası:", err);
+      showToast("Gelirler listesi PDF oluşturulurken hata meydana geldi.");
+    }
+  };
+
+  // 5. Giderler Listesi İndir (VKN / TCKN Gösterimli - Excel / CSV)
+  const handleDownloadExpenseListCsv = () => {
+    const headers = [
+      "Tarih",
+      "Belge No",
+      "Satıcı / Tedarikçi Ünvanı",
+      "VKN / TCKN",
+      "Gider Kategorisi / Türü",
+      "KDV Oranı (%)",
+      "Matrah (KDV Hariç)",
+      "İndirilecek KDV",
+      "Tevkifat / Stopaj Tutarı",
+      "Genel Toplam",
+      "Para Birimi",
+      "Durum",
+    ];
+
+    const rows = periodData.purchaseInvoices.map((inv) => {
+      const vkn = getResolvedVknTckn(inv);
+      const net =
+        inv.subtotal !== undefined
+          ? inv.subtotal
+          : Math.max(0, (inv.grandTotal || 0) - (inv.totalVat || 0));
+      const vatRate =
+        net > 0 && (inv.totalVat || 0) > 0
+          ? Math.round(((inv.totalVat || 0) / net) * 100)
+          : 20;
+
+      return [
+        inv.issueDate || "",
+        inv.invoiceNumber || inv.id,
+        (inv.contactName || "Tedarikçi").replace(/;/g, ","),
+        vkn,
+        inv.expenseCategory || "Genel Yönetim / Alış",
+        String(vatRate),
+        net.toFixed(2),
+        (inv.totalVat || 0).toFixed(2),
+        ((inv.totalWithholding || 0) + (inv.totalStopaj || 0)).toFixed(2),
+        (inv.grandTotal || 0).toFixed(2),
+        inv.currency || "TRY",
+        inv.status || "Kayıtlı",
+      ];
+    });
+
+    const csvContent =
+      "\uFEFF" +
+      [
+        headers.join(";"),
+        ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")),
+      ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Giderler_Listesi_VKN_${periodKey}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`✓ ${periodLabel} Giderler Listesi (VKN/TCKN) (.CSV) indirildi.`);
+  };
+
+  // 6. Giderler Listesi İndir (VKN / TCKN Gösterimli - PDF)
+  const handleDownloadExpenseListPdf = async () => {
+    try {
+      showToast("Giderler listesi PDF hazırlanıyor...");
+      const items: IncomeExpenseItemPDF[] = periodData.purchaseInvoices.map((inv) => {
+        const net =
+          inv.subtotal !== undefined
+            ? inv.subtotal
+            : Math.max(0, (inv.grandTotal || 0) - (inv.totalVat || 0));
+        const vatRate =
+          net > 0 && (inv.totalVat || 0) > 0
+            ? Math.round(((inv.totalVat || 0) / net) * 100)
+            : 20;
+        return {
+          date: inv.issueDate || "",
+          documentNo: inv.invoiceNumber || inv.id,
+          partyName: inv.contactName || "Tedarikçi",
+          vknTckn: getResolvedVknTckn(inv),
+          categoryOrType: inv.expenseCategory || "Alış / Gider Faturası",
+          netBase: net,
+          vatRate,
+          vatAmount: inv.totalVat || 0,
+          withholdingOrStopaj: (inv.totalWithholding || 0) + (inv.totalStopaj || 0),
+          grandTotal: inv.grandTotal || 0,
+          currency: inv.currency || "TRY",
+        };
+      });
+
+      const res = await generateIncomeExpenseListPDF({
+        companySettings,
+        periodLabel,
+        type: "expense",
+        items,
+        advisorName: persisted.profile.fullName,
+      });
+
+      const blobUrl = URL.createObjectURL(res.blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = blobUrl;
+      downloadLink.download = res.fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+      showToast(`✓ ${periodLabel} Giderler Listesi PDF olarak indirildi.`);
+    } catch (err) {
+      console.error("Giderler PDF hatası:", err);
+      showToast("Giderler listesi PDF oluşturulurken hata meydana geldi.");
+    }
+  };
+
+  // 7. GİB Defter Beyan Sistemi (DBS) Gelir Kayıtları İndir (.CSV)
+  const handleDownloadDefterBeyanGelirCsv = () => {
+    const headers = [
+      "Belge Turu",
+      "Belge Tarihi",
+      "Belge Seri Sira No",
+      "VKN / TCKN",
+      "Alici Unvani",
+      "Satis Turu",
+      "Gelir Kayit Alt Turu",
+      "KDV Orani",
+      "KDV Haric Tutar (Matrah)",
+      "Hesaplanan KDV",
+      "Tevkifat Tutari",
+      "Toplam Tutar",
+      "Para Birimi",
+      "Aciklama",
+    ];
+
+    const rows = periodData.salesInvoices.map((inv) => {
+      const vkn = getResolvedVknTckn(inv);
+      const net =
+        inv.subtotal !== undefined
+          ? inv.subtotal
+          : Math.max(0, (inv.grandTotal || 0) - (inv.totalVat || 0));
+      const vatRate =
+        net > 0 && (inv.totalVat || 0) > 0
+          ? Math.round(((inv.totalVat || 0) / net) * 100)
+          : 20;
+
+      const docType = inv.docKind === "receipt" ? "Perakende Satış Fişi" : "e-Arşiv / e-Fatura";
+      const salesType = (inv.totalWithholding || 0) > 0 ? "Tevkifatlı Satış" : "Normal Satış";
+
+      return [
+        docType,
+        formatDbsDate(inv.issueDate),
+        inv.invoiceNumber || inv.id,
+        vkn !== "—" ? vkn : "11111111111",
+        (inv.contactName || "Alıcı").replace(/;/g, ","),
+        salesType,
+        "Yurtiçi Mal ve Hizmet Satışı",
+        String(vatRate),
+        net.toFixed(2),
+        (inv.totalVat || 0).toFixed(2),
+        (inv.totalWithholding || 0).toFixed(2),
+        (inv.grandTotal || 0).toFixed(2),
+        inv.currency || "TRY",
+        `${periodLabel} DBS Satış Kaydı - ${inv.invoiceNumber || ""}`.replace(/;/g, ","),
+      ];
+    });
+
+    const csvContent =
+      "\uFEFF" +
+      [
+        headers.join(";"),
+        ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")),
+      ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Defter_Beyan_Gelir_${periodKey}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`✓ GİB Defter Beyan Sistemi Gelir Kayıtları (.CSV) indirildi.`);
+  };
+
+  // 8. GİB Defter Beyan Sistemi (DBS) Gider Kayıtları İndir (.CSV)
+  const handleDownloadDefterBeyanGiderCsv = () => {
+    const headers = [
+      "Belge Turu",
+      "Belge Tarihi",
+      "Belge Seri Sira No",
+      "VKN / TCKN",
+      "Satici Unvani",
+      "Alis Turu",
+      "Gider Kayit Alt Turu",
+      "KDV Orani",
+      "KDV Haric Tutar (Matrah)",
+      "Indirilecek KDV",
+      "Tevkifat KDV Tutari",
+      "Stopaj Kesintisi",
+      "Toplam Tutar",
+      "Para Birimi",
+      "Aciklama",
+    ];
+
+    const rows = periodData.purchaseInvoices.map((inv) => {
+      const vkn = getResolvedVknTckn(inv);
+      const net =
+        inv.subtotal !== undefined
+          ? inv.subtotal
+          : Math.max(0, (inv.grandTotal || 0) - (inv.totalVat || 0));
+      const vatRate =
+        net > 0 && (inv.totalVat || 0) > 0
+          ? Math.round(((inv.totalVat || 0) / net) * 100)
+          : 20;
+
+      const docType =
+        inv.docKind === "receipt"
+          ? "Fiş / Perakende"
+          : (inv.totalStopaj || 0) > 0
+          ? "Serbest Meslek Makbuzu / Gider Pusulası"
+          : "Alış Faturası";
+      const purchaseType =
+        inv.expenseCategory === "Mal Alımı" ? "Mal Alışı" : "Hizmet Alımı / İşletme Gideri";
+
+      return [
+        docType,
+        formatDbsDate(inv.issueDate),
+        inv.invoiceNumber || inv.id,
+        vkn !== "—" ? vkn : "22222222222",
+        (inv.contactName || "Satıcı").replace(/;/g, ","),
+        purchaseType,
+        inv.expenseCategory || "Genel Yönetim Giderleri",
+        String(vatRate),
+        net.toFixed(2),
+        (inv.totalVat || 0).toFixed(2),
+        (inv.totalWithholding || 0).toFixed(2),
+        (inv.totalStopaj || 0).toFixed(2),
+        (inv.grandTotal || 0).toFixed(2),
+        inv.currency || "TRY",
+        `${periodLabel} DBS Gider Kaydı - ${inv.invoiceNumber || ""}`.replace(/;/g, ","),
+      ];
+    });
+
+    const csvContent =
+      "\uFEFF" +
+      [
+        headers.join(";"),
+        ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")),
+      ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Defter_Beyan_Gider_${periodKey}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`✓ GİB Defter Beyan Sistemi Gider Kayıtları (.CSV) indirildi.`);
+  };
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     setPersisted((prev) => ({
@@ -1034,14 +1538,80 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
               <span>Resmi Mahsup Fişi (.CSV)</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleOpenAdvisorSummaryWhatsApp}
-              className="px-4 py-2 rounded-xl bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Müşavire Dönem İcmali Gönder</span>
-            </button>
+            {/* Bilanço İndir (Resmi PDF & Excel Seçenekli) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsBilancoMenuOpen((prev) => !prev)}
+                className="px-4 py-2 rounded-xl bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Bilanço İndir</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isBilancoMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isBilancoMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsBilancoMenuOpen(false)}
+                  />
+                  <div
+                    className="absolute right-0 mt-1.5 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl z-30 p-1.5 space-y-1 text-xs"
+                    style={{ borderColor: theme.cardBorder }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBilancoMenuOpen(false);
+                        handleDownloadBalanceSheetPdf();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors"
+                      style={{ color: theme.pageText }}
+                    >
+                      <FileText className="w-4 h-4 text-[#0f6bae] shrink-0" />
+                      <div>
+                        <div className="font-semibold">Bilanço İndir (Resmi PDF)</div>
+                        <div className="text-[10px] text-slate-500">Varlıklar, kaynaklar ve gelir tablosu</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBilancoMenuOpen(false);
+                        handleDownloadBalanceSheetCsv();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer transition-colors"
+                      style={{ color: theme.pageText }}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Bilanço İndir (Excel / CSV)</div>
+                        <div className="text-[10px] text-slate-500">Tablo formatında bilanço icmali</div>
+                      </div>
+                    </button>
+
+                    <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBilancoMenuOpen(false);
+                        handleOpenAdvisorSummaryWhatsApp();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <Send className="w-4 h-4 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Müşavire WhatsApp İcmali</div>
+                        <div className="text-[10px] text-emerald-600/80">Dönem özet metni mesajı gönder</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1243,23 +1813,142 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Resmi Dışa Aktarım & Defter Beyan Paketi
+              </div>
+
+              {/* Bilanço İndir Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadBalanceSheetPdf}
+                  className="py-2 px-2.5 rounded-xl bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                >
+                  <FileText className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Bilanço İndir (PDF)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadBalanceSheetCsv}
+                  className="py-2 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  style={{ color: theme.pageText }}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">Bilanço İndir (Excel)</span>
+                </button>
+              </div>
+
+              {/* Gelir ve Giderleri Ayrı Olarak İndir (VKN / TCKN Gösterimli) */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/40 p-2.5 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    Gelir & Gider Dökümleri (VKN/TCKN)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Resmi Döküm</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Gelirler */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <ArrowUpRight className="w-3 h-3" />
+                      <span>Gelirler ({periodData.salesInvoices.length})</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleDownloadIncomeListCsv}
+                        className="flex-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                        title="Gelirler listesini VKN/TCKN bilgileriyle CSV/Excel olarak indir"
+                      >
+                        <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+                        <span>Excel</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadIncomeListPdf}
+                        className="flex-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                        title="Gelirler listesini VKN/TCKN bilgileriyle PDF olarak indir"
+                      >
+                        <FileText className="w-3 h-3 text-emerald-600" />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Giderler */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                      <ArrowDownLeft className="w-3 h-3" />
+                      <span>Giderler ({periodData.purchaseInvoices.length})</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleDownloadExpenseListCsv}
+                        className="flex-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-rose-500 text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                        title="Giderler listesini VKN/TCKN bilgileriyle CSV/Excel olarak indir"
+                      >
+                        <FileSpreadsheet className="w-3 h-3 text-rose-600" />
+                        <span>Excel</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadExpenseListPdf}
+                        className="flex-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-rose-500 text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                        title="Giderler listesini VKN/TCKN bilgileriyle PDF olarak indir"
+                      >
+                        <FileText className="w-3 h-3 text-rose-600" />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Defter Beyan Sistemi (DBS) Formatında İndir */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/40 p-2.5 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-[#0f6bae]" />
+                    <span>Defter Beyan Sistemi (DBS)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">GİB Uyumlu</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadDefterBeyanGelirCsv}
+                    className="py-1.5 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-[#0f6bae] text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    title="GİB Defter Beyan Sistemi standart formatında Gelir kayıtlarını indir (.CSV)"
+                  >
+                    <Download className="w-3 h-3 text-[#0f6bae]" />
+                    <span className="truncate">DBS Gelir (.CSV)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadDefterBeyanGiderCsv}
+                    className="py-1.5 px-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-[#0f6bae] text-[11px] font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    title="GİB Defter Beyan Sistemi standart formatında Gider kayıtlarını indir (.CSV)"
+                  >
+                    <Download className="w-3 h-3 text-[#0f6bae]" />
+                    <span className="truncate">DBS Gider (.CSV)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tek Düzen Muhasebe Mahsup Fişi */}
               <button
                 type="button"
                 onClick={handleDownloadAccountingVoucherCsv}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                <span>Tek Düzen Hesap Planı Mahsup Fişi İndir (.CSV)</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleDownloadInvoiceSummaryCsv}
-                className="w-full py-2 px-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                className="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                 style={{ color: theme.pageText }}
               >
-                <FileText className="w-3.5 h-3.5 text-[#0f6bae]" />
-                <span>Dönem Fatura & KDV İcmal Listesi İndir (.CSV)</span>
+                <Download className="w-3.5 h-3.5 text-[#0f6bae]" />
+                <span>Tek Düzen Mahsup Fişi (120/320/600/770 .CSV)</span>
               </button>
             </div>
           </div>
