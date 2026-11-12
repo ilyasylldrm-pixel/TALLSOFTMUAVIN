@@ -264,8 +264,8 @@ export const Header: React.FC<HeaderProps> = ({
 
 
 
-        {/* Company Switcher Pill & Dropdown */}
-        {validCompanies.length > 0 && (
+        {/* Company Switcher Pill & Dropdown - Yalnızca Admin ve Sistem Yöneticileri görebilir */}
+        {isAdminOrSysAdmin(currentUser) && validCompanies.length > 0 && (
           <div className="relative" ref={companyDropdownRef}>
             <button
               type="button"
