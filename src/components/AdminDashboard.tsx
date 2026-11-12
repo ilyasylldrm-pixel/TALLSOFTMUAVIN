@@ -51,6 +51,7 @@ import {
   Edit2,
   Terminal,
   Store,
+  Zap,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { UserProfile, BRAND_LOGOS } from "./AuthModal";
@@ -80,6 +81,8 @@ import {
   saveUserProfile,
   deleteUserProfile,
   deleteUserProfileAndData,
+  getLocalUsersBackup,
+  saveLocalUsersBackup,
   UserProfileData,
   UserFileMetadata,
 } from "../lib/firebase";
@@ -499,6 +502,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Draft permissions state: changes staged before committing to Firebase
   const [draftPermissions, setDraftPermissions] = useState<Record<string, AppModuleKey[]>>({});
+  // Hızlı Anında Kayıt modu (Varsayılan Açık: 0ms beklemesiz yerel ve arka plan senkronizasyonu)
+  const [autoSaveMatrix, setAutoSaveMatrix] = useState<boolean>(true);
+  const [fastSaveNotification, setFastSaveNotification] = useState<string | null>(null);
 
   // Modals & Save states
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
@@ -702,6 +708,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const pendingUsersList = users.filter((u) => hasUserPendingChanges(u.userId));
   const pendingChangesCount = pendingUsersList.length;
 
+  // Hızlı & Beklemesiz modül yetki kaydı yardımcısı (0ms anında UI güncelleme, arka planda senkronizasyon)
+  const persistUserModulesInstantly = (user: UserProfileData, newModules: AppModuleKey[], actionSummary: string) => {
+    const updatedUser: UserProfileData = {
+      ...user,
+      allowedModules: newModules,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. React durumunu beklemesiz (0ms) güncelle
+    setUsers((prev) => prev.map((u) => (u.userId === user.userId ? updatedUser : u)));
+    handleCancelUserDraft(user.userId);
+
+    // 2. Yerel kalıcı depoyu hemen tazele
+    try {
+      const existing = getLocalUsersBackup();
+      const idx = existing.findIndex((u) => u.userId === user.userId);
+      if (idx >= 0) existing[idx] = updatedUser;
+      else existing.unshift(updatedUser);
+      saveLocalUsersBackup(existing);
+    } catch (e) {
+      console.warn("Local users update error:", e);
+    }
+
+    // 3. Hızlı bildirim
+    setFastSaveNotification(`⚡ ${actionSummary}`);
+    setTimeout(() => setFastSaveNotification(null), 2500);
+
+    // 4. Arka planda beklemesiz cloud & Firestore kaydı
+    void saveUserProfile(updatedUser);
+    void logSystemAction({
+      action: `Yetki Değişikliği: ${user.name}`,
+      category: "Kullanıcı & Yetki",
+      details: `${actionSummary}. Toplam ${newModules.length} modül tanımlandı.`,
+      performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      userRole: currentUser?.role || "Admin",
+      targetUser: user.name,
+      timestamp: new Date().toISOString(),
+    });
+
+    saveLocalDbSyncReport({
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      lastActionSummary: `${user.name} Yetkileri Güncellendi`,
+      totalUsersCount: users.length,
+      syncedUsersCount: users.length,
+    });
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
+    }
+  };
+
   // Toggle module or sub-module in draft (Admin & System Administrator only)
   const handleToggleModuleInDraft = (userId: string, moduleKey: AppModuleKey) => {
     if (!isAdminOrSysAdmin(currentUser)) return;
@@ -710,40 +768,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const currentList = getUserEffectiveModules(user);
     const updated = toggleModuleSelectionWithSubModules(moduleKey, currentList) as AppModuleKey[];
 
-    setDraftPermissions((prev) => ({
-      ...prev,
-      [userId]: updated,
-    }));
+    if (autoSaveMatrix) {
+      const modDef = allAppModules.find((m) => m.key === moduleKey);
+      const isNowEnabled = isKeyAllowedInList(moduleKey, modDef?.parentKey, updated);
+      const statusText = isNowEnabled ? "erişime açıldı" : "kapatıldı";
+      persistUserModulesInstantly(
+        user,
+        updated,
+        `"${user.name}" için "${modDef?.label || moduleKey}" modülü ${statusText}`
+      );
+    } else {
+      setDraftPermissions((prev) => ({
+        ...prev,
+        [userId]: updated,
+      }));
+    }
   };
 
   // Apply Role Preset to User Draft
   const handleApplyPresetToUser = (userId: string, preset: RolePreset) => {
     if (!isAdminOrSysAdmin(currentUser)) return;
+    const user = users.find((u) => u.userId === userId);
+    if (!user) return;
     // Include all sub-modules of preset's main modules automatically
     const subKeys = allAppModules
       .filter((m) => m.isSubModule && m.parentKey && preset.modules.includes(m.parentKey))
       .map((m) => m.key);
-    setDraftPermissions((prev) => ({
-      ...prev,
-      [userId]: Array.from(new Set([...preset.modules, ...subKeys])),
-    }));
+    const newModules = Array.from(new Set([...preset.modules, ...subKeys]));
+
+    if (autoSaveMatrix) {
+      persistUserModulesInstantly(user, newModules, `"${user.name}" için "${preset.name || preset.badge}" şablonu uygulandı`);
+    } else {
+      setDraftPermissions((prev) => ({
+        ...prev,
+        [userId]: newModules,
+      }));
+    }
   };
 
   // Grant / Revoke all for a user
   const handleGrantAllToUser = (userId: string) => {
     if (!isAdminOrSysAdmin(currentUser)) return;
-    setDraftPermissions((prev) => ({
-      ...prev,
-      [userId]: allAppModules.map((m) => m.key),
-    }));
+    const user = users.find((u) => u.userId === userId);
+    if (!user) return;
+    const allKeys = allAppModules.map((m) => m.key);
+    if (autoSaveMatrix) {
+      persistUserModulesInstantly(user, allKeys, `"${user.name}" için tüm modül yetkileri açıldı`);
+    } else {
+      setDraftPermissions((prev) => ({
+        ...prev,
+        [userId]: allKeys,
+      }));
+    }
   };
 
   const handleRevokeAllFromUser = (userId: string) => {
     if (!isAdminOrSysAdmin(currentUser)) return;
-    setDraftPermissions((prev) => ({
-      ...prev,
-      [userId]: ["dashboard"],
-    }));
+    const user = users.find((u) => u.userId === userId);
+    if (!user) return;
+    const basicOnly: AppModuleKey[] = ["dashboard"];
+    if (autoSaveMatrix) {
+      persistUserModulesInstantly(user, basicOnly, `"${user.name}" için tüm modül yetkileri kapatıldı`);
+    } else {
+      setDraftPermissions((prev) => ({
+        ...prev,
+        [userId]: basicOnly,
+      }));
+    }
   };
 
   // Cancel draft for single user
@@ -755,95 +846,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  // Save single user
+  // Save single user (Hızlı, anında UI güncellemesiyle)
   const handleExecuteSaveUser = async () => {
     if (!confirmSaveUser) return;
     const userId = confirmSaveUser.userId;
     const effectiveModules = getUserEffectiveModules(confirmSaveUser);
 
-    setSavingUserId(userId);
-    try {
-      const updatedUser: UserProfileData = {
-        ...confirmSaveUser,
-        allowedModules: effectiveModules,
-        updatedAt: new Date().toISOString(),
-      };
-      await saveUserProfile(updatedUser);
+    const updatedUser: UserProfileData = {
+      ...confirmSaveUser,
+      allowedModules: effectiveModules,
+      updatedAt: new Date().toISOString(),
+    };
 
-      // Merkezi denetim ve aktivite günlüğüne kaydet
-      await logSystemAction({
-        action: `Kullanıcı Yetkileri Güncellendi: ${confirmSaveUser.name}`,
-        category: "Kullanıcı & Yetki",
-        details: `${effectiveModules.length} adet modüle erişim yetkisi tanımlandı (${effectiveModules.join(", ")}).`,
-        performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        timestamp: new Date().toISOString(),
-      });
+    // Anında UI güncelle ve modalı kapat
+    setUsers((prev) => prev.map((u) => (u.userId === userId ? updatedUser : u)));
+    handleCancelUserDraft(userId);
+    setConfirmSaveUser(null);
+    setFastSaveNotification(`⚡ "${confirmSaveUser.name}" yetkileri kaydedildi.`);
+    setTimeout(() => setFastSaveNotification(null), 2500);
 
-      // Kullanıcı yerel veritabanı senkronizasyon raporunu tazele
-      saveLocalDbSyncReport({
-        lastUpdatedAt: new Date().toISOString(),
-        lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        lastActionSummary: `Kullanıcı Yetkileri Güncellendi: ${confirmSaveUser.name}`,
-        totalUsersCount: users.length,
-        syncedUsersCount: users.length,
-      });
+    // Arka planda senkronizasyon
+    void saveUserProfile(updatedUser);
+    void logSystemAction({
+      action: `Kullanıcı Yetkileri Güncellendi: ${confirmSaveUser.name}`,
+      category: "Kullanıcı & Yetki",
+      details: `${effectiveModules.length} adet modüle erişim yetkisi tanımlandı (${effectiveModules.join(", ")}).`,
+      performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      userRole: currentUser?.role || "Admin",
+      targetUser: confirmSaveUser.name,
+      timestamp: new Date().toISOString(),
+    });
 
-      setUsers((prev) =>
-        prev.map((u) => (u.userId === userId ? updatedUser : u))
-      );
-      handleCancelUserDraft(userId);
-      setConfirmSaveUser(null);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
-      }
-    } catch (err) {
-      console.error("Save error:", err);
-      triggerFormErrorNotification("Yetkiler kaydedilirken bir hata oluştu.", "Yetki Kayıt Hatası");
-    } finally {
-      setSavingUserId(null);
+    saveLocalDbSyncReport({
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      lastActionSummary: `Kullanıcı Yetkileri Güncellendi: ${confirmSaveUser.name}`,
+      totalUsersCount: users.length,
+      syncedUsersCount: users.length,
+    });
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
     }
   };
 
-  // Batch save all pending changes
+  // Batch save all pending changes (Paralel ve beklemesiz)
   const handleExecuteBatchSave = async () => {
+    if (pendingUsersList.length === 0) return;
     setIsBatchSaving(true);
+    const targetCount = pendingUsersList.length;
+
+    // 1. Yeni durum haritasını oluştur ve React state'i 0ms'de güncelle
+    const updatedUsersMap = new Map<string, UserProfileData>();
+    const usersToPersist: UserProfileData[] = [];
+
+    pendingUsersList.forEach((user) => {
+      const effectiveModules = getUserEffectiveModules(user);
+      const updatedUser: UserProfileData = {
+        ...user,
+        allowedModules: effectiveModules,
+        updatedAt: new Date().toISOString(),
+      };
+      updatedUsersMap.set(user.userId, updatedUser);
+      usersToPersist.push(updatedUser);
+    });
+
+    setUsers((prev) => prev.map((u) => updatedUsersMap.get(u.userId) || u));
+    setDraftPermissions({});
+    setConfirmBatchSaveModalOpen(false);
+    setIsBatchSaving(false);
+
+    setFastSaveNotification(`⚡ ${targetCount} personelin yetkisi başarıyla kaydedildi.`);
+    setTimeout(() => setFastSaveNotification(null), 3000);
+
+    // 2. Yerel yedek depoyu hemen güncelle
     try {
-      for (const user of pendingUsersList) {
-        const effectiveModules = getUserEffectiveModules(user);
-        const updatedUser: UserProfileData = {
-          ...user,
-          allowedModules: effectiveModules,
-          updatedAt: new Date().toISOString(),
-        };
-        await saveUserProfile(updatedUser);
-      }
+      const existing = getLocalUsersBackup();
+      const updatedList = existing.map((u) => updatedUsersMap.get(u.userId) || u);
+      saveLocalUsersBackup(updatedList);
+    } catch {}
 
-      await logSystemAction({
-        action: `Toplu Yetki Güncellemesi Uygulandı`,
-        category: "Kullanıcı & Yetki",
-        details: `${pendingUsersList.length} adet personelin modül yetkileri merkezi veritabanına işlendi.`,
-        performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        timestamp: new Date().toISOString(),
-      });
+    // 3. Arka planda paralel olarak sunucu ve Firestore'a yaz (UI'yi dondurmadan)
+    Promise.all(usersToPersist.map((u) => saveUserProfile(u))).catch((err) => {
+      console.warn("Toplu kayıt arka plan uyarısı:", err);
+    });
 
-      saveLocalDbSyncReport({
-        lastUpdatedAt: new Date().toISOString(),
-        lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-        lastActionSummary: `${pendingUsersList.length} Personelin Yetkisi Toplu Güncellendi`,
-        totalUsersCount: users.length,
-        syncedUsersCount: users.length,
-      });
+    void logSystemAction({
+      action: "Toplu Yetki Güncellemesi Uygulandı",
+      category: "Kullanıcı & Yetki",
+      details: `${targetCount} personelin modül erişim yetkileri merkezi sisteme kaydedildi.`,
+      performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      userRole: currentUser?.role || "Admin",
+      timestamp: new Date().toISOString(),
+    });
 
-      await fetchData();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
-      }
-      setConfirmBatchSaveModalOpen(false);
-    } catch (err) {
-      console.error("Batch save error:", err);
-      triggerFormErrorNotification("Toplu kayıt sırasında bir hata oluştu.", "Toplu Kayıt Hatası");
-    } finally {
-      setIsBatchSaving(false);
+    saveLocalDbSyncReport({
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      lastActionSummary: `${targetCount} Personelin Yetkisi Toplu Güncellendi`,
+      totalUsersCount: users.length,
+      syncedUsersCount: users.length,
+    });
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
     }
   };
 
@@ -1386,7 +1492,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>Canlı Güncelleme Dağıtımı</span>
           </button>
 
-          {/* 12. Log İzleme Ekranı (Mysoft API) */}
+          {/* 12. Log İzleme Ekranı */}
           <button
             onClick={() => setActiveTab("mysoft_logs")}
             className={`h-9 px-3.5 rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
@@ -1396,7 +1502,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <Terminal className={`w-4 h-4 ${activeTab === "mysoft_logs" ? "text-white" : "text-indigo-300"}`} />
-            <span>Log İzleme Ekranı (Mysoft API)</span>
+            <span>Log İzleme Ekranı</span>
           </button>
 
           {/* 13. Hızlı Şifre Kasası */}
@@ -1969,11 +2075,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
+                {/* Hızlı Otomatik Kayıt / Manuel Taslak Geçişi */}
+                <button
+                  type="button"
+                  onClick={() => setAutoSaveMatrix((prev) => !prev)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                    autoSaveMatrix
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                  }`}
+                  title={
+                    autoSaveMatrix
+                      ? "Anında Otomatik Kayıt Açık: Tıkladığınız anda izinler 0 ms'de sisteme işlenir."
+                      : "Manuel Taslak Modu: Değişiklikler taslak olarak toplanır, toplu kaydedilir."
+                  }
+                >
+                  <Zap className={`w-3.5 h-3.5 ${autoSaveMatrix ? "fill-amber-300 text-amber-300" : "text-slate-400"}`} />
+                  <span>{autoSaveMatrix ? "⚡ Hızlı Kayıt (0ms Aktif)" : "💾 Manuel Taslak Modu"}</span>
+                </button>
+
                 {isAdminOrSysAdmin(currentUser) && (
                   <button
                     type="button"
                     onClick={() => setShowDefineModuleModal(true)}
-                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                    className="px-3.5 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>+ Yeni Modül / Alt Modül Tanımla</span>
@@ -2043,6 +2168,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
           </div>
+
+          {/* ⚡ Hızlı Kayıt Başarı Rozeti */}
+          {fastSaveNotification && (
+            <div className="bg-emerald-600 text-white px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-1">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
+                <span>{fastSaveNotification}</span>
+              </div>
+              <span className="text-[10px] bg-emerald-700/80 px-2 py-0.5 rounded-full font-mono">0 ms Gecikme</span>
+            </div>
+          )}
 
           {/* 📊 The Matrix Table */}
           <div className="card-elevation-2 bg-white rounded-2xl border border-slate-200 overflow-hidden">
@@ -2269,10 +2405,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setConfirmSaveUser(user)}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
+                                onClick={() =>
+                                  persistUserModulesInstantly(
+                                    user,
+                                    effectiveModules,
+                                    `"${user.name}" yetkileri kaydedildi`
+                                  )
+                                }
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95"
+                                title="Anında Kaydet (0 ms)"
                               >
-                                <Save className="w-3 h-3" />
+                                <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
                                 <span>Kaydet</span>
                               </button>
                             </div>

@@ -510,16 +510,14 @@ export const Settings: React.FC<SettingsProps> = ({
               </button>
             )}
 
-            {isMysoftMatched && (
               <button
                 type="button"
                 onClick={() => onOpenSubModule("logs")}
                 className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200"
               >
                 <Terminal className="w-4 h-4 text-amber-600" />
-                <span>Log İzleme Ekranı (Mysoft API)</span>
+                <span>Log İzleme Ekranı</span>
               </button>
-            )}
           </>
         )}
 

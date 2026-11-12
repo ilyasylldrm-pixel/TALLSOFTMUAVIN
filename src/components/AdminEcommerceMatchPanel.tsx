@@ -3,6 +3,7 @@ import { CompanyItem } from "../types";
 import {
   MarketplaceId,
   MarketplaceStoreConfig,
+  getStoreMarketplaceId,
 } from "./ECommerceModule";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -72,16 +73,6 @@ const MARKETPLACE_TEMPLATES: Record<
     defaultCargo: 29.9,
     defaultWithholding: 1,
     storeUrl: "https://partner.tgoyemek.com",
-  },
-  yemeksepeti: {
-    name: "Yemeksepeti Yemek",
-    shortCode: "YS",
-    badgeColor: "bg-rose-100 text-rose-900 border-rose-300",
-    accentBg: "#e21b70",
-    defaultCommission: 0,
-    defaultCargo: 0,
-    defaultWithholding: 0,
-    storeUrl: "https://integration.yemeksepeti.com",
   },
   ubereats: {
     name: "Uber Eats",
@@ -320,15 +311,17 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
 
   // Add / Edit Store Match Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
   const [formState, setFormState] = useState<{
     id: MarketplaceId;
+    storeId?: string;
+    storeName: string;
     supplierId: string;
     integrationRefCode: string;
     apiKey: string;
     apiSecret: string;
     trendyolSecretKey: string;
     apiToken: string;
-    executorEmail: string;
     commissionRate: number;
     shippingDeductionAvg: number;
     withholdingRate: number;
@@ -337,13 +330,13 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     storeUrl: string;
   }>({
     id: "trendyol",
+    storeName: "Trendyol Pazaryeri",
     supplierId: "",
     integrationRefCode: "",
     apiKey: "",
     apiSecret: "",
     trendyolSecretKey: "",
     apiToken: "",
-    executorEmail: "",
     commissionRate: 18.5,
     shippingDeductionAvg: 64.9,
     withholdingRate: 1,
@@ -359,39 +352,53 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleOpenAddStoreModal = (companyId: string, presetMp?: MarketplaceId) => {
+  const handleOpenAddStoreModal = (
+    companyId: string,
+    presetMp?: MarketplaceId,
+    storeToEdit?: MarketplaceStoreConfig
+  ) => {
     setSelectedCompanyId(companyId);
-    const mpId = presetMp || "trendyol";
-    const existing = (companyStoresMap[companyId] || []).find((s) => s.id === mpId);
+    const mpId = presetMp || (storeToEdit ? getStoreMarketplaceId(storeToEdit) : "trendyol");
     const tpl = MARKETPLACE_TEMPLATES[mpId];
 
-    if (existing) {
-      setFormState({
-        id: existing.id,
-        supplierId: existing.supplierId,
-        integrationRefCode: existing.integrationRefCode || "",
-        apiKey: existing.apiKey,
-        apiSecret: existing.apiSecret,
-        trendyolSecretKey: existing.trendyolSecretKey || "",
-        apiToken: existing.apiToken || "",
-        executorEmail: existing.executorEmail || "",
-        commissionRate: existing.commissionRate,
-        shippingDeductionAvg: existing.shippingDeductionAvg,
-        withholdingRate: existing.withholdingRate,
-        autoInvoice: existing.autoInvoice,
-        autoStockSync: existing.autoStockSync,
-        storeUrl: existing.storeUrl || tpl.storeUrl,
-      });
-    } else {
+    if (storeToEdit) {
+      setEditingStoreId(storeToEdit.id);
       setFormState({
         id: mpId,
+        storeId: storeToEdit.id,
+        storeName: storeToEdit.name || tpl.name,
+        supplierId: storeToEdit.supplierId || "",
+        integrationRefCode: storeToEdit.integrationRefCode || "",
+        apiKey: storeToEdit.apiKey || "",
+        apiSecret: storeToEdit.apiSecret || "",
+        trendyolSecretKey: storeToEdit.trendyolSecretKey || "",
+        apiToken: storeToEdit.apiToken || "",
+        commissionRate: storeToEdit.commissionRate ?? tpl.defaultCommission,
+        shippingDeductionAvg: storeToEdit.shippingDeductionAvg ?? tpl.defaultCargo,
+        withholdingRate: storeToEdit.withholdingRate ?? tpl.defaultWithholding,
+        autoInvoice: storeToEdit.autoInvoice ?? true,
+        autoStockSync: storeToEdit.autoStockSync ?? true,
+        storeUrl: storeToEdit.storeUrl || tpl.storeUrl,
+      });
+    } else {
+      const currentList = companyStoresMap[companyId] || [];
+      const sameMpCount = currentList.filter(
+        (s) => getStoreMarketplaceId(s) === mpId
+      ).length;
+      setEditingStoreId(null);
+      setFormState({
+        id: mpId,
+        storeId: undefined,
+        storeName:
+          sameMpCount > 0
+            ? `${tpl.name} - Entegrasyon #${sameMpCount + 1}`
+            : tpl.name,
         supplierId: "",
         integrationRefCode: "",
         apiKey: "",
         apiSecret: "",
         trendyolSecretKey: "",
         apiToken: "",
-        executorEmail: "",
         commissionRate: tpl.defaultCommission,
         shippingDeductionAvg: tpl.defaultCargo,
         withholdingRate: tpl.defaultWithholding,
@@ -404,7 +411,8 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   };
 
   const syncTrendyolBackend = async (company: CompanyItem, config: MarketplaceStoreConfig) => {
-    if (config.id !== "trendyol") return;
+    const mp = getStoreMarketplaceId(config);
+    if (mp !== "trendyol" && mp !== "trendyol_go") return;
     if (!config.supplierId || !config.apiKey || !config.apiSecret) return;
     try {
       const headers: Record<string, string> = {
@@ -451,9 +459,18 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     const tpl = MARKETPLACE_TEMPLATES[formState.id];
     const nowStr = new Date().toISOString().slice(0, 16).replace("T", " ");
 
+    const currentList = companyStoresMap[selectedCompany.id] || [];
+    const isEditing = Boolean(editingStoreId);
+    const storeId = isEditing
+      ? editingStoreId!
+      : currentList.some((s) => s.id === formState.id)
+      ? `${formState.id}_${Date.now()}`
+      : formState.id;
+
     const newConfig: MarketplaceStoreConfig = {
-      id: formState.id,
-      name: tpl.name,
+      id: storeId,
+      marketplace: formState.id,
+      name: formState.storeName.trim() || tpl.name,
       shortCode: tpl.shortCode,
       badgeColor: tpl.badgeColor,
       accentBg: tpl.accentBg,
@@ -462,23 +479,21 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       apiKey: formState.apiKey.trim(),
       apiSecret: formState.apiSecret.trim(),
       trendyolSecretKey:
-        formState.id === "trendyol"
+        formState.id === "trendyol" || formState.id === "trendyol_go"
           ? formState.trendyolSecretKey.trim() || undefined
           : undefined,
       apiToken: formState.apiToken.trim() || undefined,
-      executorEmail: formState.executorEmail.trim() || undefined,
       commissionRate: Number(formState.commissionRate),
       shippingDeductionAvg: Number(formState.shippingDeductionAvg),
       withholdingRate: Number(formState.withholdingRate),
-      autoInvoice: ["trendyol_go", "yemeksepeti"].includes(formState.id) ? false : formState.autoInvoice,
-      autoStockSync: ["trendyol_go", "yemeksepeti"].includes(formState.id) ? false : formState.autoStockSync,
-      isConnected: ["trendyol_go", "yemeksepeti"].includes(formState.id) ? false : Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
-      lastSyncAt: selectedCompanyStores.find((s) => s.id === formState.id)?.lastSyncAt || "",
+      autoInvoice: formState.autoInvoice,
+      autoStockSync: formState.autoStockSync,
+      isConnected: Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
+      lastSyncAt: nowStr,
       storeUrl: formState.storeUrl.trim() || tpl.storeUrl,
     };
 
-    const currentList = companyStoresMap[selectedCompany.id] || [];
-    const existsIdx = currentList.findIndex((s) => s.id === newConfig.id);
+    const existsIdx = currentList.findIndex((s) => s.id === storeId);
     const updatedList =
       existsIdx >= 0
         ? currentList.map((s, idx) => (idx === existsIdx ? newConfig : s))
@@ -491,26 +506,27 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       [selectedCompany.id]: updatedList,
     }));
     setIsModalOpen(false);
+    setEditingStoreId(null);
     if (onNotifySuccess) {
       onNotifySuccess(
-        `"${selectedCompany.companyName}" şirketi için ${tpl.name} E-Ticaret eşleştirmesi kaydedildi.`
+        `"${selectedCompany.companyName}" şirketi için ${newConfig.name} E-Ticaret eşleştirmesi kaydedildi.`
       );
     }
   };
 
-  const handleRemoveMatch = (companyId: string, mpId: MarketplaceId) => {
+  const handleRemoveMatch = (companyId: string, storeId: string) => {
     const currentList = companyStoresMap[companyId] || [];
-    const updatedList = currentList.filter((s) => s.id !== mpId);
+    const removedStore = currentList.find((s) => s.id === storeId);
+    const updatedList = currentList.filter((s) => s.id !== storeId);
     saveCompanyMatchedEcommerceStores(companyId, updatedList);
     setCompanyStoresMap((prev) => ({
       ...prev,
       [companyId]: updatedList,
     }));
     const comp = companies.find((c) => c.id === companyId);
-    const tpl = MARKETPLACE_TEMPLATES[mpId];
     if (onNotifySuccess) {
       onNotifySuccess(
-        `"${comp?.companyName || "Şirket"}" bünyesindeki ${tpl.name} eşleştirmesi kaldırıldı.`
+        `"${comp?.companyName || "Şirket"}" bünyesindeki ${removedStore?.name || "mağaza"} eşleştirmesi kaldırıldı.`
       );
     }
   };
@@ -765,20 +781,28 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
             <div className="flex flex-wrap items-center gap-1.5">
               {(Object.keys(MARKETPLACE_TEMPLATES) as MarketplaceId[]).map((mpId) => {
                 const tpl = MARKETPLACE_TEMPLATES[mpId];
-                const isAlreadyMatched = selectedCompanyStores.some((s) => s.id === mpId);
+                const matchedCount = selectedCompanyStores.filter(
+                  (s) => getStoreMarketplaceId(s) === mpId
+                ).length;
                 return (
                   <button
                     key={mpId}
                     type="button"
                     onClick={() => handleOpenAddStoreModal(selectedCompany.id, mpId)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer transition-all flex items-center gap-1 ${
-                      isAlreadyMatched
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border cursor-pointer transition-all flex items-center gap-1.5 ${
+                      matchedCount > 0
                         ? tpl.badgeColor
                         : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                     }`}
+                    title={`${tpl.name} için yeni mağaza / entegrasyon ekle (Şu an ${matchedCount} adet bağlı)`}
                   >
-                    <span>{isAlreadyMatched ? "✓" : "+"}</span>
+                    <span>+</span>
                     <span>{tpl.shortCode}</span>
+                    {matchedCount > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/80 dark:bg-slate-900/40 font-mono font-bold">
+                        {matchedCount}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -932,10 +956,19 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-200/70 flex items-center justify-end gap-2">
+                  <div className="mt-4 pt-3 border-t border-slate-200/70 flex items-center justify-end gap-2 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => handleOpenAddStoreModal(selectedCompany.id, st.id)}
+                      onClick={() => handleOpenAddStoreModal(selectedCompany.id, getStoreMarketplaceId(st))}
+                      className="px-2.5 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                      title={`${st.name} platformunda ek bir mağaza / şube / hesap eşleştir`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>+ Ek Entegrasyon</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddStoreModal(selectedCompany.id, getStoreMarketplaceId(st), st)}
                       className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
                     >
                       <Edit2 className="w-3 h-3" />
@@ -964,7 +997,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  E-Ticaret Pazaryeri Eşleştirmesi ({selectedCompany.companyName})
+                  {editingStoreId ? "E-Ticaret Entegrasyonunu Düzenle" : "Yeni E-Ticaret Entegrasyonu Ekle"} ({selectedCompany.companyName})
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   VKN / TCKN:{" "}
@@ -989,28 +1022,24 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </label>
                 <select
                   value={formState.id}
+                  disabled={Boolean(editingStoreId)}
                   onChange={(e) => {
                     const mpId = e.target.value as MarketplaceId;
                     const tpl = MARKETPLACE_TEMPLATES[mpId];
-                    const existing = selectedCompanyStores.find((s) => s.id === mpId);
-                    setFormState({
+                    setFormState((prev) => ({
+                      ...prev,
                       id: mpId,
-                      supplierId: existing?.supplierId || "",
-                      integrationRefCode: existing?.integrationRefCode || "",
-                      apiKey: existing?.apiKey || "",
-                      apiSecret: existing?.apiSecret || "",
-                      trendyolSecretKey: existing?.trendyolSecretKey || "",
-                      apiToken: existing?.apiToken || "",
-                      executorEmail: existing?.executorEmail || "",
-                      commissionRate: existing?.commissionRate ?? tpl.defaultCommission,
-                      shippingDeductionAvg: existing?.shippingDeductionAvg ?? tpl.defaultCargo,
-                      withholdingRate: existing?.withholdingRate ?? tpl.defaultWithholding,
-                      autoInvoice: existing?.autoInvoice ?? true,
-                      autoStockSync: existing?.autoStockSync ?? true,
-                      storeUrl: existing?.storeUrl || tpl.storeUrl,
-                    });
+                      storeName:
+                        prev.storeName.includes("Entegrasyon") || prev.storeName === MARKETPLACE_TEMPLATES[prev.id].name
+                          ? tpl.name
+                          : prev.storeName,
+                      commissionRate: tpl.defaultCommission,
+                      shippingDeductionAvg: tpl.defaultCargo,
+                      withholdingRate: tpl.defaultWithholding,
+                      storeUrl: tpl.storeUrl,
+                    }));
                   }}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-semibold text-slate-800"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-semibold text-slate-800 disabled:opacity-60"
                 >
                   {(Object.keys(MARKETPLACE_TEMPLATES) as MarketplaceId[]).map((mpId) => (
                     <option key={mpId} value={mpId}>
@@ -1020,10 +1049,29 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </select>
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Mağaza / Entegrasyon Adı *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Örn: Trendyol - Kadıköy Şube veya Butik Mağaza"
+                  value={formState.storeName}
+                  onChange={(e) =>
+                    setFormState((prev) => ({ ...prev, storeName: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Aynı platformda birden fazla mağaza / şube eklerken ayırt edici bir isim belirleyebilirsiniz.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    {formState.id === "yemeksepeti" ? "Zincir kodu (Chain Code) *" : formState.id === "trendyol_go"
+                    {formState.id === "trendyol_go"
                       ? "Satıcı ID (Cari ID) *"
                       : "Satıcı ID (Supplier / Merchant ID) *"}
                   </label>
@@ -1053,14 +1101,14 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              {(formState.id === "ubereats" || formState.id === "yemeksepeti") && (
+              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    {formState.id === "yemeksepeti" ? "Restoran kodu (Vendor ID) *" : "Entegrasyon Referans Kodu"}
+                    Entegrasyon Referans Kodu {formState.id === "trendyol_go" ? "*" : ""}
                   </label>
                   <input
                     type="text"
-                    required={formState.id === "yemeksepeti"}
+                    required={formState.id === "trendyol_go"}
                     placeholder="Örn: TGO-REF-948201"
                     value={formState.integrationRefCode}
                     onChange={(e) =>
@@ -1074,7 +1122,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    {formState.id === "yemeksepeti" ? "POS kullanıcı adı *" : "API Key *"}
+                    API Key *
                   </label>
                   <input
                     type="text"
@@ -1089,11 +1137,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    {formState.id === "yemeksepeti" ? "POS şifresi *" : "API Secret"} {formState.id === "trendyol_go" ? "*" : ""}
+                    API Secret {formState.id === "trendyol_go" ? "*" : ""}
                   </label>
                   <input
                     type="text"
-                    required={formState.id === "trendyol_go" || formState.id === "yemeksepeti"}
+                    required={formState.id === "trendyol_go"}
                     placeholder="API Secret girin..."
                     value={formState.apiSecret}
                     onChange={(e) =>
@@ -1104,16 +1152,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              {formState.id === "trendyol_go" && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">İşlemi yapan kişinin e-postası *</label>
-                  <input type="email" required value={formState.executorEmail}
-                    onChange={(e) => setFormState((prev) => ({ ...prev, executorEmail: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50" />
-                </div>
-              )}
-
-              {formState.id === "trendyol" && (
+              {(formState.id === "trendyol" || formState.id === "trendyol_go") && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="font-bold text-slate-700 flex items-center gap-1">
@@ -1145,7 +1184,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               )}
 
-              {formState.id === "ubereats" && (
+              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
                     Token {formState.id === "trendyol_go" ? "(TGO Yemek Eşleştirme Token) *" : "(OAuth / Access Token)"}

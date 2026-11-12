@@ -60,6 +60,7 @@ import {
   DEFAULT_CLOUD_BRANDING,
 } from "../services/cloudBrandingService";
 import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
+import { logSystemAction } from "../services/systemSyncService";
 import {
   Building2,
   Building,
@@ -319,6 +320,16 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       } catch {
         // Ignore storage write errors
       }
+
+      void logSystemAction({
+        action: `Şirket Bilgileri Güncellendi: ${savedComp.companyName}`,
+        category: "Şirket & Yapılandırma",
+        details: `${savedComp.companyName} (${savedComp.taxNumber || savedComp.vkn || "VKN Yok"}) ticari firma bilgileri güncellendi.`,
+        performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        userRole: currentUser?.role || "Admin",
+        targetCompany: savedComp.companyName,
+        timestamp: new Date().toISOString(),
+      });
     } else {
       if (onAddCompany) {
         onAddCompany(savedComp, makeActiveImmediately);
@@ -336,6 +347,16 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       if (makeActiveImmediately && onSelectCompany) {
         onSelectCompany(savedComp.id);
       }
+
+      void logSystemAction({
+        action: `Yeni Şirket Oluşturuldu: ${savedComp.companyName}`,
+        category: "Şirket & Yapılandırma",
+        details: `${savedComp.companyName} (${savedComp.taxNumber || savedComp.vkn || "VKN Yok"}) sisteme yeni firma olarak eklendi.`,
+        performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        userRole: currentUser?.role || "Admin",
+        targetCompany: savedComp.companyName,
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
@@ -366,12 +387,25 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       setCompanyToDelete(null);
       return;
     }
+    const deletedName = companyToDelete.companyName;
     if (onDeleteCompany) {
       onDeleteCompany(companyToDelete.id);
     } else {
       const updated = deleteCompanyItem(companyToDelete.id);
       setLocalCompanies(updated);
     }
+
+    void logSystemAction({
+      action: `Şirket Silindi: ${deletedName}`,
+      category: "Şirket & Yapılandırma",
+      details: `${deletedName} firma kaydı ve ilişkili yerel veriler sistemden silindi.`,
+      performedBy: currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+      userRole: currentUser?.role || "Admin",
+      targetCompany: deletedName,
+      status: "warning",
+      timestamp: new Date().toISOString(),
+    });
+
     setCompanyToDelete(null);
   };
 
@@ -1712,7 +1746,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                   }`}
                 >
                   <Terminal className="w-4 h-4" />
-                  <span>Log İzleme Ekranı (Mysoft API)</span>
+                  <span>Log İzleme Ekranı</span>
                 </button>
               )}
             </div>
@@ -5237,38 +5271,15 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         const activeCompObj = effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
         const isMysoftMatched = isCompanyMysoftMatched(activeCompObj, profileForm || settings);
 
-        if (!isMysoftMatched) {
-          return (
-            <div className="p-8 max-w-xl mx-auto bg-white rounded-2xl border border-amber-200 shadow-xs text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-                <Terminal className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                Mysoft Eşleştirmesi Bulunamadı
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Log İzleme Ekranı (Mysoft API) bölümü yalnızca <strong>Mysoft VKN/TCKN eşleştirmesi yapılan firma</strong> için görüntülenmektedir. Lütfen önce Sistem Ayarları altından Mysoft VKN/TCKN eşleştirmesini tamamlayın.
-              </p>
-              <button
-                type="button"
-                onClick={() => handleTabChange("mysoft")}
-                className="px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <Globe className="w-4 h-4" />
-                <span>Mysoft VKN/TCKN Eşleştirme Ekranına Git</span>
-              </button>
-            </div>
-          );
-        }
-
         return (
           <AdminMysoftLogMonitorPanel
-            companyName={profileForm.companyName || settings.companyName}
+            companyName={activeCompObj?.companyName || activeCompObj?.name || profileForm?.companyName || settings?.companyName}
             companyTaxNumber={
-              profileForm.tenantIdentifierNumber ||
-              profileForm.taxNumber ||
-              settings.tenantIdentifierNumber ||
-              settings.taxNumber
+              activeCompObj?.taxNumber ||
+              profileForm?.tenantIdentifierNumber ||
+              profileForm?.taxNumber ||
+              settings?.tenantIdentifierNumber ||
+              settings?.taxNumber
             }
           />
         );

@@ -4052,7 +4052,7 @@ export default function App() {
         return "Firma Bilgileri - Sistem Ayarları (Mysoft Eşleştirme)";
       case "company_logs":
       case "e_document_logs":
-        return "Log İzleme Ekranı (Mysoft API & Teknik Hata Konsolu)";
+        return "Log İzleme Ekranı";
       case "company_settings":
       case "settings":
         return "Firma Bilgileri - Sistem Ayarları";

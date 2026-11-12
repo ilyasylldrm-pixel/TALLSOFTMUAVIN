@@ -53,10 +53,24 @@ import {
 export interface SystemAuditLogItem {
   id?: string;
   action: string;
-  category: "Bordro & SGK" | "Kullanıcı & Yetki" | "Evrak & Dosya" | "Sistem & Ayarlar" | "Duyuru" | "Şirket & Yapılandırma";
+  category:
+    | "Bordro & SGK"
+    | "Kullanıcı & Yetki"
+    | "Evrak & Dosya"
+    | "Sistem & Ayarlar"
+    | "Duyuru"
+    | "Şirket & Yapılandırma"
+    | "Pazaryeri & Entegrasyon"
+    | "Fatura & Muhasebe"
+    | "Oturum & Güvenlik"
+    | string;
   details: string;
   performedBy: string;
+  userRole?: string;
   timestamp: string;
+  status?: "success" | "warning" | "error" | "info";
+  targetUser?: string;
+  targetCompany?: string;
   metadata?: Record<string, any>;
 }
 
@@ -817,37 +831,135 @@ export async function preserveAndSyncAllCompaniesHistoricalData(writeToCloud: bo
   }
 }
 
-// 1. Audit Log Ekleme
-export async function logSystemAction(log: Omit<SystemAuditLogItem, "id">): Promise<void> {
-  if (isFirestoreWriteQuotaExhausted()) return;
+const LOCAL_AUDIT_LOGS_KEY = "muavin_system_audit_logs";
+
+export function getLocalAuditLogs(): SystemAuditLogItem[] {
+  if (typeof window === "undefined") return [];
   try {
-    const colRef = collection(db, AUDIT_COLLECTION);
-    await addDoc(colRef, sanitizeForFirestore({
-      ...log,
-      timestamp: log.timestamp || new Date().toISOString()
-    }));
-  } catch (err) {
-    checkAndMarkFirestoreQuotaError(err);
-    console.warn("Audit log yazılamadı (yerel kaydedildi):", err);
+    const raw = localStorage.getItem(LOCAL_AUDIT_LOGS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 
-// 2. Audit Logları Getirme
-export async function getSystemAuditLogs(maxCount: number = 30): Promise<SystemAuditLogItem[]> {
-  if (isFirestoreWriteQuotaExhausted()) return [];
+export function saveLocalAuditLog(item: SystemAuditLogItem): void {
+  if (typeof window === "undefined") return;
   try {
-    const colRef = collection(db, AUDIT_COLLECTION);
-    const q = query(colRef, orderBy("timestamp", "desc"), limit(maxCount));
-    const snapshot = await getDocs(q);
-    const list: SystemAuditLogItem[] = [];
-    snapshot.forEach((docSnap) => {
-      list.push({ id: docSnap.id, ...(docSnap.data() as Omit<SystemAuditLogItem, "id">) });
-    });
-    return list;
-  } catch (err) {
-    checkAndMarkFirestoreQuotaError(err);
-    return [];
+    const current = getLocalAuditLogs();
+    const updated = [item, ...current.filter((x) => x.id !== item.id)].slice(0, 300);
+    localStorage.setItem(LOCAL_AUDIT_LOGS_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("Local audit log save error:", e);
   }
+}
+
+export function clearSystemAuditLogs(): void {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(LOCAL_AUDIT_LOGS_KEY);
+    } catch {}
+  }
+}
+
+// 1. Audit Log Ekleme (Yerel depolama + Sunucu + Firestore hibrit)
+export async function logSystemAction(log: Omit<SystemAuditLogItem, "id"> & { id?: string }): Promise<void> {
+  const fullItem: SystemAuditLogItem = {
+    id: log.id || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    action: log.action,
+    category: log.category,
+    details: log.details,
+    performedBy: log.performedBy || "Sistem Yöneticisi",
+    userRole: log.userRole,
+    timestamp: log.timestamp || new Date().toISOString(),
+    status: log.status || "success",
+    targetUser: log.targetUser,
+    targetCompany: log.targetCompany,
+    metadata: log.metadata,
+  };
+
+  // 1. Hemen yerel önbelleğe yaz (0ms gecikme)
+  saveLocalAuditLog(fullItem);
+
+  // 2. Canlı arayüz dinleyicilerine bildir
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new CustomEvent("muavin:audit-log-added", { detail: fullItem }));
+    } catch {}
+  }
+
+  // 3. Sunucu disk deposuna gönder (arka planda, engellemeden)
+  if (typeof window !== "undefined") {
+    fetch("/api/cloud-sync/audit-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fullItem),
+    }).catch(() => {});
+  }
+
+  // 4. Firestore'a yaz (kota aşılmamışsa, arka planda)
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const colRef = collection(db, AUDIT_COLLECTION);
+      await addDoc(colRef, sanitizeForFirestore(fullItem));
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+      console.warn("Firestore audit log yazılamadı, yerel ve sunucu kopyası korundu:", err);
+    }
+  }
+}
+
+// 2. Audit Logları Getirme (Yerel + Sunucu + Firestore birleştirme)
+export async function getSystemAuditLogs(maxCount: number = 60): Promise<SystemAuditLogItem[]> {
+  const localList = getLocalAuditLogs();
+  const mergedMap = new Map<string, SystemAuditLogItem>();
+
+  localList.forEach((item) => {
+    if (item && item.id) mergedMap.set(item.id, item);
+  });
+
+  // Sunucu deposundan çek
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch(`/api/cloud-sync/audit-logs?limit=${maxCount}`);
+      if (res.ok) {
+        const body = await res.json();
+        if (body && Array.isArray(body.logs)) {
+          body.logs.forEach((item: SystemAuditLogItem) => {
+            if (item && item.id && !mergedMap.has(item.id)) {
+              mergedMap.set(item.id, item);
+            }
+          });
+        }
+      }
+    } catch {
+      // Çevrimdışı sessiz devam
+    }
+  }
+
+  // Firestore'dan çek (varsa ve kota uygunsa)
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const colRef = collection(db, AUDIT_COLLECTION);
+      const q = query(colRef, orderBy("timestamp", "desc"), limit(maxCount));
+      const snapshot = await getDocs(q);
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as any;
+        const id = docSnap.id;
+        if (!mergedMap.has(id)) {
+          mergedMap.set(id, { id, ...data });
+        }
+      });
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+    }
+  }
+
+  const result = Array.from(mergedMap.values());
+  result.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return result.slice(0, maxCount);
 }
 
 // 3. Merkezi Bordro & SGK Parametrelerini Firestore'a Kaydetme (Tüm kullanıcılara yayınlama)

@@ -276,10 +276,10 @@ export const AdminOverviewPanel: React.FC<AdminOverviewPanelProps> = ({
             <button
               onClick={() => onNavigateTab("mysoft_logs")}
               className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-              title="Mysoft API Teknik Hata Dökümü ve Çözüm Önerisi Log İzleme Ekranı"
+              title="Sistem Denetimi, Kullanıcı Hareketleri ve Log İzleme Ekranı"
             >
               <Terminal className="w-4 h-4" />
-              <span>Mysoft Log İzleme Ekranı</span>
+              <span>Log İzleme Ekranı</span>
             </button>
             <button
               onClick={handleForceGlobalSyncPulse}

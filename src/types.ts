@@ -294,7 +294,7 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   { id: "company_settings", name: "↳ Sistem Ayarları", description: "Genel sistem ayarları, çoklu şirket ve Mysoft VKN/TCKN eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_companies", name: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_mysoft", name: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_logs", name: "↳ Sistem Ayarları: Log İzleme Ekranı (Mysoft API)", description: "Mysoft e-Fatura/e-Belge teknik hata dökümü ve çözüm önerileri ekranı (Yalnızca Mysoft eşleştirmesi yapılan firma için)", category: "core", parentId: "company", isSubModule: true, badge: "Canlı Log" },
+  { id: "company_logs", name: "↳ Sistem Ayarları: Log İzleme Ekranı", description: "Sistem denetim günlüğü, kullanıcı/yetki hareketleri ve e-Belge/API işlem ve hata tanılama konsolu", category: "core", parentId: "company", isSubModule: true, badge: "Canlı Log" },
 
   // Ana Modül: E-İşlemler
   { id: "e_services", name: "E-İşlemler (GİB / Portal)", description: "GİB portalı, e-Arşiv, SGK ve e-Devlet sorgulama", category: "commercial", badge: "Resmi" },
@@ -2096,7 +2096,7 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   { key: "company_settings", label: "↳ Sistem Ayarları", description: "Firma bazlı parametreler, çoklu şirket, Mysoft eşleştirme ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_companies", label: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_mysoft", label: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_logs", label: "↳ Sistem Ayarları: Log İzleme Ekranı (Mysoft API)", description: "Mysoft API teknik hata dökümü ve çözüm önerileri ekranı (Yalnızca Mysoft eşleştirmesi yapılan firma için)", category: "Yönetim", parentKey: "company", isSubModule: true },
+  { key: "company_logs", label: "↳ Sistem Ayarları: Log İzleme Ekranı", description: "Sistem denetim günlüğü, kullanıcı/yetki hareketleri ve teknik işlem log konsolu", category: "Yönetim", parentKey: "company", isSubModule: true },
 
   // E-İşlemler
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },

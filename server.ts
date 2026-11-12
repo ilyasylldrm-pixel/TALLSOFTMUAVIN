@@ -10,8 +10,6 @@ import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
 import { createTrendyolModule } from "./src/services/trendyol/trendyolRoutes.ts";
-import { createTgoMealRouter } from "./src/services/tgoMeal.ts";
-import { createYemeksepetiMealRouter } from "./src/services/yemeksepetiMeal.ts";
 import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import {
@@ -166,8 +164,6 @@ const trendyolModule = createTrendyolModule({
   },
 });
 app.use("/api/marketplace/trendyol", trendyolModule.router);
-app.use("/api/marketplace/tgo-meal", createTgoMealRouter());
-app.use("/api/marketplace/yemeksepeti-meal", createYemeksepetiMealRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;
@@ -1852,6 +1848,7 @@ interface ServerCloudSyncStore {
   version?: number;
   lastActionSummary?: string;
   lastUpdatedBy?: string;
+  auditLogs?: any[];
 }
 
 const CLOUD_SYNC_FILE_PATH = path.join(process.cwd(), "data", "cloud_sync_store.json");
@@ -1904,6 +1901,7 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
           lastActionSummary:
             parsed.lastActionSummary || "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
           lastUpdatedBy: parsed.lastUpdatedBy || "Sistem Yöneticisi",
+          auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
         };
       }
     }
@@ -1920,6 +1918,7 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
     version: Date.now(),
     lastActionSummary: "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
     lastUpdatedBy: "Sistem Yöneticisi",
+    auditLogs: [],
   };
 })();
 
@@ -2249,6 +2248,52 @@ app.post("/api/cloud-sync/broadcast", (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "Yayınlama hatası" });
+  }
+});
+
+// ==========================================
+// MERKEZİ DENETİM VE KULLANICI HAREKET LOGLARI (AUDIT LOGS)
+// ==========================================
+app.get("/api/cloud-sync/audit-logs", (req, res) => {
+  try {
+    const raw = (memoryCloudSyncStore as any).auditLogs || [];
+    const limitNum = Math.min(Number(req.query.limit) || 100, 300);
+    res.json({ success: true, logs: raw.slice(0, limitNum) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "Audit log okuma hatası" });
+  }
+});
+
+app.post("/api/cloud-sync/audit-logs", (req, res) => {
+  try {
+    const logItem = req.body;
+    if (!logItem || typeof logItem !== "object") {
+      return res.status(400).json({ success: false, error: "Geçersiz log içeriği" });
+    }
+    if (!(memoryCloudSyncStore as any).auditLogs) {
+      (memoryCloudSyncStore as any).auditLogs = [];
+    }
+    const fullLog = {
+      id: logItem.id || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      action: String(logItem.action || "Sistem İşlemi"),
+      category: String(logItem.category || "Sistem & Ayarlar"),
+      details: String(logItem.details || ""),
+      performedBy: String(logItem.performedBy || "Bilinmeyen Kullanıcı"),
+      userRole: logItem.userRole ? String(logItem.userRole) : undefined,
+      timestamp: logItem.timestamp || new Date().toISOString(),
+      status: logItem.status || "success",
+      targetUser: logItem.targetUser,
+      targetCompany: logItem.targetCompany,
+      metadata: logItem.metadata,
+    };
+    (memoryCloudSyncStore as any).auditLogs.unshift(fullLog);
+    if ((memoryCloudSyncStore as any).auditLogs.length > 500) {
+      (memoryCloudSyncStore as any).auditLogs = (memoryCloudSyncStore as any).auditLogs.slice(0, 500);
+    }
+    persistServerCloudSyncStore();
+    res.json({ success: true, log: fullLog });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "Audit log kayıt hatası" });
   }
 });
 
