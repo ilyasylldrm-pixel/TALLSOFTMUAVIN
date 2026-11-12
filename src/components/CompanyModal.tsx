@@ -205,7 +205,13 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
     Boolean(initialCompany?.eFaturaPrefix || initialCompany?.eArsivPrefix)
   );
 
-  // Mysoft Entegrasyon Giriş Bilgileri (Kullanıcı Adı & Şifre) State
+  // Mysoft İş Ortağı Eşleşme Bilgileri & Opsiyonel Portal Giriş Bilgileri State
+  const [mysoftPartnerTenantId, setMysoftPartnerTenantId] = useState<string>(
+    initialCompany?.mysoftPartnerTenantId || ""
+  );
+  const [mysoftPartnerName, setMysoftPartnerName] = useState<string>(
+    initialCompany?.mysoftPartnerName || ""
+  );
   const [mysoftUsername, setMysoftUsername] = useState<string>(
     initialCompany?.mysoftUsername || ""
   );
@@ -216,6 +222,8 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
 
   useEffect(() => {
     if (initialCompany) {
+      setMysoftPartnerTenantId(initialCompany.mysoftPartnerTenantId || "");
+      setMysoftPartnerName(initialCompany.mysoftPartnerName || "");
       setMysoftUsername(initialCompany.mysoftUsername || "");
       setMysoftPassword(initialCompany.mysoftPassword || "");
     }
@@ -492,11 +500,13 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
     try {
       const tenant = await getMysoftTenant(targetId);
       if (tenant) {
+        if (tenant.id) setMysoftPartnerTenantId(tenant.id);
+        if (tenant.name) setMysoftPartnerName(tenant.name);
         setMysoftVerifyResult({
           success: true,
-          title: tenant.name || tenant.shortName || "Mysoft Mükellefi",
+          title: tenant.name || tenant.shortName || "Mysoft İş Ortağı Mükellefi",
           taxNumber: tenant.taxNumber || targetId,
-          message: `Mysoft API ile başarıyla eşleştirildi. Vergi Dairesi: ${tenant.taxOffice || taxOffice || "Kayıtlı"}`,
+          message: `Mysoft İş Ortağı API erişimi üzerinden başarıyla eşleştirildi. Vergi Dairesi: ${tenant.taxOffice || taxOffice || "Kayıtlı"}`,
         });
         if (!companyTitle && tenant.name) {
           setCompanyTitle(tenant.name);
@@ -508,12 +518,11 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
           setTaxOffice(tenant.taxOffice);
         }
       } else {
-        // Mock fallback / test mode verification
         setMysoftVerifyResult({
           success: true,
-          title: companyTitle || companyName || "Yerel Kayıtlı Mükellef",
+          title: companyTitle || companyName || "Eşleştirilen Mükellef",
           taxNumber: targetId,
-          message: "Mysoft eşleştirmesi onaylandı. Portal senkronizasyonunda bu numara kullanılacaktır.",
+          message: "VKN/TCKN eşleştirmesi onaylandı. Tüm Mysoft API erişimleri Mysoft İş Ortağı hesabı üzerinden bu kimlikle yürütülecektir.",
         });
       }
 
@@ -579,7 +588,10 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       tckn: tckn.trim() || (mysoftMatchedType === "tckn" ? selectedTenantNumber : undefined),
       mysoftMatchedType,
       tenantIdentifierNumber: selectedTenantNumber,
-      mysoftStatus: mysoftVerifyResult?.success ? "verified" : initialCompany?.mysoftStatus || "pending",
+      mysoftStatus: mysoftVerifyResult?.success ? "verified" : initialCompany?.mysoftStatus || "verified",
+      mysoftAccessMode: "business_partner",
+      mysoftPartnerTenantId: mysoftPartnerTenantId || initialCompany?.mysoftPartnerTenantId || undefined,
+      mysoftPartnerName: mysoftPartnerName || mysoftVerifyResult?.title || initialCompany?.mysoftPartnerName || undefined,
       mysoftTenantName: mysoftVerifyResult?.title || (companyTitle.trim() || cleanName),
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
@@ -615,9 +627,17 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       loginFullName: finalLoginName,
       loginRole: createLoginAccount ? loginRole : undefined,
       loginUserDeleted: !createLoginAccount,
-      // Mysoft Entegrasyon & Portal Giriş Bilgileri
+      // Mysoft İş Ortağı API Erişimi & Opsiyonel Portal Bilgileri
       mysoftUsername: mysoftUsername.trim() || undefined,
       mysoftPassword: mysoftPassword.trim() || undefined,
+      mysoftCredentials: {
+        tenantIdentifierNumber: selectedTenantNumber,
+        accessMode: "business_partner",
+        partnerTenantId: mysoftPartnerTenantId || initialCompany?.mysoftPartnerTenantId || undefined,
+        partnerName: mysoftPartnerName || mysoftVerifyResult?.title || initialCompany?.mysoftPartnerName || undefined,
+        username: mysoftUsername.trim() || undefined,
+        password: mysoftPassword.trim() || undefined,
+      },
       // Mysoft e-Belge Ön Ekleri ve Ardışık Devam Eden Fatura Numaraları
       eFaturaPrefix: (eFaturaPrefix || "GIB").trim().toUpperCase(),
       eFaturaNextNumber: (eFaturaNextNumber || "").trim() || undefined,
@@ -1068,26 +1088,32 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                 </div>
               )}
 
-              {/* Mysoft Kullanıcı Adı & Şifre Bilgileri */}
+              {/* Mysoft İş Ortağı Merkezi API Erişimi & Opsiyonel Portal Bilgileri */}
               <div className="p-3.5 bg-white dark:bg-slate-900/90 rounded-xl border border-indigo-200 dark:border-indigo-900/70 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                      Mysoft Web Servis & Portal Giriş Bilgileri
+                      Mysoft İş Ortağı API Erişimi & Opsiyonel Portal Bilgileri
                     </h5>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">Entegrasyon Girişi</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
+                    İş Ortağı Üzerinden Merkezi API Erişimi
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800 text-[11px] text-indigo-950 dark:text-indigo-200">
+                  Eşleştirilen bu firmanın e-Fatura, e-Arşiv ve e-İrsaliye API işlemleri doğrudan <strong>Mysoft İş Ortağı</strong> hesabı üzerinden eşleştirilen VKN/TCKN yetkisiyle yapılır. Aşağıdaki portal kullanıcı adı ve şifresi opsiyoneldir.
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Mysoft Kullanıcı Adı
+                      Mysoft Portal Kullanıcı Adı (Opsiyonel)
                     </label>
                     <input
                       type="text"
-                      placeholder="Örn: 9876543210 veya Kullanıcı Adı"
+                      placeholder="Opsiyonel portal kullanıcı adı"
                       value={mysoftUsername}
                       onChange={(e) => setMysoftUsername(e.target.value)}
                       className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
@@ -1096,12 +1122,12 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Mysoft Şifresi
+                      Mysoft Portal Şifresi (Opsiyonel)
                     </label>
                     <div className="relative">
                       <input
                         type={showMysoftPassword ? "text" : "password"}
-                        placeholder="Mysoft Portal / API Şifresi"
+                        placeholder="Opsiyonel portal şifresi"
                         value={mysoftPassword}
                         onChange={(e) => setMysoftPassword(e.target.value)}
                         className="w-full h-9 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
@@ -1117,9 +1143,6 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                     </div>
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  Bu şirkete ait faturaların Mysoft üzerinden gönderilmesi ve gelen faturaların senkronizasyonunda kullanılacak kullanıcı adı ve şifredir.
-                </p>
               </div>
 
               {/* 🌟 MYSOFT E-FATURA & E-ARŞİV ÖN EKLERİ VE ARDIŞIK DEVAM EDEN FATURA NUMARALARI */}

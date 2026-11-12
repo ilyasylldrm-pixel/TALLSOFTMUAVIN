@@ -29,13 +29,19 @@ export interface TrendyolModule {
 
 export function createTrendyolModule(options: {
   resolveCompanySettings: (companyId: string) => Partial<CompanySettings> | null;
+  resolveMysoftClient?: (companyId: string, tenantIdentifierNumber?: string) => MysoftEdocumentClient;
 }): TrendyolModule {
   const store = new TrendyolStore();
   // Ortam değişkenleri dotenv ile yüklendikten sonra oluşturulur (modül içi singleton erken okunabilir).
   const mysoftEdocumentClient = new MysoftEdocumentClient(getMysoftConfig());
+  const resolveMysoft = (companyId?: string, tenant?: string) =>
+    companyId && options.resolveMysoftClient
+      ? options.resolveMysoftClient(companyId, tenant)
+      : mysoftEdocumentClient;
   const invoicer = new TrendyolInvoicer({
     store,
     mysoft: mysoftEdocumentClient,
+    resolveMysoftClient: options.resolveMysoftClient,
     resolveCompanySettings: options.resolveCompanySettings,
   });
   const router = Router();
@@ -67,19 +73,31 @@ export function createTrendyolModule(options: {
     }
   };
 
-  const publicView = (conn: TrendyolConnectionRecord | null) => {
-    if (!conn) return { connected: false, defaults: DEFAULT_SETTINGS };
+  const publicView = (conn: TrendyolConnectionRecord | null, companyId?: string) => {
+    const cid = conn?.companyId || companyId || "";
+    const hasSecretKey = cid ? store.hasCustomSecretKey(cid) : false;
+    const secretKeyMasked = cid ? store.getMaskedSecretKey(cid) : "";
+    if (!conn) {
+      return {
+        connected: false,
+        hasSecretKey,
+        secretKeyMasked,
+        defaults: DEFAULT_SETTINGS,
+      };
+    }
     let apiKeyMasked = "";
     let secretReadable = true;
     try {
-      apiKeyMasked = maskSecret(store.decrypt(conn.apiKeyEnc));
-      store.decrypt(conn.apiSecretEnc);
+      apiKeyMasked = maskSecret(store.decrypt(conn.apiKeyEnc, conn.companyId));
+      store.decrypt(conn.apiSecretEnc, conn.companyId);
     } catch {
       secretReadable = false;
     }
     return {
       connected: true,
       secretReadable,
+      hasSecretKey,
+      secretKeyMasked,
       sellerId: conn.sellerId,
       apiKeyMasked,
       environment: conn.environment,
@@ -94,7 +112,7 @@ export function createTrendyolModule(options: {
       lastSyncAt: conn.lastSyncAt || null,
       lastSyncSummary: conn.lastSyncSummary || "",
       lastError: conn.lastError || "",
-      mysoftMockMode: mysoftEdocumentClient.config.mockMode,
+      mysoftMockMode: resolveMysoft(cid, conn.tenantIdentifierNumber).config.mockMode,
       updatedAt: conn.updatedAt,
     };
   };
@@ -104,7 +122,7 @@ export function createTrendyolModule(options: {
       const companyId = companyIdOf(req);
       const conn = store.getConnection(companyId);
       authorizeConnection(req, conn);
-      res.json(publicView(conn));
+      res.json(publicView(conn, companyId));
     } catch (error) {
       fail(res, error);
     }
@@ -119,11 +137,17 @@ export function createTrendyolModule(options: {
       const sellerId = normalizeSellerId(body.sellerId ?? existing?.sellerId);
       const apiKey = typeof body.apiKey === "string" && body.apiKey.trim() ? body.apiKey.trim() : undefined;
       const apiSecret = typeof body.apiSecret === "string" && body.apiSecret.trim() ? body.apiSecret.trim() : undefined;
+      const rawSecretKey = body.trendyolSecretKey ?? body.secretKey;
+      const secretKey = typeof rawSecretKey === "string" && rawSecretKey.trim() ? rawSecretKey.trim() : undefined;
+      const skipValidation = body.skipValidation === true;
       const environment: TrendyolEnvironment = body.environment === "stage" ? "stage" : "prod";
       if (!sellerId) throw new TrendyolApiError("Satıcı ID (Cari ID) zorunlu.", 400, "INVALID_REQUEST");
 
-      // Yeni bilgi girildiyse kaydetmeden önce Trendyol'da doğrula.
-      if (apiKey || apiSecret || !existing || sellerId !== existing.sellerId || environment !== existing.environment) {
+      // Yeni bilgi girildiyse kaydetmeden önce Trendyol'da doğrula (skipValidation değilse).
+      if (
+        !skipValidation &&
+        (apiKey || apiSecret || !existing || sellerId !== existing.sellerId || environment !== existing.environment)
+      ) {
         const creds = existing ? store.getCredentials(existing) : { apiKey: "", apiSecret: "" };
         const client = new TrendyolClient({
           sellerId,
@@ -144,6 +168,7 @@ export function createTrendyolModule(options: {
         sellerId,
         apiKey,
         apiSecret,
+        secretKey,
         companySettingsSnapshot:
           body.companySettings && typeof body.companySettings === "object"
             ? (body.companySettings as Partial<CompanySettings>)
@@ -161,7 +186,25 @@ export function createTrendyolModule(options: {
           startFrom: typeof body.startFrom === "number" && body.startFrom > 0 ? body.startFrom : undefined,
         },
       });
-      res.json(publicView(record));
+      res.json(publicView(record, companyId));
+    } catch (error) {
+      fail(res, error);
+    }
+  });
+
+  router.post("/connection/ping", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const body = (req.body || {}) as Record<string, unknown>;
+      const sellerId = normalizeSellerId(body.sellerId);
+      const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+      const apiSecret = typeof body.apiSecret === "string" ? body.apiSecret.trim() : "";
+      const environment: TrendyolEnvironment = body.environment === "stage" ? "stage" : "prod";
+      if (!sellerId || !apiKey || !apiSecret) {
+        throw new TrendyolApiError("Satıcı ID, API Key ve API Secret zorunludur.", 400, "INVALID_REQUEST");
+      }
+      const rawCompId = typeof body.companyId === "string" ? body.companyId.trim() : "";
+      const result = await new TrendyolClient({ sellerId, apiKey, apiSecret, environment }).testConnection();
+      res.json({ ...result, mysoftMockMode: resolveMysoft(rawCompId).config.mockMode });
     } catch (error) {
       fail(res, error);
     }
@@ -169,11 +212,12 @@ export function createTrendyolModule(options: {
 
   router.post("/connection/test", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const conn = store.getConnection(companyIdOf(req));
+      const cid = companyIdOf(req);
+      const conn = store.getConnection(cid);
       authorizeConnection(req, conn);
       if (!conn) throw new TrendyolApiError("Kayıtlı bağlantı yok.", 404, "TRENDYOL_NOT_CONNECTED");
       const result = await new TrendyolClient(store.getCredentials(conn)).testConnection();
-      res.json({ ...result, mysoftMockMode: mysoftEdocumentClient.config.mockMode });
+      res.json({ ...result, mysoftMockMode: resolveMysoft(cid, conn.tenantIdentifierNumber).config.mockMode });
     } catch (error) {
       fail(res, error);
     }

@@ -56,7 +56,6 @@ import {
   readPersistedEDocuments,
 } from "../services/mysoftEDocumentService";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
-import { selectMysoftTenantIdentifier } from "../utils/mysoftTenantSelection";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { ExportButtons } from "./ExportButtons";
 import { ExportData } from "../utils/exportUtils";
@@ -376,10 +375,17 @@ export const IncomingEDocumentsLegacy: React.FC<IncomingEDocumentsLegacyProps> =
   const isDespatch = family === "despatch";
   const isMatched = isCompanyMysoftMatched(activeCompany, companySettings);
 
-  const hintedTaxNumber = selectMysoftTenantIdentifier(
-    activeCompany,
-    companySettings,
-    tenantIdentifierNumber,
+  const hintedTaxNumber = normalizeMysoftTenantIdentifier(
+    tenantIdentifierNumber ||
+      activeCompany?.tenantIdentifierNumber ||
+      activeCompany?.taxNumber ||
+      (activeCompany as any)?.vkn ||
+      (activeCompany as any)?.tckn ||
+      companySettings?.tenantIdentifierNumber ||
+      companySettings?.mysoftCredentials?.tenantIdentifierNumber ||
+      companySettings?.taxNumber ||
+      (companySettings as any)?.vkn ||
+      (companySettings as any)?.tckn,
   );
   const activeManagedCompanyId = companyId || activeCompany?.id;
   const {

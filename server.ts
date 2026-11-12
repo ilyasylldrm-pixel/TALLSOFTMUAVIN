@@ -10,7 +10,6 @@ import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
 import { createTrendyolModule } from "./src/services/trendyol/trendyolRoutes.ts";
-import { createTgoMealRouter } from "./src/services/tgoMeal.ts";
 import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import {
@@ -98,25 +97,73 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "25mb" }));
-app.use("/api/mysoft", getMysoftRouter());
+const resolveServerMatchedCompanyTenant = (companyId: string): string | undefined => {
+  try {
+    const cleanId = String(companyId || "").trim();
+    if (!cleanId) return undefined;
+    const regComp = memoryCloudSyncStore.companiesRegistry.find((c: any) => c && c.id === cleanId);
+    const settings = memoryCloudSyncStore.companiesData[cleanId]?.data?.settings;
+    const matchedType = regComp?.mysoftMatchedType || settings?.mysoftMatchedType;
+    const candidates = [
+      matchedType === "tckn" ? regComp?.tckn || settings?.tckn : undefined,
+      matchedType === "vkn" ? regComp?.vkn || settings?.vkn : undefined,
+      regComp?.tenantIdentifierNumber,
+      settings?.tenantIdentifierNumber,
+      settings?.mysoftCredentials?.tenantIdentifierNumber,
+      regComp?.vkn,
+      regComp?.tckn,
+      regComp?.taxNumber,
+      settings?.vkn,
+      settings?.tckn,
+      settings?.taxNumber,
+    ];
+    for (const candidate of candidates) {
+      const digits = String(candidate || "").replace(/\D/g, "").trim();
+      if (digits.length === 10 || digits.length === 11) return digits;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+app.use(
+  "/api/mysoft",
+  getMysoftRouter({
+    resolveCompanyTenant: resolveServerMatchedCompanyTenant,
+  }),
+);
 app.use("/api/whatsapp", getWhatsAppRouter());
 app.use("/api/portal-proxy", getPortalProxyRouter());
 app.use("/api/extension", getExtensionRouter());
 app.use("/api/github", getGitHubRouter());
 
-// Trendyol pazaryeri entegrasyonu: sipariş çekme + otomatik e-Fatura/e-Arşiv (Mysoft).
+// Trendyol pazaryeri entegrasyonu: sipariş çekme + otomatik e-Fatura/e-Arşiv (Mysoft İş Ortağı üzerinden).
 // Firma bilgisi, istemcinin senkronladığı cloud-sync deposundan okunur (aşağıda tanımlı).
 const trendyolModule = createTrendyolModule({
   resolveCompanySettings: (companyId) => {
     try {
-      return memoryCloudSyncStore.companiesData[companyId]?.data?.settings || null;
+      const settings = memoryCloudSyncStore.companiesData[companyId]?.data?.settings || null;
+      const regComp = memoryCloudSyncStore.companiesRegistry.find((c: any) => c && c.id === companyId);
+      const matchedTenant = resolveServerMatchedCompanyTenant(companyId);
+      if (!settings && !regComp) return null;
+      return {
+        ...(settings || {}),
+        companyName: settings?.companyName || regComp?.companyName || "",
+        companyTitle: settings?.companyTitle || regComp?.companyTitle || regComp?.companyName || "",
+        taxOffice: settings?.taxOffice || regComp?.taxOffice || "Merkez",
+        taxNumber: matchedTenant || settings?.taxNumber || regComp?.taxNumber || "",
+        tenantIdentifierNumber: matchedTenant || settings?.tenantIdentifierNumber,
+        mysoftAccessMode: "business_partner",
+        eFaturaPrefix: settings?.eFaturaPrefix || regComp?.eFaturaPrefix,
+        eArsivPrefix: settings?.eArsivPrefix || regComp?.eArsivPrefix,
+      } as any;
     } catch {
       return null;
     }
   },
 });
 app.use("/api/marketplace/trendyol", trendyolModule.router);
-app.use("/api/marketplace/tgo-meal", createTgoMealRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;

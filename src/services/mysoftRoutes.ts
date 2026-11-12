@@ -27,7 +27,15 @@ class InvalidMysoftRequestError extends Error {
  * route handlers do not log request bodies because UBL/XML payloads can hold
  * personal and financial data.
  */
-export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftConfig())): Router {
+export interface MysoftRouterOptions {
+  /** Resolve a matched company's Mysoft VKN/TCKN (tenantIdentifierNumber) by Muavin companyId */
+  resolveCompanyTenant?: (companyId: string) => string | undefined;
+}
+
+export function createMysoftRouter(
+  client = new MysoftEdocumentClient(getMysoftConfig()),
+  options: MysoftRouterOptions = {},
+): Router {
   const router = Router();
 
   const handleError = (error: unknown, res: Response): void => {
@@ -234,17 +242,50 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     return result as MysoftListRequest;
   };
 
-  const tenantFrom = (req: Request): string | undefined =>
-    normalizeMysoftTenantIdentifier(
+  const companyIdFrom = (req: Request): string | undefined =>
+    textParam(
+      req.headers["x-company-id"] ||
+        queryText(req, "companyId") ||
+        (req.body as Record<string, unknown> | undefined)?.companyId,
+    );
+
+  const tenantFrom = (req: Request, allowVknTcknFallback = false): string | undefined => {
+    const direct = normalizeMysoftTenantIdentifier(
       req.headers["x-tenant-identifier"] ||
         req.headers["x-mysoft-tenant"] ||
         queryText(req, "tenantIdentifierNumber") ||
-        queryText(req, "vkn") ||
-        queryText(req, "vknTckn") ||
         textParam((req.body as Record<string, unknown> | undefined)?.tenantIdentifierNumber) ||
-        textParam((req.body as Record<string, unknown> | undefined)?.vkn) ||
-        textParam((req.body as Record<string, unknown> | undefined)?.vknTckn),
+        queryText(req, "vkn") ||
+        textParam((req.body as Record<string, unknown> | undefined)?.vkn),
     );
+    if (direct) return direct;
+
+    const compId = companyIdFrom(req);
+    if (compId && options.resolveCompanyTenant) {
+      const resolvedCompTenant = normalizeMysoftTenantIdentifier(options.resolveCompanyTenant(compId));
+      if (resolvedCompTenant) return resolvedCompTenant;
+    }
+
+    if (allowVknTcknFallback) {
+      return normalizeMysoftTenantIdentifier(
+        queryText(req, "vknTckn") ||
+          textParam((req.body as Record<string, unknown> | undefined)?.vknTckn),
+      );
+    }
+    return undefined;
+  };
+
+  const withRequestTenant = (req: Request, rawBody: unknown): unknown => {
+    const tenant = tenantFrom(req);
+    if (!tenant) return rawBody;
+    if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+      return { tenantIdentifierNumber: tenant };
+    }
+    const obj = rawBody as Record<string, unknown>;
+    const existing = normalizeMysoftTenantIdentifier(obj.tenantIdentifierNumber);
+    if (existing) return obj;
+    return { ...obj, tenantIdentifierNumber: tenant };
+  };
 
   const familyFrom = (req: Request) =>
     canonicalMysoftDocumentFamily(
@@ -313,6 +354,11 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       res.json({ provider: "mysoft", ...client.status });
     }
   });
+
+  router.get(
+    "/business-partner/summary",
+    run(() => client.getBusinessPartnerAccessSummary()),
+  );
 
   router.get("/operations/:operation", documentOperationRoute);
   router.post("/operations/:operation", documentOperationRoute);
@@ -408,7 +454,7 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
     run((req) => {
       const vknTckn = textParam(req.params.vknTckn);
       if (!vknTckn) throw new InvalidMysoftRequestError("vknTckn is required");
-      return client.getGibAccountModel(vknTckn);
+      return client.getGibAccountModel(vknTckn, tenantFrom(req));
     }),
   );
 
@@ -582,39 +628,67 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
         const value = textParam(body[key]);
         if (value) payload[key] = value;
       });
+      if (!payload.tenantIdentifierNumber) {
+        const resolvedTenant = tenantFrom(req);
+        if (resolvedTenant) payload.tenantIdentifierNumber = resolvedTenant;
+      }
       return client.sendOutgoingDraft(payload);
     }),
   );
   router.post(
     "/e-documents/outgoing",
-    run((req) => client.createOutgoing(req.body)),
+    run((req) => client.createOutgoing(withRequestTenant(req, req.body))),
   );
   router.post(
     "/e-documents/outgoing/ubl",
-    run((req) => client.createOutgoingWithUblXml(req.body)),
+    run((req) => client.createOutgoingWithUblXml(withRequestTenant(req, req.body))),
   );
 
   router.post(
     "/incoming/list",
-    run((req) => client.listIncoming({ ...listBody(req), tenantIdentifierNumber: tenantFrom(req) }))
+    run((req) => {
+      const filters = listBody(req);
+      return client.listIncoming({
+        ...filters,
+        tenantIdentifierNumber: tenantFrom(req) || filters.tenantIdentifierNumber,
+      });
+    }),
   );
   router.post(
     "/incoming/paging",
-    run((req) => client.listIncomingPaging({ ...listBody(req), tenantIdentifierNumber: tenantFrom(req) }))
+    run((req) => {
+      const filters = listBody(req);
+      return client.listIncomingPaging({
+        ...filters,
+        tenantIdentifierNumber: tenantFrom(req) || filters.tenantIdentifierNumber,
+      });
+    }),
   );
   router.post(
     "/incoming/new",
-    run((req) => client.listNewIncoming({ ...listBody(req), tenantIdentifierNumber: tenantFrom(req) }))
+    run((req) => {
+      const filters = listBody(req);
+      return client.listNewIncoming({
+        ...filters,
+        tenantIdentifierNumber: tenantFrom(req) || filters.tenantIdentifierNumber,
+      });
+    }),
   );
   router.post(
     "/outgoing/list",
-    run((req) => client.listOutgoing({ ...listBody(req), tenantIdentifierNumber: tenantFrom(req) }))
+    run((req) => {
+      const filters = listBody(req);
+      return client.listOutgoing({
+        ...filters,
+        tenantIdentifierNumber: tenantFrom(req) || filters.tenantIdentifierNumber,
+      });
+    }),
   );
 
-  router.post("/outgoing", run((req) => client.createOutgoing(req.body)));
+  router.post("/outgoing", run((req) => client.createOutgoing(withRequestTenant(req, req.body))));
   router.post(
     "/outgoing/validate",
-    run((req) => client.validateOutgoingPayload(req.body)),
+    run((req) => client.validateOutgoingPayload(withRequestTenant(req, req.body))),
   );
   router.get(
     "/diagnostics",
@@ -625,12 +699,15 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
       };
     }),
   );
-  router.post("/outgoing/ubl", run((req) => client.createOutgoingWithUblXml(req.body)));
+  router.post(
+    "/outgoing/ubl",
+    run((req) => client.createOutgoingWithUblXml(withRequestTenant(req, req.body))),
+  );
   router.post(
     "/outgoing/draft-preview",
     runBinary(async (req) => {
       const format = (queryText(req, "format") || "html").toLowerCase() === "pdf" ? "pdf" : "html";
-      return client.getInvoiceOutboxDraftPreview(req.body, format);
+      return client.getInvoiceOutboxDraftPreview(withRequestTenant(req, req.body), format);
     }),
   );
 
@@ -722,6 +799,6 @@ export function createMysoftRouter(client = new MysoftEdocumentClient(getMysoftC
 /** Build a router on demand after environment loading (for example after
  * `dotenv.config()` in server.ts).  Keeping construction lazy prevents a
  * module import from freezing an empty process.env into the client. */
-export function getMysoftRouter(): Router {
-  return createMysoftRouter();
+export function getMysoftRouter(options: MysoftRouterOptions = {}): Router {
+  return createMysoftRouter(undefined, options);
 }

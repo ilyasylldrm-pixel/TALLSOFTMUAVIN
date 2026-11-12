@@ -117,29 +117,88 @@ function resolveKey(dataDir: string): Buffer {
 
 export class TrendyolStore {
   private readonly filePath: string;
+  private readonly keysFilePath: string;
   private readonly key: Buffer;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(filePath = process.env.TRENDYOL_STORE_PATH || path.join(process.cwd(), "data", "trendyol_store.json")) {
     this.filePath = filePath;
+    this.keysFilePath =
+      path.basename(filePath) === "trendyol_store.json"
+        ? path.join(path.dirname(filePath), ".trendyol.keys.json")
+        : `${filePath}.keys.json`;
     this.key = resolveKey(path.dirname(filePath));
   }
 
+  // ---------- şirket bazlı TRENDYOL_SECRET_KEY yönetimi ----------
+  private readCompanyKeys(): Record<string, string> {
+    try {
+      const raw = fs.readFileSync(this.keysFilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private writeCompanyKeys(keysMap: Record<string, string>): void {
+    fs.mkdirSync(path.dirname(this.keysFilePath), { recursive: true });
+    const tmp = `${this.keysFilePath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(keysMap), { mode: 0o600 });
+    fs.renameSync(tmp, this.keysFilePath);
+  }
+
+  hasCustomSecretKey(companyId: string): boolean {
+    const val = this.readCompanyKeys()[companyId];
+    return Boolean(val && val.trim());
+  }
+
+  getMaskedSecretKey(companyId: string): string {
+    const custom = this.readCompanyKeys()[companyId]?.trim();
+    if (custom) return maskSecret(custom);
+    const fromEnv = process.env.TRENDYOL_SECRET_KEY?.trim();
+    if (fromEnv) return maskSecret(fromEnv);
+    return "";
+  }
+
+  private resolveCompanyKey(companyId?: string): Buffer {
+    if (companyId) {
+      const custom = this.readCompanyKeys()[companyId]?.trim();
+      if (custom) return crypto.createHash("sha256").update(custom).digest();
+    }
+    return this.key;
+  }
+
   // ---------- şifreleme ----------
-  encrypt(plain: string): string {
+  encrypt(plain: string, companyId?: string): string {
+    const activeKey = this.resolveCompanyKey(companyId);
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv("aes-256-gcm", this.key, iv);
+    const cipher = crypto.createCipheriv("aes-256-gcm", activeKey, iv);
     const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
     const tag = cipher.getAuthTag();
     return ["v1", iv.toString("base64"), tag.toString("base64"), enc.toString("base64")].join(".");
   }
 
-  decrypt(payload: string): string {
+  decrypt(payload: string, companyId?: string): string {
     const [version, ivB64, tagB64, dataB64] = String(payload || "").split(".");
     if (version !== "v1" || !ivB64 || !tagB64 || !dataB64) throw new Error("Şifreli veri biçimi tanınmadı.");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", this.key, Buffer.from(ivB64, "base64"));
-    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-    return Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]).toString("utf8");
+    const iv = Buffer.from(ivB64, "base64");
+    const tag = Buffer.from(tagB64, "base64");
+    const encData = Buffer.from(dataB64, "base64");
+
+    const primaryKey = this.resolveCompanyKey(companyId);
+    try {
+      const decipher = crypto.createDecipheriv("aes-256-gcm", primaryKey, iv);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(encData), decipher.final()]).toString("utf8");
+    } catch (primaryErr) {
+      if (companyId && !primaryKey.equals(this.key)) {
+        const fallbackDecipher = crypto.createDecipheriv("aes-256-gcm", this.key, iv);
+        fallbackDecipher.setAuthTag(tag);
+        return Buffer.concat([fallbackDecipher.update(encData), fallbackDecipher.final()]).toString("utf8");
+      }
+      throw primaryErr;
+    }
   }
 
   // ---------- dosya ----------
@@ -188,8 +247,8 @@ export class TrendyolStore {
   getCredentials(record: TrendyolConnectionRecord) {
     return {
       sellerId: record.sellerId,
-      apiKey: this.decrypt(record.apiKeyEnc),
-      apiSecret: this.decrypt(record.apiSecretEnc),
+      apiKey: this.decrypt(record.apiKeyEnc, record.companyId),
+      apiSecret: this.decrypt(record.apiSecretEnc, record.companyId),
       environment: record.environment,
     };
   }
@@ -200,6 +259,7 @@ export class TrendyolStore {
     sellerId: string;
     apiKey?: string;
     apiSecret?: string;
+    secretKey?: string;
     settings: Partial<TrendyolConnectionSettings>;
     companySettingsSnapshot?: Partial<CompanySettings>;
   }): Promise<TrendyolConnectionRecord> {
@@ -209,6 +269,25 @@ export class TrendyolStore {
       if (!existing && (!input.apiKey || !input.apiSecret)) {
         throw new Error("İlk kayıtta API Key ve API Secret zorunludur.");
       }
+
+      let resolvedApiKeyPlain = input.apiKey?.trim();
+      let resolvedApiSecretPlain = input.apiSecret?.trim();
+
+      const nextSecretKey = input.secretKey?.trim();
+      if (nextSecretKey) {
+        if (existing) {
+          try {
+            if (!resolvedApiKeyPlain) resolvedApiKeyPlain = this.decrypt(existing.apiKeyEnc, input.companyId);
+            if (!resolvedApiSecretPlain) resolvedApiSecretPlain = this.decrypt(existing.apiSecretEnc, input.companyId);
+          } catch {
+            /* eski şifre çözülemezse yeni girilen değerler kullanılır */
+          }
+        }
+        const keysMap = this.readCompanyKeys();
+        keysMap[input.companyId] = nextSecretKey;
+        this.writeCompanyKeys(keysMap);
+      }
+
       const record: TrendyolConnectionRecord = {
         ...DEFAULT_SETTINGS,
         ...(existing || {}),
@@ -216,8 +295,8 @@ export class TrendyolStore {
         companyId: input.companyId,
         ownerUid: existing?.ownerUid || input.ownerUid,
         sellerId: input.sellerId,
-        apiKeyEnc: input.apiKey ? this.encrypt(input.apiKey.trim()) : existing!.apiKeyEnc,
-        apiSecretEnc: input.apiSecret ? this.encrypt(input.apiSecret.trim()) : existing!.apiSecretEnc,
+        apiKeyEnc: resolvedApiKeyPlain ? this.encrypt(resolvedApiKeyPlain, input.companyId) : existing!.apiKeyEnc,
+        apiSecretEnc: resolvedApiSecretPlain ? this.encrypt(resolvedApiSecretPlain, input.companyId) : existing!.apiSecretEnc,
         companySettingsSnapshot: input.companySettingsSnapshot || existing?.companySettingsSnapshot,
         createdAt: existing?.createdAt || nowIso,
         updatedAt: nowIso,
@@ -239,6 +318,11 @@ export class TrendyolStore {
   deleteConnection(companyId: string): Promise<void> {
     return this.mutate((data) => {
       delete data.connections[companyId];
+      const keysMap = this.readCompanyKeys();
+      if (companyId in keysMap) {
+        delete keysMap[companyId];
+        this.writeCompanyKeys(keysMap);
+      }
     });
   }
 

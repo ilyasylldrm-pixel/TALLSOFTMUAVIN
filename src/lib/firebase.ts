@@ -390,6 +390,34 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
     }
     saveLocalUsersBackup(existing);
 
+    // If the updated user is currently logged in, update active user session storage immediately
+    if (typeof window !== "undefined") {
+      try {
+        const storedUserRaw =
+          window.localStorage?.getItem("muavin_active_user") ||
+          window.sessionStorage?.getItem("muavin_active_user");
+        if (storedUserRaw) {
+          const parsedU = JSON.parse(storedUserRaw);
+          const isSameUser =
+            parsedU.userId === user.userId ||
+            (parsedU.email && user.email && parsedU.email.toLowerCase() === user.email.toLowerCase()) ||
+            (parsedU.username && user.username && parsedU.username.toLowerCase() === user.username.toLowerCase());
+          if (isSameUser) {
+            const updatedActive = { ...parsedU, ...user };
+            if (window.localStorage?.getItem("muavin_active_user")) {
+              window.localStorage.setItem("muavin_active_user", JSON.stringify(updatedActive));
+            }
+            if (window.sessionStorage?.getItem("muavin_active_user")) {
+              window.sessionStorage.setItem("muavin_active_user", JSON.stringify(updatedActive));
+            }
+            window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
+          }
+        }
+      } catch (activeUserErr) {
+        console.warn("Active user session sync error:", activeUserErr);
+      }
+    }
+
     // Sync to server-side cross-device cloud store immediately
     if (typeof window !== "undefined") {
       fetch("/api/cloud-sync/system", {

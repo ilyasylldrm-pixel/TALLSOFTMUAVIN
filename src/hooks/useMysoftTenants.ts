@@ -17,6 +17,8 @@ export interface UseMysoftTenantsOptions {
   hintVkn?: string;
   /** Locked VKN when company matching is already completed by Admin. */
   lockedVkn?: string;
+  /** Target companyId so backend uses this company's Mysoft API credentials. */
+  companyId?: string;
   /** Hide and skip loading Mysoft business partners list for company users once matched. */
   hidePartners?: boolean;
   /** Load tenant directory on mount. */
@@ -68,6 +70,7 @@ function deduplicateTenants(rows: MysoftTenant[]): MysoftTenant[] {
 export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
   const lockedVkn = normalizeMysoftTenantIdentifier(options.lockedVkn);
   const hintVkn = normalizeMysoftTenantIdentifier(options.hintVkn) || lockedVkn;
+  const targetCompanyId = options.companyId?.trim() || undefined;
   const isAdmin = isAdminOrSysAdmin(getEffectiveUserFromStorage());
   const hidePartners = Boolean(options.hidePartners) || (!isAdmin && Boolean(hintVkn));
   const autoLoad = options.autoLoad !== false && !hidePartners;
@@ -115,7 +118,7 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
 
     setLoading(true);
     setError(null);
-    const status = await getMysoftConnectionStatus().catch(() => null);
+    const status = await getMysoftConnectionStatus({ companyId: targetCompanyId }).catch(() => null);
     const identity = status?.identity;
     if (identity?.businessPartnerId && isAdmin) {
       setPartnerHint(
@@ -125,13 +128,13 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
       setPartnerHint(null);
     }
     try {
-      const rows = await listMysoftTenants();
+      const rows = await listMysoftTenants({ companyId: targetCompanyId });
       const uniqueRows = deduplicateTenants(rows);
       setTenants(uniqueRows);
       applyPick(uniqueRows);
       if (uniqueRows.length === 0) {
         setError(
-          "Müşteri listesi boş döndü. Erişim anahtarı yetkisini ve sunucu .env kaydını kontrol edin.",
+          "Müşteri listesi boş döndü. Şirketin Mysoft API erişim bilgilerini veya sunucu anahtarını kontrol edin.",
         );
       }
     } catch (loadError) {
@@ -147,7 +150,7 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [applyPick, setSelectedVkn, hidePartners, lockedVkn, hintVkn, isAdmin]);
+  }, [applyPick, setSelectedVkn, hidePartners, lockedVkn, hintVkn, isAdmin, targetCompanyId]);
 
   const lookupByVkn = useCallback(async () => {
     const vkn = normalizeMysoftTenantIdentifier(manualVkn);
@@ -158,7 +161,7 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     setLookupLoading(true);
     setError(null);
     try {
-      const tenant = await getMysoftTenant(vkn);
+      const tenant = await getMysoftTenant(vkn, { companyId: targetCompanyId });
       if (!tenant) {
         setError("Bu VKN erişim anahtarına tanımlı değil.");
         return null;
@@ -180,7 +183,7 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     } finally {
       setLookupLoading(false);
     }
-  }, [manualVkn, setSelectedVkn]);
+  }, [manualVkn, setSelectedVkn, targetCompanyId]);
 
   useEffect(() => {
     const targetVkn = lockedVkn || hintVkn;
@@ -205,17 +208,14 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     applyPick(tenants);
   }, [hintVkn, tenants, applyPick]);
 
-  // A locked company must never render or request documents with the previous
-  // company's stored VKN during the render before the synchronization effect.
-  const effectiveSelectedVkn = hidePartners ? lockedVkn || hintVkn : selectedVkn;
-  const selectedTenant = tenants.find((row) => row.taxNumber === effectiveSelectedVkn);
+  const selectedTenant = tenants.find((row) => row.taxNumber === selectedVkn);
 
   return {
     tenants,
     loading,
     error,
     partnerHint,
-    selectedVkn: effectiveSelectedVkn,
+    selectedVkn,
     selectedTenant,
     setSelectedVkn,
     manualVkn,

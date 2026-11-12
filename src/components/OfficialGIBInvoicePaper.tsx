@@ -1062,14 +1062,17 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
     };
   }, [overrideCssConfigKey, activeCompanyId]);
 
-  const design = useMemo(
-    () =>
-      resolveInvoiceDesignSettings(companySettings, {
-        ...(remoteDesignPatch || {}),
-        ...(designOverride || {}),
-      }),
-    [companySettings, remoteDesignPatch, designOverride]
-  );
+  const design = useMemo(() => {
+    const resolved = resolveInvoiceDesignSettings(companySettings, {
+      ...(remoteDesignPatch || {}),
+      ...(designOverride || {}),
+    });
+    // Gelir faturaları gönderilirken özel şablon yerine Mysoft resmi giden fatura tasarımı (gib_standard) kullanılır
+    if (invoice?.type === "sales" && (invoice?.eDocumentType || invoice?.eDocumentEttn)) {
+      resolved.templateStyle = "gib_standard";
+    }
+    return resolved;
+  }, [companySettings, remoteDesignPatch, designOverride, invoice?.type, invoice?.eDocumentType, invoice?.eDocumentEttn]);
 
   const activeCssConfig = useMemo(
     () => ({

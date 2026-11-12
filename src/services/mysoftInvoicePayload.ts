@@ -507,8 +507,10 @@ export function buildMysoftInvoiceOutboxPayload(
     ettn: invoice.eDocumentEttn || undefined,
     prefix: options.numeratorSetCode ? undefined : prefix || undefined,
     numeratorSetCode: options.numeratorSetCode?.trim() || undefined,
+    // Gelir faturaları gönderilirken özel tasarım yerine Mysoft resmi giden fatura şablonu kullanılır
     xsltSetCode: options.xsltSetCode?.trim() || undefined,
     xsltName: options.xsltName?.trim() || undefined,
+    isSendWithGeneralXsltIfDefaultNotExists: true,
     docNo: effectiveDocNo,
     docDate: toMysoftDateTime(invoice.issueDate),
     dueDate: invoice.dueDate

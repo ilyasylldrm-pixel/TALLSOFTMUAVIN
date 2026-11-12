@@ -58,7 +58,6 @@ import {
   readPersistedEDocuments,
 } from "../services/mysoftEDocumentService";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
-import { selectMysoftTenantIdentifier } from "../utils/mysoftTenantSelection";
 import { DetailPageLayout } from "./common/DetailPageLayout";
 import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
@@ -402,10 +401,15 @@ const OutgoingEDocuments: React.FC<EDocumentsProps> = ({
     activeCompany as any,
     companySettings,
   );
-  const hintedTaxNumber = selectMysoftTenantIdentifier(
-    activeCompany,
-    companySettings,
-    tenantIdentifierNumber,
+  const hintedTaxNumber = normalizeMysoftTenantIdentifier(
+    activeCompany?.tenantIdentifierNumber ||
+      companySettings?.tenantIdentifierNumber ||
+      companySettings?.mysoftCredentials?.tenantIdentifierNumber ||
+      activeCompany?.taxNumber ||
+      companySettings?.taxNumber ||
+      companySettings?.vkn ||
+      companySettings?.tckn ||
+      tenantIdentifierNumber,
   );
   // Mysoft iş ortakları yönetimi Firma Bilgileri > Mysoft Eşleştirme Masası'na taşınmıştır
   const activeManagedCompanyId = companyId || activeCompany?.id;

@@ -116,9 +116,19 @@ const mysoft: any = {
 
 const store = new TrendyolStore();
 await store.upsertConnection({ companyId: "c1", ownerUid: "u1", sellerId: "555", apiKey: "k", apiSecret: "s",
+  secretKey: "company-c1-custom-trendyol-secret-key-48chars-0001",
   settings: { autoInvoice: true, startFrom: Date.now() - 86400000 },
   companySettingsSnapshot: { companyName: "Satıcı", companyTitle: "Satıcı Ltd", taxNumber: "9876543210", taxOffice: "Şişli", address: "a", city: "İstanbul", phone: "", email: "", website: "", currency: "TRY" } as any });
-assert.equal(store.getCredentials(store.getConnection("c1")).apiSecret, "s");
+assert.equal(store.hasCustomSecretKey("c1"), true);
+assert.equal(store.getMaskedSecretKey("c1"), "••••0001");
+assert.equal(store.getCredentials(store.getConnection("c1")!).apiSecret, "s");
+// Anahtar rotasyonu: apiKey ve apiSecret tekrar gönderilmese bile yeni TRENDYOL_SECRET_KEY ile yeniden şifrelenir
+await store.upsertConnection({ companyId: "c1", ownerUid: "u1", sellerId: "555",
+  secretKey: "company-c1-rotated-trendyol-secret-key-48chars-9999",
+  settings: { autoInvoice: true } });
+assert.equal(store.getMaskedSecretKey("c1"), "••••9999");
+assert.equal(store.getCredentials(store.getConnection("c1")!).apiKey, "k");
+assert.equal(store.getCredentials(store.getConnection("c1")!).apiSecret, "s");
 assert.ok(!fs.readFileSync(process.env.TRENDYOL_STORE_PATH!, "utf8").includes('"s"'), "secret plaintext olmamalı");
 
 const inv = new TrendyolInvoicer({ store, mysoft, resolveCompanySettings: () => null });
@@ -149,7 +159,7 @@ const r3 = await inv.invoicePackage("c1", "1004");
 assert.equal(r3.state, "invoiced"); assert.equal(createCalls, 3);
 failUpload = false;
 await inv.syncConnection("c1");
-assert.equal(store.getEntry("c1", "1004").state, "delivered"); assert.equal(createCalls, 3);
+assert.equal(store.getEntry("c1", "1004")!.state, "delivered"); assert.equal(createCalls, 3);
 
 // 4) Mysoft zaman aşımı ama fatura oluştu → aynı ETTN bulunur, çift kesim yok
 pkgs["1005"] = { ...pkgs["1001"], shipmentPackageId: 1005, orderNumber: "A5" };
@@ -170,3 +180,4 @@ assert.equal(r6.state, "needs_review"); assert.equal(createCalls, 4);
 console.log("INVOICER OK", r6.message);
 
 try { fs.unlinkSync(process.env.TRENDYOL_STORE_PATH!); } catch {}
+try { fs.unlinkSync(`${process.env.TRENDYOL_STORE_PATH!}.keys.json`); } catch {}

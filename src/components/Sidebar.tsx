@@ -447,12 +447,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   if (isOrderItem) {
                     setIsOrdersExpanded((prev) => !prev);
                     if (!["orders", "orders_module", "quotes", "marketplace_trendyol"].includes(currentTab)) {
-                      handleSelectTabWithMobileClose("orders");
+                      handleSelectTabWithMobileClose((orderSubModules[0]?.id as NavItem) || "orders");
                     }
                   } else if (isEcommerceItem) {
                     setIsEcommerceExpanded((prev) => !prev);
                     if (!["ecommerce", "ecommerce_orders", "ecommerce_stores", "ecommerce_products", "ecommerce_finance"].includes(currentTab)) {
-                      handleSelectTabWithMobileClose("ecommerce_orders");
+                      handleSelectTabWithMobileClose((ecommerceSubModules[0]?.id as NavItem) || "ecommerce_orders");
                     }
                   } else if (isInvoiceItem) {
                     setIsInvoicesExpanded((prev) => !prev);
@@ -469,7 +469,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         "e_document_logs",
                       ].includes(currentTab)
                     ) {
-                      handleSelectTabWithMobileClose("invoices_sales");
+                      handleSelectTabWithMobileClose((invoiceSubModules[0]?.id as NavItem) || "invoices_sales");
                     }
                   } else if (isFinanceItem) {
                     setIsFinanceExpanded((prev) => !prev);
@@ -491,7 +491,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         "settings",
                       ].includes(currentTab)
                     ) {
-                      handleSelectTabWithMobileClose("company_profile");
+                      handleSelectTabWithMobileClose((companySubModules[0]?.id as NavItem) || "company_profile");
                     }
                   } else if (isHrItem) {
                     setIsHrExpanded((prev) => !prev);
@@ -508,12 +508,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         "hr_allowances",
                       ].includes(currentTab)
                     ) {
-                      handleSelectTabWithMobileClose("hr_employees");
+                      handleSelectTabWithMobileClose((hrSubModules[0]?.id as NavItem) || "hr_employees");
                     }
                   } else if (isReportsItem) {
                     setIsReportsExpanded((prev) => !prev);
                     if (!["reports", "reports_advisor"].includes(currentTab)) {
-                      handleSelectTabWithMobileClose("reports");
+                      handleSelectTabWithMobileClose((reportSubModules[0]?.id as NavItem) || "reports");
                     }
                   } else if (isConstructionItem) {
                     setIsConstructionExpanded((prev) => !prev);
@@ -1039,19 +1039,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           const handleCollapsedClick = () => {
             if (isOrderItem) {
-              onSelectTab("orders");
+              onSelectTab((orderSubModules[0]?.id as NavItem) || "orders");
             } else if (isEcommerceItem) {
-              onSelectTab("ecommerce_orders");
+              onSelectTab((ecommerceSubModules[0]?.id as NavItem) || "ecommerce_orders");
             } else if (isInvoiceItem) {
-              onSelectTab("invoices_sales");
+              onSelectTab((invoiceSubModules[0]?.id as NavItem) || "invoices_sales");
             } else if (isFinanceItem) {
               onSelectTab("accounts");
             } else if (isCompanyItem) {
-              onSelectTab("company_profile");
+              onSelectTab((companySubModules[0]?.id as NavItem) || "company_profile");
             } else if (isHrItem) {
-              onSelectTab("hr_employees");
+              onSelectTab((hrSubModules[0]?.id as NavItem) || "hr_employees");
             } else if (isReportsItem) {
-              onSelectTab("reports");
+              onSelectTab((reportSubModules[0]?.id as NavItem) || "reports");
             } else {
               onSelectTab(item.id as NavItem);
             }

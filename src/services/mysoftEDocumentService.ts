@@ -7,8 +7,11 @@ import {
   Invoice,
   MysoftDocumentFamily,
   MysoftEDocument,
+  isCompanyMysoftMatched,
+  resolveCompanyMysoftTenantIdentifier,
 } from "../types";
 import {
+  getActiveCompanyId,
   getCompaniesList,
   getStoredData,
   saveStoredData,
@@ -20,6 +23,7 @@ import { auth } from "../lib/firebase";
 import {
   normalizeMysoftTenantIdentifier,
 } from "./mysoftTenant";
+import { readStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
 import { extractFirstFileFromZip } from "../utils/mysoftZip";
 import {
   getRecentMysoftDiagnosticLogs,
@@ -993,6 +997,7 @@ export interface MysoftTenantListOptions {
   limit?: number;
   signal?: AbortSignal;
   fallback?: boolean;
+  companyId?: string;
 }
 
 /** List every taxpayer linked to the authenticated accountant/business partner. */
@@ -1032,6 +1037,9 @@ export interface MysoftConnectionStatus {
   configured?: boolean;
   mockMode?: boolean;
   environment?: string;
+  grantType?: string;
+  accessMode?: "business_partner";
+  isBusinessPartner?: boolean;
   identity?: {
     defaultTenantId?: number;
     hasDefaultTenant?: boolean;
@@ -1040,17 +1048,40 @@ export interface MysoftConnectionStatus {
   };
 }
 
+export interface MysoftBusinessPartnerSummary {
+  accessMode: "business_partner";
+  configured: boolean;
+  mockMode: boolean;
+  environment: string;
+  isBusinessPartner: boolean;
+  businessPartnerId?: number;
+  hasDefaultTenant: boolean;
+  linkedTenantCount: number;
+  linkedTenantVkns: string[];
+}
+
 export async function getMysoftConnectionStatus(
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; companyId?: string } = {},
 ): Promise<MysoftConnectionStatus> {
   const { payload } = await proxyRequest("", { method: "GET", signal: options.signal }, "status");
   return asRecord(payload) as MysoftConnectionStatus;
 }
 
+export async function getMysoftBusinessPartnerSummary(
+  options: { signal?: AbortSignal; companyId?: string } = {},
+): Promise<MysoftBusinessPartnerSummary> {
+  const { payload } = await proxyRequest(
+    "",
+    { method: "GET", signal: options.signal },
+    "business-partner/summary",
+  );
+  return asRecord(payload) as unknown as MysoftBusinessPartnerSummary;
+}
+
 /** Retrieve one linked taxpayer by VKN/TCKN. */
 export async function getMysoftTenant(
   identifierNumber: string,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; companyId?: string } = {},
 ): Promise<MysoftTenant | null> {
   const identifier = identifierNumber.trim();
   if (!identifier) throw new Error("VKN/TCKN gereklidir.");
@@ -2199,10 +2230,92 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
+export interface MatchedCompanyMysoftContext {
+  companyId?: string;
+  tenantIdentifierNumber?: string;
+  isMatched: boolean;
+  accessMode: "business_partner";
+  partnerTenantId?: string;
+  partnerName?: string;
+}
+
+/**
+ * Mysoft VKN/TCKN Eşleştirme Masasında eşleştirilen aktif veya hedef şirketin
+ * Mysoft İş Ortağı API erişim bağlamını (tenantIdentifierNumber ve companyId) çözümler.
+ */
+export function resolveMatchedCompanyMysoftContext(options?: {
+  companyId?: string;
+  tenantIdentifierNumber?: string;
+}): MatchedCompanyMysoftContext {
+  const explicitTenant = normalizeMysoftTenantIdentifier(options?.tenantIdentifierNumber);
+  try {
+    const companies = getCompaniesList();
+    const activeCompId = options?.companyId || getActiveCompanyId();
+    const matchedComp =
+      (activeCompId ? companies.find((c) => c.id === activeCompId) : undefined) ||
+      (explicitTenant
+        ? companies.find(
+            (c) =>
+              resolveCompanyMysoftTenantIdentifier(c) === explicitTenant ||
+              String(c.vkn || "").replace(/\D/g, "") === explicitTenant ||
+              String(c.tckn || "").replace(/\D/g, "") === explicitTenant ||
+              String(c.taxNumber || "").replace(/\D/g, "") === explicitTenant,
+          )
+        : undefined) ||
+      companies[0];
+
+    const resolvedCompanyId = matchedComp?.id || activeCompId || undefined;
+    const storedSettings = resolvedCompanyId ? getStoredData(resolvedCompanyId)?.settings : undefined;
+    const isMatched = isCompanyMysoftMatched(matchedComp, storedSettings);
+    const resolvedTenant =
+      explicitTenant ||
+      resolveCompanyMysoftTenantIdentifier(matchedComp, storedSettings) ||
+      readStoredMysoftTenantVkn();
+
+    return {
+      companyId: resolvedCompanyId,
+      tenantIdentifierNumber: resolvedTenant,
+      isMatched: Boolean(isMatched || resolvedTenant),
+      accessMode: "business_partner",
+      partnerTenantId: matchedComp?.mysoftPartnerTenantId || storedSettings?.mysoftPartnerTenantId,
+      partnerName: matchedComp?.mysoftPartnerName || storedSettings?.mysoftPartnerName,
+    };
+  } catch {
+    return {
+      companyId: options?.companyId,
+      tenantIdentifierNumber: explicitTenant || readStoredMysoftTenantVkn(),
+      isMatched: Boolean(explicitTenant),
+      accessMode: "business_partner",
+    };
+  }
+}
+
+function extractExplicitTenantFromProxyCall(path: string, init: RequestInit): string | undefined {
+  try {
+    const qIdx = path.indexOf("?");
+    if (qIdx >= 0) {
+      const params = new URLSearchParams(path.slice(qIdx + 1));
+      const fromQuery = normalizeMysoftTenantIdentifier(
+        params.get("tenantIdentifierNumber") || params.get("vkn"),
+      );
+      if (fromQuery) return fromQuery;
+    }
+    if (typeof init.body === "string" && init.body.trim().startsWith("{")) {
+      const parsed = JSON.parse(init.body) as Record<string, unknown>;
+      const fromBody = normalizeMysoftTenantIdentifier(parsed?.tenantIdentifierNumber);
+      if (fromBody) return fromBody;
+    }
+  } catch {
+    // Ignore malformed query/body
+  }
+  return undefined;
+}
+
 async function proxyRequest(
   path: string,
   init: RequestInit = {},
   resource = "e-documents",
+  contextHints?: { companyId?: string; tenantIdentifierNumber?: string },
 ): Promise<{ response: Response; payload: unknown }> {
   // Production deployments protect the server-side Mysoft proxy with the
   // signed-in Firebase user's ID token.  Wait for Firebase's initial auth
@@ -2220,11 +2333,34 @@ async function proxyRequest(
     // Let the proxy return its normal 401/configuration response. Do not
     // block local fallback logins or expose Firebase internals in the UI.
   }
+
+  // Eşleştirilen tüm şirket ve firmaların Mysoft API çağrıları merkezi Mysoft İş Ortağı
+  // bağlantısı üzerinden şirketin eşleştirilmiş VKN/TCKN (tenantIdentifierNumber) yetkisiyle yapılır.
+  const isTenantAgnosticResource =
+    resource === "status" ||
+    resource === "tenants" ||
+    resource === "business-partner/summary" ||
+    path.startsWith("diagnostics");
+
+  const explicitTenant =
+    contextHints?.tenantIdentifierNumber || extractExplicitTenantFromProxyCall(path, init);
+  const partnerContext = !isTenantAgnosticResource
+    ? resolveMatchedCompanyMysoftContext({
+        companyId: contextHints?.companyId,
+        tenantIdentifierNumber: explicitTenant,
+      })
+    : undefined;
+
   const response = await fetch(`/api/mysoft/${resource}${path}`, {
     ...init,
     headers: {
       Accept:
         "application/json, application/zip, application/pdf, application/xml, text/html;q=0.9",
+      "X-Mysoft-Access-Mode": "business_partner",
+      ...(partnerContext?.companyId ? { "X-Company-Id": partnerContext.companyId } : {}),
+      ...(partnerContext?.tenantIdentifierNumber
+        ? { "X-Tenant-Identifier": partnerContext.tenantIdentifierNumber }
+        : {}),
       ...(authorization ? { Authorization: authorization } : {}),
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(init.headers || {}),
@@ -2263,9 +2399,24 @@ async function proxyRequest(
  */
 export async function createMysoftOutgoingEDocument(
   payload: unknown,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; companyId?: string; tenantIdentifierNumber?: string } = {},
 ): Promise<unknown> {
-  const validation = validateMysoftInvoiceOutboxPayload(payload, {
+  const partnerCtx = resolveMatchedCompanyMysoftContext({
+    companyId: options.companyId,
+    tenantIdentifierNumber: options.tenantIdentifierNumber,
+  });
+  const enrichedInput =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? {
+          ...(payload as Record<string, unknown>),
+          tenantIdentifierNumber:
+            normalizeMysoftTenantIdentifier(
+              (payload as Record<string, unknown>).tenantIdentifierNumber,
+            ) || partnerCtx.tenantIdentifierNumber,
+        }
+      : payload;
+
+  const validation = validateMysoftInvoiceOutboxPayload(enrichedInput, {
     requireTenantIdentifier: false,
     autoRepair: true,
   });
@@ -2276,11 +2427,19 @@ export async function createMysoftOutgoingEDocument(
       validation.nullGuard,
     );
   }
-  const { payload: result } = await proxyRequest("/outgoing", {
-    method: "POST",
-    body: JSON.stringify(validation.sanitizedPayload),
-    signal: options.signal,
-  });
+  const { payload: result } = await proxyRequest(
+    "/outgoing",
+    {
+      method: "POST",
+      body: JSON.stringify(validation.sanitizedPayload),
+      signal: options.signal,
+    },
+    "e-documents",
+    {
+      companyId: partnerCtx.companyId,
+      tenantIdentifierNumber: partnerCtx.tenantIdentifierNumber,
+    },
+  );
   return result;
 }
 
@@ -3777,19 +3936,25 @@ export async function checkRecipientTaxpayerStatus(
     };
   };
 
-  const cacheKey = `${clean}:${tenantIdentifierNumber || ""}`;
+  const resolvedTenant =
+    normalizeMysoftTenantIdentifier(tenantIdentifierNumber) ||
+    resolveMatchedCompanyMysoftContext().tenantIdentifierNumber;
+  const cacheKey = `${clean}:${resolvedTenant || ""}`;
   if (recipientCache.has(cacheKey)) {
     return enrichWithLocalAndNormalizedAddress(recipientCache.get(cacheKey)!);
   }
   try {
-    const tenantQuery = tenantIdentifierNumber ? `?tenantIdentifierNumber=${encodeURIComponent(tenantIdentifierNumber)}` : "";
-    const res = await fetch(`/api/mysoft/check-recipient/${encodeURIComponent(clean)}${tenantQuery}`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal,
-    });
-    if (res.ok) {
-      const data: RecipientTaxpayerStatus = await res.json();
+    const tenantQuery = resolvedTenant
+      ? `?tenantIdentifierNumber=${encodeURIComponent(resolvedTenant)}`
+      : "";
+    const { payload } = await proxyRequest(
+      `/${encodeURIComponent(clean)}${tenantQuery}`,
+      { method: "GET", signal },
+      "check-recipient",
+      { tenantIdentifierNumber: resolvedTenant },
+    );
+    if (payload && typeof payload === "object") {
+      const data = payload as RecipientTaxpayerStatus;
       const enriched = enrichWithLocalAndNormalizedAddress(data);
       recipientCache.set(cacheKey, enriched);
       return enriched;
@@ -3960,32 +4125,44 @@ export async function getTaxpayerDetails(
 ): Promise<any> {
   const clean = String(identifierNumber || "").replace(/\D/g, "").trim();
   if (!clean) return null;
-  const tenantQuery = tenantIdentifierNumber ? `?tenantIdentifierNumber=${encodeURIComponent(tenantIdentifierNumber)}` : "";
-  const res = await fetch(`/api/mysoft/taxpayer/${encodeURIComponent(clean)}${tenantQuery}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  if (!res.ok) throw new Error(`Mükellef sorgulama hatası: ${res.status}`);
-  return await res.json();
+  const resolvedTenant =
+    normalizeMysoftTenantIdentifier(tenantIdentifierNumber) ||
+    resolveMatchedCompanyMysoftContext().tenantIdentifierNumber;
+  const tenantQuery = resolvedTenant
+    ? `?tenantIdentifierNumber=${encodeURIComponent(resolvedTenant)}`
+    : "";
+  const { payload } = await proxyRequest(
+    `/${encodeURIComponent(clean)}${tenantQuery}`,
+    { method: "GET", signal },
+    "taxpayer",
+    { tenantIdentifierNumber: resolvedTenant },
+  );
+  return payload;
 }
 
 /**
- * Official GİB account lookup from Mysoft (Gib Hesap Sorgula).
+ * Official GİB account lookup from Mysoft (Gib Hesap Sorgula) via Business Partner access.
  */
 export async function getGibAccountDetails(
   vknTckn: string,
   signal?: AbortSignal,
+  tenantIdentifierNumber?: string,
 ): Promise<any> {
   const clean = String(vknTckn || "").replace(/\D/g, "").trim();
   if (!clean) return null;
-  const res = await fetch(`/api/mysoft/gib-account/${encodeURIComponent(clean)}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  if (!res.ok) throw new Error(`GİB hesap sorgulama hatası: ${res.status}`);
-  return await res.json();
+  const resolvedTenant =
+    normalizeMysoftTenantIdentifier(tenantIdentifierNumber) ||
+    resolveMatchedCompanyMysoftContext().tenantIdentifierNumber;
+  const tenantQuery = resolvedTenant
+    ? `?tenantIdentifierNumber=${encodeURIComponent(resolvedTenant)}`
+    : "";
+  const { payload } = await proxyRequest(
+    `/${encodeURIComponent(clean)}${tenantQuery}`,
+    { method: "GET", signal },
+    "gib-account",
+    { tenantIdentifierNumber: resolvedTenant },
+  );
+  return payload;
 }
 
 // Stable alias for code that refers to this as the generic Mysoft service.
@@ -3997,4 +4174,6 @@ export const mysoftEDocumentService = {
   checkRecipient: checkRecipientTaxpayerStatus,
   getTaxpayerDetails,
   getGibAccountDetails,
+  getBusinessPartnerSummary: getMysoftBusinessPartnerSummary,
+  resolveMatchedCompanyContext: resolveMatchedCompanyMysoftContext,
 };

@@ -3261,6 +3261,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
       isSaveAsDraft: true,
       tenantIdentifierNumber: effectiveTenant,
       pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
+      // Gelir faturaları gönderilirken özel tasarım kullanılmaz; Mysoft portal giden fatura tasarımı kullanılır
+      xsltName: undefined,
+      xsltSetCode: undefined,
     });
   }, [
     customerMode,
@@ -3851,6 +3854,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
             isSaveAsDraft: false,
             tenantIdentifierNumber: effectiveTenant,
             pkAlias: isCurrentSalesEArsiv ? undefined : recipientStatus?.pkAlias,
+            // Gelir faturaları gönderilirken özel tasarım kullanılmaz; Mysoft portal giden fatura tasarımı kullanılır
+            xsltName: undefined,
+            xsltSetCode: undefined,
           });
           const preCheck = validateMysoftInvoiceOutboxPayload(payload, {
             requireTenantIdentifier: true,
@@ -5347,6 +5353,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
           </label>
           {sendToMysoft && (
             <div className="pl-6 space-y-3">
+              {/* Mysoft Giden Fatura Tasarımı Bilgilendirme Rozeti */}
+              <div className="flex items-center gap-2 p-2.5 bg-purple-50/80 border border-purple-200/90 rounded-xl text-xs text-purple-950">
+                <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-extrabold flex items-center gap-1.5">
+                    <span>Gönderim Tasarımı:</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-200/80 text-purple-900 font-bold">
+                      Mysoft Giden Fatura Tasarımı
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-purple-800/80 mt-0.5">
+                    Gelir faturaları gönderilirken özel tasarım kullanılmaz; faturanız doğrudan Mysoft portalında tanımlı resmi giden fatura tasarımı (XSLT) ile iletilir.
+                  </p>
+                </div>
+              </div>
+
               <MysoftTenantPicker
                 value={mysoftTenantVkn}
                 variant="compact"

@@ -14,3 +14,8 @@ sessions
 # Trendyol entegrasyonu: şifreli API bilgileri imaja girmesin
 data/trendyol_store.json
 data/.trendyol.key
+data/.trendyol.keys.json
+
+# Mysoft şirket bazlı şifreli API bilgileri imaja girmesin
+data/mysoft_connections.json
+data/.mysoft.key

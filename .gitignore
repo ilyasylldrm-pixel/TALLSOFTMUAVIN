@@ -60,3 +60,10 @@ bun.lockb
 data/trendyol_store.json
 data/trendyol_store.json.*.tmp
 data/.trendyol.key
+data/.trendyol.keys.json
+data/.trendyol.keys.json.*.tmp
+
+# Mysoft şirket bazlı şifreli API erişim bilgileri (asla commit edilmez)
+data/mysoft_connections.json
+data/mysoft_connections.json.*.tmp
+data/.mysoft.key

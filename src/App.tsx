@@ -4074,6 +4074,7 @@ export default function App() {
     }
 
     const tabPermissionMap: Record<string, { key: string; parent?: string }> = {
+      dashboard: { key: "dashboard" },
       company: { key: "company" },
       company_profile: { key: "company_profile", parent: "company" },
       company_branches: { key: "company_branches", parent: "company" },
@@ -4082,35 +4083,44 @@ export default function App() {
       company_settings: { key: "company_settings", parent: "company" },
       company_companies: { key: "company_companies", parent: "company" },
       company_mysoft: { key: "company_mysoft", parent: "company" },
+      company_logs: { key: "company_logs", parent: "company" },
+      e_document_logs: { key: "company_logs", parent: "company" },
       contacts: { key: "contacts" },
-      contacts_debtors: { key: "contacts_customers", parent: "contacts" },
-      contacts_risky: { key: "contacts_customers", parent: "contacts" },
+      contacts_debtors: { key: "contacts" },
+      contacts_risky: { key: "contacts" },
       invoices: { key: "invoices" },
       invoices_sales: { key: "invoices_sales", parent: "invoices" },
       invoices_purchase: { key: "invoices_purchase", parent: "invoices" },
-      e_documents_outgoing: { key: "invoices_sales", parent: "invoices" },
-      e_documents_incoming: { key: "invoices_purchase", parent: "invoices" },
+      e_documents_outgoing: { key: "e_documents_outgoing", parent: "invoices" },
+      e_documents_incoming: { key: "e_documents_incoming", parent: "invoices" },
+      waybills: { key: "waybills", parent: "invoices" },
+      waybills_dispatch: { key: "waybills_dispatch", parent: "invoices" },
+      waybills_receipt: { key: "waybills_receipt", parent: "invoices" },
       orders_module: { key: "orders_module" },
-      orders: { key: "orders_sales", parent: "orders_module" },
-      quotes: { key: "orders_quotes", parent: "orders_module" },
+      orders: { key: "orders", parent: "orders_module" },
+      quotes: { key: "quotes", parent: "orders_module" },
+      marketplace_trendyol: { key: "marketplace_trendyol", parent: "orders_module" },
       ecommerce: { key: "ecommerce" },
       ecommerce_orders: { key: "ecommerce_orders", parent: "ecommerce" },
       ecommerce_stores: { key: "ecommerce_stores", parent: "ecommerce" },
       ecommerce_products: { key: "ecommerce_products", parent: "ecommerce" },
       ecommerce_finance: { key: "ecommerce_finance", parent: "ecommerce" },
-      quotes_and_slips: { key: "invoices_expense", parent: "invoices" },
+      quotes_and_slips: { key: "invoices_purchase", parent: "invoices" },
       accounts: { key: "accounts" },
-      transactions: { key: "finance_gelir_gider", parent: "accounts" },
+      finance_kasa: { key: "finance_kasa", parent: "accounts" },
+      finance_banka: { key: "finance_banka", parent: "accounts" },
+      finance_cek: { key: "finance_cek", parent: "accounts" },
+      finance_senet: { key: "finance_senet", parent: "accounts" },
+      finance_virman: { key: "finance_virman", parent: "accounts" },
+      transactions: { key: "transactions", parent: "accounts" },
       income_slips: { key: "invoices_sales", parent: "invoices" },
-      expenses: { key: "invoices_expense", parent: "invoices" },
+      expenses: { key: "invoices_purchase", parent: "invoices" },
       products: { key: "products" },
-      products_list: { key: "products_stock", parent: "products" },
+      products_list: { key: "products_list", parent: "products" },
+      products_warehouses: { key: "products_warehouses", parent: "products" },
       fixed_assets: { key: "fixed_assets" },
       production: { key: "production" },
-      sectors: { key: "sectors_hub" },
-      waybills: { key: "waybills" },
-      waybills_dispatch: { key: "waybills_sales", parent: "waybills" },
-      waybills_receipt: { key: "waybills_purchase", parent: "waybills" },
+      sectors: { key: "sectors" },
       auto_service: { key: "auto_service" },
       it_service: { key: "it_service" },
       appliance_service: { key: "appliance_service" },
@@ -4125,7 +4135,8 @@ export default function App() {
       hr_zimmet: { key: "hr_zimmet", parent: "hr" },
       hr_allowances: { key: "hr_allowances", parent: "hr" },
       files: { key: "files" },
-      reports: { key: "reports_tax", parent: "reports" },
+      reports: { key: "reports" },
+      reports_tax: { key: "reports_tax", parent: "reports" },
       reports_advisor: { key: "reports_advisor", parent: "reports" },
       e_services: { key: "e_services" },
       company_e_services: { key: "e_services" },
@@ -4141,6 +4152,13 @@ export default function App() {
       activeCompanyObj
     );
   };
+
+  // Eğer kullanıcının yetkileri güncellendiğinde mevcut sekme yetkisiz hale gelirse ana sayfaya yönlendir
+  useEffect(() => {
+    if (currentTab !== "dashboard" && !isCurrentTabAuthorized(currentTab)) {
+      setCurrentTab("dashboard");
+    }
+  }, [currentTab, currentUser, activeCompanyId]);
 
   return (
     <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased md:gap-x-4 lg:gap-x-5">
@@ -4356,11 +4374,10 @@ export default function App() {
               currentUser={currentUser}
               tenantIdentifierNumber={
                 activeCompanyObj?.tenantIdentifierNumber ||
-                activeCompanyObj?.taxNumber ||
-                activeCompanyObj?.vkn ||
-                activeCompanyObj?.tckn ||
                 data.settings.tenantIdentifierNumber ||
                 data.settings.mysoftCredentials?.tenantIdentifierNumber ||
+                activeCompanyObj?.vkn ||
+                activeCompanyObj?.tckn ||
                 data.settings.taxNumber ||
                 readStoredMysoftTenantVkn()
               }
@@ -4622,11 +4639,10 @@ export default function App() {
               currentUser={currentUser}
               tenantIdentifierNumber={
                 activeCompanyObj?.tenantIdentifierNumber ||
-                activeCompanyObj?.taxNumber ||
-                activeCompanyObj?.vkn ||
-                activeCompanyObj?.tckn ||
                 data.settings.tenantIdentifierNumber ||
                 data.settings.mysoftCredentials?.tenantIdentifierNumber ||
+                activeCompanyObj?.vkn ||
+                activeCompanyObj?.tckn ||
                 data.settings.taxNumber ||
                 readStoredMysoftTenantVkn()
               }

@@ -2,10 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   PlugZap,
   RefreshCw,
+  ShieldCheck,
   Store,
   Trash2,
   Zap,
@@ -23,6 +26,8 @@ import { ModuleEntranceHeader } from "../common/ModuleEntranceHeader";
 interface ConnectionView {
   connected: boolean;
   secretReadable?: boolean;
+  hasSecretKey?: boolean;
+  secretKeyMasked?: string;
   sellerId?: string;
   apiKeyMasked?: string;
   environment?: "prod" | "stage";
@@ -138,6 +143,9 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
   const [sellerId, setSellerId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [trendyolSecretKey, setTrendyolSecretKey] = useState("");
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [environment, setEnvironment] = useState<"prod" | "stage">("prod");
   const [autoInvoice, setAutoInvoice] = useState(false);
   const [statuses, setStatuses] = useState<string[]>(["Picking", "Invoiced", "Shipped", "Delivered"]);
@@ -152,6 +160,14 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
   const [busyPackage, setBusyPackage] = useState<string | null>(null);
   const [confirmPackage, setConfirmPackage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+
+  const generateTrendyolSecretKey = () => {
+    const bytes = new Uint8Array(24);
+    window.crypto.getRandomValues(bytes);
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    setTrendyolSecretKey(hex);
+    setShowSecretKey(true);
+  };
 
   const applyView = (view: ConnectionView) => {
     setConn(view);
@@ -209,6 +225,7 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
           sellerId,
           apiKey: apiKey || undefined,
           apiSecret: apiSecret || undefined,
+          trendyolSecretKey: trendyolSecretKey.trim() || undefined,
           environment,
           autoInvoice,
           invoiceStatuses: statuses,
@@ -222,6 +239,7 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
       applyView(view);
       setApiKey("");
       setApiSecret("");
+      setTrendyolSecretKey("");
       setNotice({ tone: "ok", text: "Trendyol bağlantısı doğrulandı ve kaydedildi." });
     } catch (error) {
       setNotice({ tone: "err", text: (error as Error).message });
@@ -231,12 +249,13 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
   };
 
   const remove = async () => {
-    if (!window.confirm("Trendyol bağlantısı silinsin mi? Kesilmiş faturalar etkilenmez.")) return;
+    setConfirmRemove(false);
     try {
       await api(companyId, "/connection", { method: "DELETE" });
       setConn({ connected: false });
       setPackages([]);
       setSellerId("");
+      setTrendyolSecretKey("");
       setNotice({ tone: "ok", text: "Bağlantı silindi." });
     } catch (error) {
       setNotice({ tone: "err", text: (error as Error).message });
@@ -392,6 +411,42 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
               <option value="0">%0</option>
             </select>
           </label>
+          <div className="space-y-1 md:col-span-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#0f6bae]" />
+                TRENDYOL_SECRET_KEY (AES-256 Şifreleme Anahtarı)
+              </span>
+              <button
+                type="button"
+                onClick={generateTrendyolSecretKey}
+                className="text-[11px] font-bold text-[#0f6bae] hover:underline"
+              >
+                Otomatik Üret (48 Karakter)
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                className={`${inputCls} pr-9 font-mono`}
+                type={showSecretKey ? "text" : "password"}
+                value={trendyolSecretKey}
+                onChange={(e) => setTrendyolSecretKey(e.target.value)}
+                placeholder={
+                  conn?.secretKeyMasked
+                    ? `Kayıtlı: ${conn.secretKeyMasked} (Değiştirmek için yeni değer girin)`
+                    : "Yeni Mağaza & API Bağlantısı Ekle bölümünden veya buradan girin (en az 32 karakter önerilir)"
+                }
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecretKey((prev) => !prev)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                {showSecretKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -448,13 +503,32 @@ export const TrendyolIntegration: React.FC<{ companyId: string; companySettings:
             {conn?.connected ? "Kaydet" : "Bağlan ve Test Et"}
           </button>
           {conn?.connected && (
-            <button
-              type="button"
-              onClick={remove}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold border border-rose-200 text-rose-700 bg-white flex items-center gap-2 hover:bg-rose-50"
-            >
-              <Trash2 className="w-4 h-4" /> Bağlantıyı Sil
-            </button>
+            confirmRemove ? (
+              <span className="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={remove}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-700"
+                >
+                  Silmeyi Onayla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemove(false)}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 text-slate-600 bg-white"
+                >
+                  Vazgeç
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmRemove(true)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold border border-rose-200 text-rose-700 bg-white flex items-center gap-2 hover:bg-rose-50"
+              >
+                <Trash2 className="w-4 h-4" /> Bağlantıyı Sil
+              </button>
+            )
           )}
           {conn?.lastSyncAt && (
             <span className="text-[11px] text-slate-500">

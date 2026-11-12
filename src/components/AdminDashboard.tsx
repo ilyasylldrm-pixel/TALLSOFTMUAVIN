@@ -793,6 +793,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       );
       handleCancelUserDraft(userId);
       setConfirmSaveUser(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
+      }
     } catch (err) {
       console.error("Save error:", err);
       triggerFormErrorNotification("Yetkiler kaydedilirken bir hata oluştu.", "Yetki Kayıt Hatası");
@@ -832,6 +835,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
 
       await fetchData();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
+      }
       setConfirmBatchSaveModalOpen(false);
     } catch (err) {
       console.error("Batch save error:", err);
@@ -1167,6 +1173,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setDeleteUserSuccessMessage(
         `"${editingPermissionsUser.name}" kullanıcısının yetki ve şifre bilgileri başarıyla kaydedildi.`
       );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
+      }
       setTimeout(() => setDeleteUserSuccessMessage(null), 4000);
     } catch (err) {
       console.error("Save permissions error:", err);

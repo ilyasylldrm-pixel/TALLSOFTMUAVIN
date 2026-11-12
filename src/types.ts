@@ -425,6 +425,10 @@ export interface CompanyItem {
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   invoiceDesign?: InvoiceDesignSettings;
+  mysoftPartnerTenantId?: string;
+  mysoftPartnerName?: string;
+  mysoftAccessMode?: string;
+  mysoftCredentials?: MysoftCredentials;
   createdAt: string;
 }
 
@@ -432,6 +436,14 @@ export interface MysoftCredentials {
   tenantIdentifierNumber?: string;
   username?: string;
   password?: string;
+  accessMode?: string;
+  partnerTenantId?: string;
+  partnerName?: string;
+  authType?: string;
+  environment?: string;
+  clientId?: string;
+  clientSecret?: string;
+  connectorGuid?: string;
 }
 
 /**
@@ -458,6 +470,50 @@ export function isCompanyMysoftMatched(
   if (settingsTenant.length === 10 || settingsTenant.length === 11) return true;
   if (settings?.mysoftStatus === "verified") return true;
   return false;
+}
+
+/**
+ * Verilen şirket veya ayar nesnesinden Mysoft VKN/TCKN tenant numarasını çözer.
+ */
+export function resolveCompanyMysoftTenantIdentifier(
+  company?: (Partial<CompanyItem> & {
+    tenantIdentifierNumber?: string;
+    taxNumber?: string;
+    vkn?: string;
+    tckn?: string;
+    vknTckn?: string;
+    mysoftCredentials?: { tenantIdentifierNumber?: string };
+  }) | null,
+  settings?: {
+    tenantIdentifierNumber?: string;
+    taxNumber?: string;
+    vknTckn?: string;
+    mysoftCredentials?: { tenantIdentifierNumber?: string };
+  } | null
+): string {
+  const clean = (val?: string) => String(val || "").replace(/\D/g, "").trim();
+
+  const compTenant =
+    clean(company?.tenantIdentifierNumber) ||
+    clean(company?.mysoftCredentials?.tenantIdentifierNumber) ||
+    clean(company?.vkn) ||
+    clean(company?.tckn) ||
+    clean(company?.taxNumber) ||
+    clean((company as any)?.vknTckn);
+  if (compTenant.length === 10 || compTenant.length === 11) {
+    return compTenant;
+  }
+
+  const settTenant =
+    clean(settings?.tenantIdentifierNumber) ||
+    clean(settings?.mysoftCredentials?.tenantIdentifierNumber) ||
+    clean(settings?.taxNumber) ||
+    clean(settings?.vknTckn);
+  if (settTenant.length === 10 || settTenant.length === 11) {
+    return settTenant;
+  }
+
+  return compTenant || settTenant || "";
 }
 
 export type DocumentKind = "invoice" | "receipt"; // invoice = Fatura, receipt = Fiş (Gelir/Gider Fişi)
@@ -933,6 +989,9 @@ export interface CompanySettings {
   mysoftUsername?: string;
   mysoftPassword?: string;
   mysoftCredentials?: MysoftCredentials;
+  mysoftPartnerTenantId?: string;
+  mysoftPartnerName?: string;
+  mysoftAccessMode?: string;
   /** Son manuel veri yedekleme zamanı (ISO 8601) ve 7 günlük bildirim yapılandırması */
   lastManualBackupAt?: string;
   manualBackupReminderDays?: number;
@@ -2235,16 +2294,15 @@ export function isModuleOrSubModuleAllowed(
   if (isAdminOrSysAdmin(currentUser)) return true;
   if (moduleKey === "admin" || moduleKey === "company_companies" || moduleKey === "company_mysoft") return false;
 
-  // 1. Şirket bazlı modül ve alt modül kısıtlaması
-  if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {
-    if (!isKeyAllowedInList(moduleKey, parentKey, activeCompany.allowedModules)) {
-      return false;
-    }
+  // 1. Kullanıcı bazlı modül ve alt modül yetkilendirmesi:
+  // Admin tarafından kullanıcıya özel yetkilendirme (allowedModules) tanımlanmışsa doğrudan kullanıcının yetki listesi belirleyicidir
+  if (currentUser && Array.isArray(currentUser.allowedModules)) {
+    return isKeyAllowedInList(moduleKey, parentKey, currentUser.allowedModules);
   }
 
-  // 2. Kullanıcı bazlı modül ve alt modül kısıtlaması
-  if (currentUser && Array.isArray(currentUser.allowedModules) && currentUser.allowedModules.length > 0) {
-    if (!isKeyAllowedInList(moduleKey, parentKey, currentUser.allowedModules)) {
+  // 2. Kullanıcıya özel yetki listesi tanımlanmamışsa şirket bazlı modül kısıtlamasına bakılır
+  if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {
+    if (!isKeyAllowedInList(moduleKey, parentKey, activeCompany.allowedModules)) {
       return false;
     }
   }

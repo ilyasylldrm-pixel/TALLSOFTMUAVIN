@@ -4,6 +4,7 @@ import {
   MarketplaceId,
   MarketplaceStoreConfig,
 } from "./ECommerceModule";
+import { auth } from "../lib/firebase";
 import { formatCurrency } from "../utils/exportUtils";
 import {
   Globe,
@@ -221,6 +222,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     integrationRefCode: string;
     apiKey: string;
     apiSecret: string;
+    trendyolSecretKey: string;
     apiToken: string;
     commissionRate: number;
     shippingDeductionAvg: number;
@@ -234,6 +236,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     integrationRefCode: "",
     apiKey: "",
     apiSecret: "",
+    trendyolSecretKey: "",
     apiToken: "",
     commissionRate: 18.5,
     shippingDeductionAvg: 64.9,
@@ -263,6 +266,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         integrationRefCode: existing.integrationRefCode || "",
         apiKey: existing.apiKey,
         apiSecret: existing.apiSecret,
+        trendyolSecretKey: existing.trendyolSecretKey || "",
         apiToken: existing.apiToken || "",
         commissionRate: existing.commissionRate,
         shippingDeductionAvg: existing.shippingDeductionAvg,
@@ -278,6 +282,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         integrationRefCode: "",
         apiKey: "",
         apiSecret: "",
+        trendyolSecretKey: "",
         apiToken: "",
         commissionRate: tpl.defaultCommission,
         shippingDeductionAvg: tpl.defaultCargo,
@@ -288,6 +293,47 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       });
     }
     setIsModalOpen(true);
+  };
+
+  const syncTrendyolBackend = async (company: CompanyItem, config: MarketplaceStoreConfig) => {
+    if (config.id !== "trendyol" && config.id !== "trendyol_go") return;
+    if (!config.supplierId || !config.apiKey || !config.apiSecret) return;
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-company-id": company.id,
+      };
+      if (auth.currentUser) {
+        headers.Authorization = `Bearer ${await auth.currentUser.getIdToken()}`;
+      } else {
+        const raw =
+          window.localStorage.getItem("muavin_active_user") ||
+          window.sessionStorage.getItem("muavin_active_user");
+        const parsed = raw ? JSON.parse(raw) : null;
+        const uid = String(parsed?.id || parsed?.userId || company.id).trim();
+        headers.Authorization = `Bearer ${uid}`;
+        headers["x-user-id"] = uid;
+      }
+      await fetch(
+        `/api/marketplace/trendyol/connection?companyId=${encodeURIComponent(company.id)}`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            companyId: company.id,
+            sellerId: config.supplierId,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret,
+            trendyolSecretKey: config.trendyolSecretKey || undefined,
+            autoInvoice: config.autoInvoice,
+            tenantIdentifierNumber: company.vkn || company.tckn || company.taxNumber || "",
+            skipValidation: true,
+          }),
+        }
+      );
+    } catch {
+      /* çevrimdışı modda yerel eşleşme korunur */
+    }
   };
 
   const handleSaveMatch = (e: React.FormEvent) => {
@@ -307,6 +353,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       integrationRefCode: formState.integrationRefCode.trim() || undefined,
       apiKey: formState.apiKey.trim(),
       apiSecret: formState.apiSecret.trim(),
+      trendyolSecretKey:
+        formState.id === "trendyol" || formState.id === "trendyol_go"
+          ? formState.trendyolSecretKey.trim() || undefined
+          : undefined,
       apiToken: formState.apiToken.trim() || undefined,
       commissionRate: Number(formState.commissionRate),
       shippingDeductionAvg: Number(formState.shippingDeductionAvg),
@@ -326,6 +376,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         : [...currentList, newConfig];
 
     saveCompanyMatchedEcommerceStores(selectedCompany.id, updatedList);
+    void syncTrendyolBackend(selectedCompany, newConfig);
     setCompanyStoresMap((prev) => ({
       ...prev,
       [selectedCompany.id]: updatedList,
@@ -691,6 +742,31 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                           )}
                         </div>
                       </div>
+                      {(st.id === "trendyol" || st.id === "trendyol_go") && st.trendyolSecretKey && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">TRENDYOL_SECRET_KEY:</span>
+                          <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-700">
+                            <span>
+                              {showSecrets
+                                ? st.trendyolSecretKey
+                                : `${st.trendyolSecretKey.slice(0, 4)}••••${st.trendyolSecretKey.slice(-4)}`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCopy(st.trendyolSecretKey!, `tsec_${selectedCompany.id}_${st.id}`)
+                              }
+                              className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                            >
+                              {copiedKey === `tsec_${selectedCompany.id}_${st.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {(st.apiToken || st.id === "trendyol_go" || st.id === "ubereats") && (
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500">Token:</span>
@@ -803,6 +879,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                       integrationRefCode: existing?.integrationRefCode || "",
                       apiKey: existing?.apiKey || "",
                       apiSecret: existing?.apiSecret || "",
+                      trendyolSecretKey: existing?.trendyolSecretKey || "",
                       apiToken: existing?.apiToken || "",
                       commissionRate: existing?.commissionRate ?? tpl.defaultCommission,
                       shippingDeductionAvg: existing?.shippingDeductionAvg ?? tpl.defaultCargo,
@@ -905,6 +982,38 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                   />
                 </div>
               </div>
+
+              {(formState.id === "trendyol" || formState.id === "trendyol_go") && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#0f6bae]" />
+                      <span>TRENDYOL_SECRET_KEY (AES-256 Şifreleme Anahtarı)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const bytes = new Uint8Array(24);
+                        window.crypto.getRandomValues(bytes);
+                        const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+                        setFormState((prev) => ({ ...prev, trendyolSecretKey: hex }));
+                      }}
+                      className="text-[11px] font-bold text-[#0f6bae] hover:underline cursor-pointer"
+                    >
+                      Otomatik Üret
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="En az 32 karakter rastgele anahtar (veya Otomatik Üret'e tıklayın)..."
+                    value={formState.trendyolSecretKey}
+                    onChange={(e) =>
+                      setFormState((prev) => ({ ...prev, trendyolSecretKey: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-mono"
+                  />
+                </div>
+              )}
 
               {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
                 <div>

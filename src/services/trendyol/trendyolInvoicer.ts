@@ -39,6 +39,8 @@ import type { LedgerEntry, TrendyolConnectionRecord, TrendyolStore } from "./tre
 export interface InvoicerDeps {
   store: TrendyolStore;
   mysoft: MysoftEdocumentClient;
+  /** Eşleştirilen şirket için özel Mysoft API istemcisi çözücü (varsa global yerine kullanılır). */
+  resolveMysoftClient?: (companyId: string, tenantIdentifierNumber?: string) => MysoftEdocumentClient;
   /** Sunucudaki güncel firma ayarları (cloud-sync deposu). */
   resolveCompanySettings: (companyId: string) => Partial<CompanySettings> | null;
 }
@@ -89,6 +91,12 @@ export class TrendyolInvoicer {
         company.taxNumber ||
         company.vknTckn,
     );
+  }
+
+  private mysoftFor(companyId: string, tenantIdentifierNumber?: string): MysoftEdocumentClient {
+    return this.deps.resolveMysoftClient
+      ? this.deps.resolveMysoftClient(companyId, tenantIdentifierNumber)
+      : this.deps.mysoft;
   }
 
   /** Belirtilen pencere için paketleri 2 haftalık dilimlerle sayfa sayfa çeker. */
@@ -170,15 +178,17 @@ export class TrendyolInvoicer {
     packageId: string,
     options: { force?: boolean; preloaded?: TrendyolPackage },
   ): Promise<PackageResult> {
-    const { store, mysoft } = this.deps;
+    const { store } = this.deps;
     const companyId = conn.companyId;
     const client = this.clientFor(conn);
     const company = this.companyFor(conn);
+    const tenant = this.tenantFor(conn, company);
+    const mysoft = this.mysoftFor(companyId, tenant);
     let entry = store.getEntry(companyId, packageId);
 
     if (mysoft.config.mockMode) {
       throw new TrendyolApiError(
-        "Mysoft kimlik bilgileri tanımlı değil (mock mod). Gerçek fatura kesilemez; önce Mysoft erişim anahtarını sunucuya girin.",
+        "Mysoft kimlik bilgileri tanımlı değil (mock mod). Gerçek fatura kesilemez; önce Mysoft VKN/TCKN Eşleştirme Masasından şirketin Mysoft API bilgilerini girin.",
         503,
         "MYSOFT_NOT_CONFIGURED",
       );
@@ -190,7 +200,6 @@ export class TrendyolInvoicer {
       return result(entry, entry.message || "İnceleme bekliyor.");
     }
 
-    const tenant = this.tenantFor(conn, company);
     if (!tenant) {
       throw new TrendyolApiError("Faturayı kesen firmanın Mysoft VKN/TCKN değeri bulunamadı.", 400, "TENANT_MISSING");
     }
@@ -202,7 +211,7 @@ export class TrendyolInvoicer {
 
     // Önceki tur "sending" aşamasında kesildiyse: fatura Mysoft'ta oluşmuş olabilir.
     if (entry?.state === "sending" && entry.ettn) {
-      const existing = await this.lookupOutgoing(entry.ettn, tenant);
+      const existing = await this.lookupOutgoing(mysoft, entry.ettn, tenant);
       if (existing) {
         entry = await store.saveEntry({
           ...entry,
@@ -258,7 +267,7 @@ export class TrendyolInvoicer {
     // e-Fatura / e-Arşiv kararı
     let decision: { eDocumentType: "EFATURA" | "EARSIVFATURA"; pkAlias?: string };
     try {
-      decision = await this.decideDocumentType(draft);
+      decision = await this.decideDocumentType(mysoft, draft);
     } catch (error) {
       const saved = await store.saveEntry({
         companyId,
@@ -315,7 +324,7 @@ export class TrendyolInvoicer {
       });
     } catch (error) {
       // Aynı ETTN ile daha önce kesilmiş olabilir (ör. zaman aşımı sonrası) → Mysoft'ta ara.
-      const existing = entry.ettn ? await this.lookupOutgoing(entry.ettn, tenant) : null;
+      const existing = entry.ettn ? await this.lookupOutgoing(mysoft, entry.ettn, tenant) : null;
       if (existing) {
         entry = await store.saveEntry({
           ...entry,
@@ -345,7 +354,8 @@ export class TrendyolInvoicer {
     entry: LedgerEntry,
     tenant: string,
   ): Promise<PackageResult> {
-    const { store, mysoft } = this.deps;
+    const { store } = this.deps;
+    const mysoft = this.mysoftFor(conn.companyId, tenant);
     if (!conn.uploadInvoiceToTrendyol) {
       const saved = await store.saveEntry({ ...entry, state: "delivered", message: `${entry.message || "Fatura kesildi."} (Trendyol'a yükleme kapalı)` });
       return result(saved, saved.message!);
@@ -404,11 +414,12 @@ export class TrendyolInvoicer {
   }
 
   private async decideDocumentType(
+    mysoft: MysoftEdocumentClient,
     draft: TrendyolInvoiceDraft,
   ): Promise<{ eDocumentType: "EFATURA" | "EARSIVFATURA"; pkAlias?: string }> {
     const id = draft.buyerVknTckn;
     if (!id || id === "11111111111") return { eDocumentType: "EARSIVFATURA" };
-    const res = await this.deps.mysoft.getGibAccountModel(id);
+    const res = await mysoft.getGibAccountModel(id);
     const data = res?.data;
     const registered = Boolean(data && data.isPassive !== true && data.eInvoiceStartDate);
     if (!registered) return { eDocumentType: "EARSIVFATURA" };
@@ -422,9 +433,13 @@ export class TrendyolInvoicer {
     return { eDocumentType: "EFATURA", pkAlias: String(pk.alias) };
   }
 
-  private async lookupOutgoing(ettn: string, tenant: string): Promise<{ docNo?: string } | null> {
+  private async lookupOutgoing(
+    mysoft: MysoftEdocumentClient,
+    ettn: string,
+    tenant: string,
+  ): Promise<{ docNo?: string } | null> {
     try {
-      const model = (await this.deps.mysoft.getOutgoingModel(ettn, tenant)) as Record<string, unknown> | null;
+      const model = (await mysoft.getOutgoingModel(ettn, tenant)) as Record<string, unknown> | null;
       const data = (model && typeof model.data === "object" ? model.data : model) as Record<string, unknown> | null;
       if (!data) return null;
       const docNo = typeof data.docNo === "string" ? data.docNo : undefined;

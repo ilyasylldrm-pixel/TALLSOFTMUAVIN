@@ -343,6 +343,8 @@ export interface MysoftStatus {
   baseUrl: string;
   tokenUrl: string;
   grantType: MysoftGrantType;
+  accessMode: "business_partner";
+  isBusinessPartner: boolean;
   hasClientCredentials: boolean;
   hasPasswordCredentials: boolean;
   hasTenantIdentifierNumber: boolean;
@@ -565,10 +567,26 @@ export function getMysoftConfig(env: NodeJS.ProcessEnv = process.env): MysoftCon
   const defaultBaseUrl = requestedEnvironment === "test" ? TEST_BASE_URL : PROD_BASE_URL;
   const baseUrl = trimBaseUrl(env.MYSOFT_API_BASE_URL || env.MYSOFT_API_URL || defaultBaseUrl);
   const tokenUrl = trimBaseUrl(env.MYSOFT_TOKEN_URL || `${baseUrl}${MYSOFT_ENDPOINTS.token}`);
-  const clientId = env.MYSOFT_CLIENT_ID?.trim() || undefined;
-  const clientSecret = env.MYSOFT_CLIENT_SECRET?.trim() || undefined;
-  const username = env.MYSOFT_USERNAME?.trim() || env.MYSOFT_USER_NAME?.trim() || undefined;
-  const password = env.MYSOFT_PASSWORD?.trim() || env.MYSOFT_USER_PASSWORD?.trim() || undefined;
+  const clientId =
+    env.MYSOFT_PARTNER_CLIENT_ID?.trim() ||
+    env.MYSOFT_CLIENT_ID?.trim() ||
+    env.MYSOFT_EDOCUMENT_CLIENT_ID?.trim() ||
+    undefined;
+  const clientSecret =
+    env.MYSOFT_PARTNER_CLIENT_SECRET?.trim() ||
+    env.MYSOFT_CLIENT_SECRET?.trim() ||
+    env.MYSOFT_EDOCUMENT_CLIENT_SECRET?.trim() ||
+    undefined;
+  const username =
+    env.MYSOFT_PARTNER_USERNAME?.trim() ||
+    env.MYSOFT_USERNAME?.trim() ||
+    env.MYSOFT_USER_NAME?.trim() ||
+    undefined;
+  const password =
+    env.MYSOFT_PARTNER_PASSWORD?.trim() ||
+    env.MYSOFT_PASSWORD?.trim() ||
+    env.MYSOFT_USER_PASSWORD?.trim() ||
+    undefined;
   const tenantIdentifierNumber = normalizeMysoftTenantIdentifier(
     env.MYSOFT_TENANT_IDENTIFIER_NUMBER,
   );
@@ -580,10 +598,12 @@ export function getMysoftConfig(env: NodeJS.ProcessEnv = process.env): MysoftCon
   return {
     baseUrl,
     tokenUrl,
-    // Explicit MYSOFT_GRANT_TYPE wins.  Otherwise infer the grant from the
-    // credentials present (client credentials first, password as fallback).
+    // Prefer Mysoft Business Partner machine-to-machine client_credentials when
+    // partner client credentials exist; fall back to explicit grant or password.
     grantType:
-      normalizeGrantType(env.MYSOFT_GRANT_TYPE || env.MYSOFT_OAUTH_GRANT_TYPE) ||
+      (clientId && clientSecret
+        ? "client_credentials"
+        : normalizeGrantType(env.MYSOFT_GRANT_TYPE || env.MYSOFT_OAUTH_GRANT_TYPE)) ||
       (clientId && clientSecret ? "client_credentials" : username && password ? "password" : "client_credentials"),
     clientId,
     clientSecret,
@@ -748,6 +768,10 @@ export class MysoftEdocumentClient {
     const grantType = grantTypeFor(this.config);
     const hasClientCredentials = Boolean(this.config.clientId && this.config.clientSecret);
     const hasPasswordCredentials = Boolean(this.config.username && this.config.password);
+    const isBusinessPartner =
+      Boolean(this.tokenIdentity?.businessPartnerId) ||
+      grantType === "client_credentials" ||
+      this.config.mockMode;
     return {
       configured:
         grantType === "password" ? hasPasswordCredentials : hasClientCredentials,
@@ -756,6 +780,8 @@ export class MysoftEdocumentClient {
       baseUrl: redactUrl(this.config.baseUrl),
       tokenUrl: redactUrl(this.config.tokenUrl),
       grantType,
+      accessMode: "business_partner",
+      isBusinessPartner,
       hasClientCredentials,
       hasPasswordCredentials,
       hasTenantIdentifierNumber: Boolean(this.config.tenantIdentifierNumber),
@@ -766,9 +792,50 @@ export class MysoftEdocumentClient {
 
   /** Fetch a token if needed and return the redacted partner/tenant identity. */
   async getTokenIdentity(): Promise<MysoftTokenIdentity | undefined> {
-    if (this.config.mockMode) return this.tokenIdentity;
+    if (this.config.mockMode) {
+      return (
+        this.tokenIdentity || {
+          defaultTenantId: 0,
+          hasDefaultTenant: false,
+          businessPartnerId: 1001,
+        }
+      );
+    }
     await this.getAccessToken();
     return this.tokenIdentity;
+  }
+
+  /** Return Mysoft Business Partner status and linked tenant directory summary. */
+  async getBusinessPartnerAccessSummary(): Promise<{
+    accessMode: "business_partner";
+    configured: boolean;
+    mockMode: boolean;
+    environment: "test" | "prod" | "custom";
+    isBusinessPartner: boolean;
+    businessPartnerId?: number;
+    hasDefaultTenant: boolean;
+    linkedTenantCount: number;
+    linkedTenantVkns: string[];
+  }> {
+    let identity: MysoftTokenIdentity | undefined;
+    try {
+      identity = await this.getTokenIdentity();
+    } catch {
+      identity = this.tokenIdentity;
+    }
+    const vkns = await this.getPartnerTenantVkns();
+    const st = this.status;
+    return {
+      accessMode: "business_partner",
+      configured: st.configured,
+      mockMode: st.mockMode,
+      environment: st.environment,
+      isBusinessPartner: Boolean(identity?.businessPartnerId) || st.isBusinessPartner,
+      businessPartnerId: identity?.businessPartnerId,
+      hasDefaultTenant: Boolean(identity?.hasDefaultTenant),
+      linkedTenantCount: vkns.length,
+      linkedTenantVkns: vkns,
+    };
   }
 
   private ensureConfigured(): void {
@@ -989,6 +1056,14 @@ export class MysoftEdocumentClient {
     error: unknown,
   ): boolean {
     if (!this.sentTenant(options) || !isMysoftTenantScopeError(error)) return false;
+    // Under a Mysoft Business Partner (İş Ortağı) token (businessPartnerId > 0),
+    // every matched company's API call MUST stay scoped to its own tenantIdentifierNumber.
+    // Even if the partner token has defaultTenantId > 0 (the partner's own firm),
+    // stripping tenantIdentifierNumber would target the partner's own account instead
+    // of the matched company, or fail with 00243.
+    if (this.tokenIdentity?.businessPartnerId) {
+      return false;
+    }
     return !/\/api\/Tenant\//i.test(path);
   }
 
@@ -1025,24 +1100,71 @@ export class MysoftEdocumentClient {
     }
 
     if (lowerPath.includes("/api/tenant/gettenant")) {
-      const defaultVkn = this.config.tenantIdentifierNumber || "37756832708";
+      const defaultVkn = this.config.tenantIdentifierNumber || "6220542314";
+      const rows = [
+        {
+          id: 101,
+          vknTckn: defaultVkn,
+          identifierNumber: defaultVkn,
+          tenantIdentifierNumber: defaultVkn,
+          accountName: "MUAVİN BİLİŞİM TEKNOLOJİLERİ VE DANIŞMANLIK A.Ş.",
+          title: "MUAVİN BİLİŞİM TEKNOLOJİLERİ VE DANIŞMANLIK A.Ş.",
+          taxOfficeName: "Mecidiyeköy V.D.",
+          cityName: "İstanbul",
+          townName: "Şişli",
+          pkAlias: `urn:mail:defaultpk@${defaultVkn}.com.tr`,
+          gbAlias: `urn:mail:defaultgb@${defaultVkn}.com.tr`,
+        },
+        {
+          id: 102,
+          vknTckn: "37756832708",
+          identifierNumber: "37756832708",
+          tenantIdentifierNumber: "37756832708",
+          accountName: "ABDURRAHMAN ŞİMŞEK",
+          title: "ABDURRAHMAN ŞİMŞEK",
+          taxOfficeName: "Selçuk V.D.",
+          cityName: "Konya",
+          townName: "Selçuklu",
+          pkAlias: "urn:mail:faturapk@ababdurrahmansimsek.com",
+          gbAlias: "urn:mail:faturagb@ababdurrahmansimsek.com",
+        },
+        {
+          id: 103,
+          vknTckn: "7600924362",
+          identifierNumber: "7600924362",
+          tenantIdentifierNumber: "7600924362",
+          accountName: "SEMİH YAPI OTOMOTİV LİMİTED ŞİRKETİ",
+          title: "SEMİH YAPI OTOMOTİV LİMİTED ŞİRKETİ",
+          taxOfficeName: "Şişli V.D.",
+          cityName: "İstanbul",
+          townName: "Şişli",
+          pkAlias: "urn:mail:smhpk@semihaplhan.com",
+          gbAlias: "urn:mail:smhgb@semihaplhan.com",
+        },
+        {
+          id: 104,
+          vknTckn: "4840847211",
+          identifierNumber: "4840847211",
+          tenantIdentifierNumber: "4840847211",
+          accountName: "İZİBİZ BİLİŞİM TEKNOLOJİLERİ A.Ş.",
+          title: "İZİBİZ BİLİŞİM TEKNOLOJİLERİ A.Ş.",
+          taxOfficeName: "Kozyatağı V.D.",
+          cityName: "İstanbul",
+          townName: "Kadıköy",
+          pkAlias: "urn:mail:merkezpk@izibiz.com.tr",
+          gbAlias: "urn:mail:merkezgb@izibiz.com.tr",
+        },
+      ];
+      const seen = new Set<string>();
+      const deduped = rows.filter((r) => {
+        if (seen.has(r.vknTckn)) return false;
+        seen.add(r.vknTckn);
+        return true;
+      });
       return {
         succeed: true,
-        message: "Mysoft mock mode",
-        data: [
-          {
-            vknTckn: defaultVkn,
-            identifierNumber: defaultVkn,
-            tenantIdentifierNumber: defaultVkn,
-            accountName: "ABDURRAHMAN ŞİMŞEK",
-            title: "ABDURRAHMAN ŞİMŞEK",
-            taxOfficeName: "Selçuk V.D.",
-            cityName: "Konya",
-            townName: "Selçuklu",
-            pkAlias: "urn:mail:faturapk@ababdurrahmansimsek.com",
-            gbAlias: "urn:mail:faturagb@ababdurrahmansimsek.com",
-          },
-        ],
+        message: "Mysoft İş Ortağı bağlı mükellef listesi (Simülasyon Modu)",
+        data: deduped,
       } as T;
     }
 
@@ -1293,14 +1415,24 @@ export class MysoftEdocumentClient {
       return this.cachedPartnerTenants.vkns;
     }
     try {
-      const tenantsPayload = await this.listTenants({ afterValue: 0, limit: 50 });
-      const rows = asObjectArray(unwrapMysoftData(tenantsPayload));
       const vkns: string[] = [];
-      for (const r of rows) {
-        const vkn = normalizeMysoftTenantIdentifier(
-          r.vknTckn ?? r.identifierNumber ?? r.taxNumber ?? r.tenantIdentifierNumber,
-        );
-        if (vkn && !vkns.includes(vkn)) vkns.push(vkn);
+      let afterValue = 0;
+      const pageSize = 250;
+      for (let page = 0; page < 10; page += 1) {
+        const tenantsPayload = await this.listTenants({ afterValue, limit: pageSize });
+        const rows = asObjectArray(unwrapMysoftData(tenantsPayload));
+        if (rows.length === 0) break;
+        let maxId = afterValue;
+        for (const r of rows) {
+          const vkn = normalizeMysoftTenantIdentifier(
+            r.vknTckn ?? r.identifierNumber ?? r.taxNumber ?? r.tenantIdentifierNumber,
+          );
+          if (vkn && !vkns.includes(vkn)) vkns.push(vkn);
+          const rowId = typeof r.id === "number" ? r.id : Number(r.id);
+          if (Number.isFinite(rowId) && rowId > maxId) maxId = rowId;
+        }
+        if (rows.length < pageSize || maxId <= afterValue) break;
+        afterValue = maxId;
       }
       if (vkns.length > 0) {
         this.cachedPartnerTenants = {
@@ -1691,11 +1823,19 @@ export class MysoftEdocumentClient {
    * Checks if firm is a registered GİB e-Fatura / e-İrsaliye user and retrieves official mailbox (PK) and sender (GB) aliases.
    * Swagger: GET /api/GeneralCard/getGibAccountModel
    */
-  getGibAccountModel(vknTckn: string): Promise<MysoftGibAccountResultModel> {
+  getGibAccountModel(
+    vknTckn: string,
+    tenantIdentifierNumber?: string,
+  ): Promise<MysoftGibAccountResultModel> {
     const clean = String(vknTckn || "").replace(/\D/g, "").trim();
+    const query: Record<string, string | undefined> = { vknTckn: clean };
+    const effectiveTenant = this.effectiveTenant(tenantIdentifierNumber);
+    if (effectiveTenant) {
+      query.tenantIdentifierNumber = effectiveTenant;
+    }
     return this.request<MysoftGibAccountResultModel>(MYSOFT_ENDPOINTS.gibAccountModel, {
       method: "GET",
-      query: { vknTckn: clean },
+      query,
     });
   }
 
@@ -2440,7 +2580,7 @@ export class MysoftEdocumentClient {
       try {
         const [taxpayerRes, gibRes] = await Promise.allSettled([
           this.getTaxPayerDetailInfo(clean, tenantIdentifierNumber),
-          this.getGibAccountModel(clean),
+          this.getGibAccountModel(clean, tenantIdentifierNumber),
         ]);
 
         const taxpayerRaw =
