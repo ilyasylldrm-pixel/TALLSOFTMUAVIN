@@ -205,14 +205,17 @@ export function useMysoftTenants(options: UseMysoftTenantsOptions = {}) {
     applyPick(tenants);
   }, [hintVkn, tenants, applyPick]);
 
-  const selectedTenant = tenants.find((row) => row.taxNumber === selectedVkn);
+  // A locked company must never render or request documents with the previous
+  // company's stored VKN during the render before the synchronization effect.
+  const effectiveSelectedVkn = hidePartners ? lockedVkn || hintVkn : selectedVkn;
+  const selectedTenant = tenants.find((row) => row.taxNumber === effectiveSelectedVkn);
 
   return {
     tenants,
     loading,
     error,
     partnerHint,
-    selectedVkn,
+    selectedVkn: effectiveSelectedVkn,
     selectedTenant,
     setSelectedVkn,
     manualVkn,

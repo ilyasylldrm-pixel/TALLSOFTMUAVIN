@@ -4356,10 +4356,11 @@ export default function App() {
               currentUser={currentUser}
               tenantIdentifierNumber={
                 activeCompanyObj?.tenantIdentifierNumber ||
-                data.settings.tenantIdentifierNumber ||
-                data.settings.mysoftCredentials?.tenantIdentifierNumber ||
+                activeCompanyObj?.taxNumber ||
                 activeCompanyObj?.vkn ||
                 activeCompanyObj?.tckn ||
+                data.settings.tenantIdentifierNumber ||
+                data.settings.mysoftCredentials?.tenantIdentifierNumber ||
                 data.settings.taxNumber ||
                 readStoredMysoftTenantVkn()
               }
@@ -4621,10 +4622,11 @@ export default function App() {
               currentUser={currentUser}
               tenantIdentifierNumber={
                 activeCompanyObj?.tenantIdentifierNumber ||
-                data.settings.tenantIdentifierNumber ||
-                data.settings.mysoftCredentials?.tenantIdentifierNumber ||
+                activeCompanyObj?.taxNumber ||
                 activeCompanyObj?.vkn ||
                 activeCompanyObj?.tckn ||
+                data.settings.tenantIdentifierNumber ||
+                data.settings.mysoftCredentials?.tenantIdentifierNumber ||
                 data.settings.taxNumber ||
                 readStoredMysoftTenantVkn()
               }
