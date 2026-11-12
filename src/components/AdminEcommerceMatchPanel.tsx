@@ -318,6 +318,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     apiSecret: string;
     trendyolSecretKey: string;
     apiToken: string;
+    executorEmail: string;
     commissionRate: number;
     shippingDeductionAvg: number;
     withholdingRate: number;
@@ -332,6 +333,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     apiSecret: "",
     trendyolSecretKey: "",
     apiToken: "",
+    executorEmail: "",
     commissionRate: 18.5,
     shippingDeductionAvg: 64.9,
     withholdingRate: 1,
@@ -362,6 +364,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         apiSecret: existing.apiSecret,
         trendyolSecretKey: existing.trendyolSecretKey || "",
         apiToken: existing.apiToken || "",
+        executorEmail: existing.executorEmail || "",
         commissionRate: existing.commissionRate,
         shippingDeductionAvg: existing.shippingDeductionAvg,
         withholdingRate: existing.withholdingRate,
@@ -378,6 +381,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         apiSecret: "",
         trendyolSecretKey: "",
         apiToken: "",
+        executorEmail: "",
         commissionRate: tpl.defaultCommission,
         shippingDeductionAvg: tpl.defaultCargo,
         withholdingRate: tpl.defaultWithholding,
@@ -390,7 +394,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   };
 
   const syncTrendyolBackend = async (company: CompanyItem, config: MarketplaceStoreConfig) => {
-    if (config.id !== "trendyol" && config.id !== "trendyol_go") return;
+    if (config.id !== "trendyol") return;
     if (!config.supplierId || !config.apiKey || !config.apiSecret) return;
     try {
       const headers: Record<string, string> = {
@@ -448,17 +452,18 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       apiKey: formState.apiKey.trim(),
       apiSecret: formState.apiSecret.trim(),
       trendyolSecretKey:
-        formState.id === "trendyol" || formState.id === "trendyol_go"
+        formState.id === "trendyol"
           ? formState.trendyolSecretKey.trim() || undefined
           : undefined,
       apiToken: formState.apiToken.trim() || undefined,
+      executorEmail: formState.executorEmail.trim() || undefined,
       commissionRate: Number(formState.commissionRate),
       shippingDeductionAvg: Number(formState.shippingDeductionAvg),
       withholdingRate: Number(formState.withholdingRate),
-      autoInvoice: formState.autoInvoice,
-      autoStockSync: formState.autoStockSync,
-      isConnected: Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
-      lastSyncAt: nowStr,
+      autoInvoice: formState.id === "trendyol_go" ? false : formState.autoInvoice,
+      autoStockSync: formState.id === "trendyol_go" ? false : formState.autoStockSync,
+      isConnected: formState.id === "trendyol_go" ? false : Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
+      lastSyncAt: selectedCompanyStores.find((s) => s.id === formState.id)?.lastSyncAt || "",
       storeUrl: formState.storeUrl.trim() || tpl.storeUrl,
     };
 
@@ -986,6 +991,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                       apiSecret: existing?.apiSecret || "",
                       trendyolSecretKey: existing?.trendyolSecretKey || "",
                       apiToken: existing?.apiToken || "",
+                      executorEmail: existing?.executorEmail || "",
                       commissionRate: existing?.commissionRate ?? tpl.defaultCommission,
                       shippingDeductionAvg: existing?.shippingDeductionAvg ?? tpl.defaultCargo,
                       withholdingRate: existing?.withholdingRate ?? tpl.defaultWithholding,
@@ -1037,7 +1043,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
+              {formState.id === "ubereats" && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
                     Entegrasyon Referans Kodu {formState.id === "trendyol_go" ? "*" : ""}
@@ -1088,7 +1094,16 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              {(formState.id === "trendyol" || formState.id === "trendyol_go") && (
+              {formState.id === "trendyol_go" && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">İşlemi yapan kişinin e-postası *</label>
+                  <input type="email" required value={formState.executorEmail}
+                    onChange={(e) => setFormState((prev) => ({ ...prev, executorEmail: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50" />
+                </div>
+              )}
+
+              {formState.id === "trendyol" && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="font-bold text-slate-700 flex items-center gap-1">
@@ -1120,7 +1135,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               )}
 
-              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
+              {formState.id === "ubereats" && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
                     Token {formState.id === "trendyol_go" ? "(TGO Yemek Eşleştirme Token) *" : "(OAuth / Access Token)"}
