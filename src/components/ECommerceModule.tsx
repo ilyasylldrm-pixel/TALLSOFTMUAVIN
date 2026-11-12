@@ -10,6 +10,7 @@ import {
 import { NavItem } from "./Sidebar";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
+import { mapTgoPackage, requestTgoPackages } from "../services/tgoMealClient";
 import {
   Globe,
   ShoppingCart,
@@ -78,6 +79,7 @@ export interface MarketplaceStoreConfig {
   apiKey: string;
   apiSecret: string;
   apiToken?: string;
+  executorEmail?: string;
   storeUrl?: string;
   serviceKey?: string;
   commissionRate: number;
@@ -278,18 +280,18 @@ function getMarketplaceFieldHelp(mp: MarketplaceId): {
       return {
         supplierIdLabel: "Satıcı ID (Cari ID)",
         supplierIdPlaceholder: "örn: 849302",
-        integrationRefLabel: "Entegrasyon Referans Kodu",
+        integrationRefLabel: undefined,
         integrationRefPlaceholder: "örn: TGO-REF-948201",
-        integrationRefRequired: true,
+        integrationRefRequired: false,
         apiKeyLabel: "API Key",
         apiKeyPlaceholder: "örn: tgo_key_xxxxxxxxxxxxxxxxxxxx",
         apiSecretLabel: "API Secret",
         apiSecretPlaceholder: "örn: tgo_sec_xxxxxxxxxxxxxxxxxxxx",
-        tokenLabel: "Token (TGO Yemek Eşleştirme Token)",
+        tokenLabel: undefined,
         tokenPlaceholder: "örn: dGdvX2tleTp0Z29fc2Vj...",
-        tokenRequired: true,
+        tokenRequired: false,
         extraLabel: null,
-        hint: "Trendyol Go (TGO Yemek) Partner Paneli > Hesap Bilgileri > Entegrasyon Bilgileri ekranından Satıcı ID (Cari ID), Entegrasyon Referans Kodu, API Key, API Secret ve Token bilgilerini alabilirsiniz.",
+        hint: "TGO Satıcı Paneli > Hesap Bilgilerim > Entegrasyon Bilgileri bölümünden Satıcı ID, API Key ve API Secret alın. İşlem yapan kişinin e-postasını da girin.",
       };
     case "ubereats":
       return {
@@ -383,6 +385,7 @@ interface MarketplaceConnectionModalProps {
   onClose: () => void;
   initialStore: MarketplaceStoreConfig | null;
   onSave: (store: MarketplaceStoreConfig) => void;
+  defaultEmail?: string;
 }
 
 const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
@@ -390,6 +393,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
   onClose,
   initialStore,
   onSave,
+  defaultEmail,
 }) => {
   if (!isOpen) return null;
 
@@ -404,9 +408,10 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
   const [apiKey, setApiKey] = useState(initialStore?.apiKey || "");
   const [apiSecret, setApiSecret] = useState(initialStore?.apiSecret || "");
   const [apiToken, setApiToken] = useState(initialStore?.apiToken || "");
+  const [executorEmail, setExecutorEmail] = useState(initialStore?.executorEmail || defaultEmail || "");
   const [serviceKey, setServiceKey] = useState(initialStore?.serviceKey || "");
   const [storeUrl, setStoreUrl] = useState(initialStore?.storeUrl || "");
-  const [autoInvoice, setAutoInvoice] = useState<boolean>(initialStore?.autoInvoice ?? true);
+  const [autoInvoice, setAutoInvoice] = useState<boolean>(initialStore?.autoInvoice ?? false);
   const [autoStockSync, setAutoStockSync] = useState<boolean>(
     initialStore?.autoStockSync ?? true
   );
@@ -444,7 +449,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
   const fieldHelp = getMarketplaceFieldHelp(selectedMarketplace);
   const currentMeta = MARKETPLACE_META[selectedMarketplace];
 
-  const handleTestConnection = () => {
+  const handleTestConnection = async () => {
     if (!supplierId.trim()) {
       setTestState("error");
       setTestMsg(`Lütfen ${fieldHelp.supplierIdLabel} alanını doldurunuz.`);
@@ -466,15 +471,21 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       return;
     }
 
+    if (selectedMarketplace !== "trendyol_go") {
+      setTestState("error");
+      setTestMsg("Bu pazaryeri için canlı bağlantı testi henüz mevcut değil.");
+      return;
+    }
     setTestState("testing");
-    setTestMsg("Pazaryeri API sunucusu ile el sıkışılıyor (Handshake)...");
-
-    setTimeout(() => {
+    setTestMsg("TGO yemek API bağlantısı kontrol ediliyor...");
+    try {
+      await requestTgoPackages({ supplierId, apiKey, apiSecret, executorEmail }, "test");
       setTestState("success");
-      setTestMsg(
-        `✓ Bağlantı Başarılı (HTTP 200 OK): ${currentMeta.name} API Ağ Geçidi kimlik doğrulamasını onayladı. Gecikme: 108ms`
-      );
-    }, 700);
+      setTestMsg("TGO yemek API bağlantısı doğrulandı.");
+    } catch (error) {
+      setTestState("error");
+      setTestMsg(error instanceof Error ? error.message : "TGO bağlantısı başarısız.");
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -489,6 +500,10 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
     }
     if (!apiKey.trim()) {
       setValidationError("Lütfen API Key alanını doldurunuz.");
+      return;
+    }
+    if (selectedMarketplace === "trendyol_go" && (!apiSecret.trim() || !executorEmail.trim())) {
+      setValidationError("TGO için API Secret ve işlem yapan kişinin e-postası zorunlu.");
       return;
     }
     if (fieldHelp.tokenRequired && !apiToken.trim()) {
@@ -508,6 +523,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       apiKey: apiKey.trim(),
       apiSecret: apiSecret.trim(),
       apiToken: apiToken.trim() || undefined,
+      executorEmail: executorEmail.trim() || undefined,
       serviceKey: serviceKey.trim() || undefined,
       storeUrl:
         storeUrl.trim() ||
@@ -517,11 +533,11 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       commissionRate: initialStore?.commissionRate ?? currentMeta.commissionRate,
       shippingDeductionAvg: initialStore?.shippingDeductionAvg ?? currentMeta.shippingDeductionAvg,
       withholdingRate: initialStore?.withholdingRate ?? currentMeta.withholdingRate,
-      autoInvoice,
-      autoStockSync,
-      isConnected: true,
-      lastSyncAt: initialStore?.lastSyncAt || "Yeni Bağlandı",
-      status: "active",
+      autoInvoice: selectedMarketplace === "trendyol_go" ? false : autoInvoice,
+      autoStockSync: selectedMarketplace === "trendyol_go" ? false : autoStockSync,
+      isConnected: selectedMarketplace === "trendyol_go" ? testState === "success" : initialStore?.isConnected ?? false,
+      lastSyncAt: initialStore?.lastSyncAt || "",
+      status: selectedMarketplace === "trendyol_go" && testState === "success" ? "active" : "paused",
     };
 
     onSave(newStore);
@@ -641,6 +657,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                 value={supplierId}
                 onChange={(e) => {
                   setSupplierId(e.target.value);
+                  setTestState("idle");
                   setValidationError(null);
                 }}
                 placeholder={fieldHelp.supplierIdPlaceholder}
@@ -677,6 +694,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                   value={apiKey}
                   onChange={(e) => {
                     setApiKey(e.target.value);
+                    setTestState("idle");
                     setValidationError(null);
                   }}
                   placeholder={fieldHelp.apiKeyPlaceholder}
@@ -701,7 +719,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                 <input
                   type={showApiSecret ? "text" : "password"}
                   value={apiSecret}
-                  onChange={(e) => setApiSecret(e.target.value)}
+                  onChange={(e) => { setApiSecret(e.target.value); setTestState("idle"); }}
                   placeholder={fieldHelp.apiSecretPlaceholder}
                   className="w-full pl-3 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
@@ -715,6 +733,14 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {selectedMarketplace === "trendyol_go" && (
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">İşlemi yapan kişinin e-postası *</label>
+                <input type="email" value={executorEmail} onChange={(e) => { setExecutorEmail(e.target.value); setTestState("idle"); }} required
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white" />
+              </div>
+            )}
 
             {fieldHelp.tokenLabel && (
               <div className="sm:col-span-2">
@@ -762,7 +788,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
           </div>
 
           {/* Automation Switches */}
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+          {selectedMarketplace !== "trendyol_go" && <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white">
@@ -796,7 +822,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
                 className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 cursor-pointer"
               />
             </div>
-          </div>
+          </div>}
 
           {/* Test Connection Section */}
           <div className="p-3.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-850 flex flex-col gap-2">
@@ -841,7 +867,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             <Lock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <span>
-              256-bit uçtan uca şifreleme: API anahtarlarınız yalnızca bu şirket kapsamında güvenli depolanır.
+              API bilgileri bu tarayıcının yerel depolamasında saklanır. Paylaşılan bilgisayarlarda oturumu açık bırakmayın.
             </span>
           </div>
 
@@ -961,33 +987,48 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     }
   };
 
-  const handleTestStoreConnection = (storeConfig: MarketplaceStoreConfig) => {
+  const handleTestStoreConnection = async (storeConfig: MarketplaceStoreConfig) => {
     setTestingStoreId(storeConfig.id);
-    setTimeout(() => {
+    try {
+      if (storeConfig.id !== "trendyol_go") throw new Error("Bu pazaryeri için canlı bağlantı testi henüz mevcut değil.");
+      await requestTgoPackages(storeConfig, "test");
+      saveStores(stores.map((store) => store.id === storeConfig.id ? { ...store, isConnected: true, status: "active" } : store));
+      showStoreToast(`${storeConfig.name} TGO yemek API bağlantısı doğrulandı.`, "success");
+    } catch (error) {
+      showStoreToast(error instanceof Error ? error.message : "Bağlantı testi başarısız.", "error");
+    } finally {
       setTestingStoreId(null);
-      showStoreToast(
-        `✓ ${storeConfig.name} API bağlantısı doğrulandı. HTTP 200 OK (Gecikme: 114ms)`,
-        "success"
-      );
-    }, 700);
+    }
   };
 
-  const handleSyncStoreNow = (storeConfig: MarketplaceStoreConfig) => {
+  const handleSyncStoreNow = async (storeConfig: MarketplaceStoreConfig) => {
     setSyncingStoreId(storeConfig.id);
-    setTimeout(() => {
+    try {
+      if (storeConfig.id !== "trendyol_go") throw new Error("Bu pazaryeri için canlı sipariş senkronizasyonu henüz mevcut değil.");
+      const packages = await requestTgoPackages(storeConfig, "sync");
+      const incoming = packages.map((pkg) => mapTgoPackage(pkg, storeConfig));
+      const existingIds = new Set(ecoOrders.map((order) => order.id));
+      setEcoOrders((previous) => {
+        const byId = new Map(incoming.map((order) => [order.id, order]));
+        const updated = previous.map((order) => {
+          const fresh = byId.get(order.id);
+          return fresh ? { ...order, ...fresh, invoiced: order.invoiced || fresh.invoiced, invoiceNumber: order.invoiceNumber, syncedToOrders: order.syncedToOrders, linkedOrderId: order.linkedOrderId } : order;
+        });
+        return [...incoming.filter((order) => !existingIds.has(order.id)), ...updated];
+      });
       const now =
         new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) +
         " (Şimdi)";
       const updated = stores.map((s) =>
-        s.id === storeConfig.id ? { ...s, lastSyncAt: now } : s
+        s.id === storeConfig.id ? { ...s, lastSyncAt: now, isConnected: true, status: "active" as const } : s
       );
       saveStores(updated);
+      showStoreToast(`${packages.length} TGO paketi alındı, ${incoming.filter((order) => !existingIds.has(order.id)).length} yeni sipariş eklendi.`, "success");
+    } catch (error) {
+      showStoreToast(error instanceof Error ? error.message : "TGO senkronizasyonu başarısız.", "error");
+    } finally {
       setSyncingStoreId(null);
-      showStoreToast(
-        `✓ ${storeConfig.name} mağazasından sipariş ve stok durumu senkronize edildi.`,
-        "success"
-      );
-    }, 900);
+    }
   };
 
   const handleDeleteStoreConfig = (storeId: MarketplaceId) => {
@@ -1253,6 +1294,10 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 
   // Convert E-Commerce Order to Official e-Arşiv / e-Fatura in Accounting
   const handleCreateInvoiceFromOrder = (ecoOrder: ECommerceOrder) => {
+    if (ecoOrder.marketplace === "trendyol_go") {
+      showToast("TGO siparişinde KDV oranı ve fatura bilgileri API yanıtında bulunmuyor. Faturayı doğrulanmış bilgilerle Faturalar ekranından hazırlayın.");
+      return;
+    }
     if (ecoOrder.invoiced) {
       showToast(`Bu sipariş için zaten fatura (${ecoOrder.invoiceNumber}) oluşturulmuş.`);
       return;
@@ -2312,7 +2357,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                               st.autoInvoice ? "text-emerald-600" : "text-slate-400"
                             }`}
                           >
-                            {st.autoInvoice ? "Açık (Otomatik Kesim)" : "Kapalı"}
+                            {st.id === "trendyol_go" ? "Elle kontrol" : st.autoInvoice ? "Açık (Otomatik Kesim)" : "Kapalı"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -2964,6 +3009,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           setEditingStore(null);
         }}
         initialStore={editingStore}
+        defaultEmail={companySettings?.email}
         onSave={(newStore) => {
           const existsIndex = stores.findIndex((s) => s.id === newStore.id);
           let updated: MarketplaceStoreConfig[];
@@ -2977,8 +3023,8 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           setIsConnectionModalOpen(false);
           setEditingStore(null);
           showStoreToast(
-            `✓ ${newStore.name} API bağlantısı ve mağaza parametreleri başarıyla kaydedildi.`,
-            "success"
+            `${newStore.name} bilgileri kaydedildi. ${newStore.id === "trendyol_go" && !newStore.isConnected ? "Bağlantıyı test edip siparişleri çekin." : ""}`,
+            "info"
           );
         }}
       />
