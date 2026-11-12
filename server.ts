@@ -8,7 +8,6 @@ import { getWhatsAppRouter } from "./src/services/whatsappRoutes.ts";
 import { whatsAppService } from "./src/services/whatsappService.ts";
 import { getPortalProxyRouter } from "./src/services/portalProxyRoutes.ts";
 import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
-import { getGitHubRouter } from "./src/services/githubRoutes.ts";
 import { createTrendyolModule } from "./src/services/trendyol/trendyolRoutes.ts";
 import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
@@ -136,7 +135,11 @@ app.use(
 app.use("/api/whatsapp", getWhatsAppRouter());
 app.use("/api/portal-proxy", getPortalProxyRouter());
 app.use("/api/extension", getExtensionRouter());
-app.use("/api/github", getGitHubRouter());
+// GitHub write operations are disabled until authenticated admin authorization
+// is implemented. The previous route accepted anonymous force-push requests.
+app.use("/api/github", (_req, res) => {
+  res.status(503).json({ success: false, error: "GitHub eşitlemesi güvenlik nedeniyle geçici olarak kapatıldı." });
+});
 
 // Trendyol pazaryeri entegrasyonu: sipariş çekme + otomatik e-Fatura/e-Arşiv (Mysoft İş Ortağı üzerinden).
 // Firma bilgisi, istemcinin senkronladığı cloud-sync deposundan okunur (aşağıda tanımlı).

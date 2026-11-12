@@ -6,20 +6,6 @@ import util from "util";
 const execPromise = util.promisify(exec);
 const CONFIG_PATH = path.join(process.cwd(), "data", "github-config.json");
 
-const DEFAULT_TOKEN_BYTES = [
-  77, 66, 90, 117, 115, 24, 73, 109, 112, 109, 24, 105, 26, 26, 89, 26, 65, 97,
-  18, 92, 104, 77, 77, 27, 93, 101, 64, 101, 80, 75, 107, 127, 69, 75, 27, 104,
-  99, 80, 115, 82,
-];
-
-function getDefaultFallbackToken(): string {
-  try {
-    return DEFAULT_TOKEN_BYTES.map((b) => String.fromCharCode(b ^ 42)).join("");
-  } catch {
-    return "";
-  }
-}
-
 export interface GitHubSyncConfig {
   repoUrl: string;
   owner: string;
@@ -197,7 +183,7 @@ export class GitHubSyncService {
   }
 
   public getConfig(): GitHubSyncConfig {
-    const fallbackToken = process.env.GITHUB_TOKEN || getDefaultFallbackToken();
+    const fallbackToken = process.env.GITHUB_TOKEN || "";
     try {
       if (fs.existsSync(CONFIG_PATH)) {
         const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
