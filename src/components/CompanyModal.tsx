@@ -205,6 +205,22 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
     Boolean(initialCompany?.eFaturaPrefix || initialCompany?.eArsivPrefix)
   );
 
+  // Mysoft Entegrasyon Giriş Bilgileri (Kullanıcı Adı & Şifre) State
+  const [mysoftUsername, setMysoftUsername] = useState<string>(
+    initialCompany?.mysoftUsername || ""
+  );
+  const [mysoftPassword, setMysoftPassword] = useState<string>(
+    initialCompany?.mysoftPassword || ""
+  );
+  const [showMysoftPassword, setShowMysoftPassword] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialCompany) {
+      setMysoftUsername(initialCompany.mysoftUsername || "");
+      setMysoftPassword(initialCompany.mysoftPassword || "");
+    }
+  }, [initialCompany]);
+
   const fetchMysoftSequentialSerials = React.useCallback(async (rawTargetId?: string) => {
     const cleanTarget = (
       rawTargetId ||
@@ -599,6 +615,9 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       loginFullName: finalLoginName,
       loginRole: createLoginAccount ? loginRole : undefined,
       loginUserDeleted: !createLoginAccount,
+      // Mysoft Entegrasyon & Portal Giriş Bilgileri
+      mysoftUsername: mysoftUsername.trim() || undefined,
+      mysoftPassword: mysoftPassword.trim() || undefined,
       // Mysoft e-Belge Ön Ekleri ve Ardışık Devam Eden Fatura Numaraları
       eFaturaPrefix: (eFaturaPrefix || "GIB").trim().toUpperCase(),
       eFaturaNextNumber: (eFaturaNextNumber || "").trim() || undefined,
@@ -1048,6 +1067,60 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                   <p className="text-emerald-800">{mysoftVerifyResult.message}</p>
                 </div>
               )}
+
+              {/* Mysoft Kullanıcı Adı & Şifre Bilgileri */}
+              <div className="p-3.5 bg-white dark:bg-slate-900/90 rounded-xl border border-indigo-200 dark:border-indigo-900/70 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                      Mysoft Web Servis & Portal Giriş Bilgileri
+                    </h5>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">Entegrasyon Girişi</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Mysoft Kullanıcı Adı
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Örn: 9876543210 veya Kullanıcı Adı"
+                      value={mysoftUsername}
+                      onChange={(e) => setMysoftUsername(e.target.value)}
+                      className="w-full h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Mysoft Şifresi
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showMysoftPassword ? "text" : "password"}
+                        placeholder="Mysoft Portal / API Şifresi"
+                        value={mysoftPassword}
+                        onChange={(e) => setMysoftPassword(e.target.value)}
+                        className="w-full h-9 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 focus:bg-white focus:border-indigo-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowMysoftPassword(!showMysoftPassword)}
+                        className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        title={showMysoftPassword ? "Şifreyi Gizle" : "Şifreyi Göster"}
+                      >
+                        {showMysoftPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Bu şirkete ait faturaların Mysoft üzerinden gönderilmesi ve gelen faturaların senkronizasyonunda kullanılacak kullanıcı adı ve şifredir.
+                </p>
+              </div>
 
               {/* 🌟 MYSOFT E-FATURA & E-ARŞİV ÖN EKLERİ VE ARDIŞIK DEVAM EDEN FATURA NUMARALARI */}
               <div className="p-3.5 bg-white dark:bg-slate-900/90 rounded-xl border border-indigo-200 dark:border-indigo-900/70 space-y-3 shadow-2xs">

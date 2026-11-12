@@ -419,6 +419,9 @@ export interface CompanyItem {
   defaultBankAccountName?: string;
   defaultBankName?: string;
   defaultBankIban?: string;
+  // Mysoft Entegrasyon & Portal Giriş Bilgileri
+  mysoftUsername?: string;
+  mysoftPassword?: string;
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   invoiceDesign?: InvoiceDesignSettings;
@@ -427,6 +430,8 @@ export interface CompanyItem {
 
 export interface MysoftCredentials {
   tenantIdentifierNumber?: string;
+  username?: string;
+  password?: string;
 }
 
 /**
@@ -925,6 +930,8 @@ export interface CompanySettings {
   eTebligatlar?: ETebligatItem[];
   /** Firma VKN/TCKN; Mysoft e-belge çağrılarında tenantIdentifierNumber olarak kullanılır. */
   tenantIdentifierNumber?: string;
+  mysoftUsername?: string;
+  mysoftPassword?: string;
   mysoftCredentials?: MysoftCredentials;
   /** Son manuel veri yedekleme zamanı (ISO 8601) ve 7 günlük bildirim yapılandırması */
   lastManualBackupAt?: string;

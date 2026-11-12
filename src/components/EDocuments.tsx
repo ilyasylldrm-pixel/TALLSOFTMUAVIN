@@ -411,25 +411,16 @@ const OutgoingEDocuments: React.FC<EDocumentsProps> = ({
       companySettings?.tckn ||
       tenantIdentifierNumber,
   );
-  // Şirket eşleşmesi Admin tarafından yapıldıktan sonra veya şirket kullanıcısı oturumunda Mysoft iş ortakları gizlenir
-  const shouldHideMysoftPartners = !isAdmin || isMysoftMatched;
+  // Mysoft iş ortakları yönetimi Firma Bilgileri > Mysoft Eşleştirme Masası'na taşınmıştır
   const activeManagedCompanyId = companyId || activeCompany?.id;
   const {
     tenants,
     loading: tenantsLoading,
-    error: tenantError,
-    partnerHint,
     selectedVkn: activeTenantIdentifierNumber,
-    setSelectedVkn: setSelectedTaxNumber,
-    manualVkn,
-    setManualVkn,
-    lookupLoading: isLookingUpVkn,
-    lookupByVkn,
-    reload: loadTenants,
   } = useMysoftTenants({
     hintVkn: hintedTaxNumber,
-    lockedVkn: shouldHideMysoftPartners ? hintedTaxNumber : undefined,
-    hidePartners: shouldHideMysoftPartners,
+    lockedVkn: hintedTaxNumber,
+    hidePartners: true,
   });
   const [activeDirection, setActiveDirection] = useState<"inbox" | "outbox">(
     () => normalizeDirection(direction),
@@ -478,13 +469,6 @@ const OutgoingEDocuments: React.FC<EDocumentsProps> = ({
   const [rejectReason, setRejectReason] = useState("");
   const [isRejecting, setIsRejecting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-
-  const handleLookupVkn = async () => {
-    const tenant = await lookupByVkn();
-    if (tenant) {
-      setNotice(`${tenant.name} (${tenant.taxNumber}) seçildi. Şimdi belgeleri senkronize edin.`);
-    }
-  };
 
   useEffect(() => {
     setSearchTerm(globalSearchTerm);
@@ -1454,67 +1438,14 @@ const OutgoingEDocuments: React.FC<EDocumentsProps> = ({
         }
       />
 
-      {!shouldHideMysoftPartners && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 min-w-[180px]">
-              <Building2 className="w-4 h-4 text-[#0f6bae]" />
-              Mysoft iş ortakları
-            </div>
-            <select
-              aria-label="Mysoft iş ortağı"
-              value={activeTenantIdentifierNumber || ""}
-              onChange={(event) => setSelectedTaxNumber(event.target.value || undefined)}
-              disabled={tenantsLoading || tenants.length === 0}
-              className="flex-1 h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-700 outline-none focus:border-[#0f6bae]"
-            >
-              <option value="">
-                {tenantsLoading
-                  ? "İş ortakları yükleniyor..."
-                  : tenants.length === 0
-                    ? "Listede iş ortağı yok"
-                    : "İş ortağı seçin"}
-              </option>
-              {tenants.map((tenant, idx) => (
-                <option key={`${tenant.taxNumber}_${tenant.id || idx}`} value={tenant.taxNumber}>
-                  {tenant.name} — {tenant.taxNumber}
-                  {tenant.id ? ` (#${tenant.id})` : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => void loadTenants()}
-              disabled={tenantsLoading}
-              className="h-10 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2"
-            >
-              {tenantsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              İş ortaklarını yenile
-            </button>
+      {!isMysoftMatched && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 text-xs">
+          <div className="flex items-center gap-2.5">
+            <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Bu şirket için Mysoft e-Belge VKN/TCKN eşleştirmesi henüz tamamlanmadı. Mysoft iş ortakları listesi ve kullanıcı adı / şifre yönetimi <strong>Firma Bilgileri &gt; Mysoft Eşleştirme Masası</strong>&apos;na taşınmıştır.
+            </span>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              value={manualVkn}
-              onChange={(event) => setManualVkn(event.target.value)}
-              placeholder="VKN / TCKN ile firma getir"
-              className="flex-1 h-10 px-3 rounded-xl border border-slate-200 text-sm outline-none focus:border-[#0f6bae]"
-            />
-            <button
-              type="button"
-              onClick={() => void handleLookupVkn()}
-              disabled={isLookingUpVkn}
-              className="h-10 px-3 rounded-xl bg-[#eaedff] text-[#0f6bae] text-xs font-semibold hover:bg-[#dae2fd] disabled:opacity-60"
-            >
-              {isLookingUpVkn ? "Sorgulanıyor..." : "VKN ile getir"}
-            </button>
-          </div>
-          {partnerHint && <p className="text-xs text-amber-700">{partnerHint}</p>}
-          {tenantError && <p className="text-xs text-rose-600">{tenantError}</p>}
-          {activeTenantIdentifierNumber && (
-            <p className="text-xs text-slate-500">
-              Belge çekimi seçilen VKN ile yapılacak: {activeTenantIdentifierNumber}
-            </p>
-          )}
         </div>
       )}
 

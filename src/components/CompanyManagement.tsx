@@ -39,6 +39,7 @@ import {
   PROTECTED_COMPANY_IDS,
 } from "../utils/storage";
 import { writeStoredMysoftTenantVkn } from "../utils/mysoftTenantStorage";
+import { useMysoftTenants } from "../hooks/useMysoftTenants";
 import {
   checkRecipientTaxpayerStatus,
   getMysoftMappingDefaults,
@@ -46,6 +47,7 @@ import {
   getLocalNextSequentialInvoiceNumber,
   validateSequentialInvoiceNumber,
   type MysoftMappingDefaults,
+  type MysoftTenant,
 } from "../services/mysoftEDocumentService";
 import {
   fetchCloudLogo,
@@ -279,6 +281,14 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           defaultBankName: savedComp.defaultBankName ?? baseSettings.defaultBankName,
           defaultBankIban: savedComp.defaultBankIban ?? baseSettings.defaultBankIban,
           tenantIdentifierNumber: savedComp.tenantIdentifierNumber || baseSettings.tenantIdentifierNumber,
+          mysoftUsername: savedComp.mysoftUsername ?? baseSettings.mysoftUsername,
+          mysoftPassword: savedComp.mysoftPassword ?? baseSettings.mysoftPassword,
+          mysoftCredentials: {
+            ...baseSettings.mysoftCredentials,
+            tenantIdentifierNumber: savedComp.tenantIdentifierNumber || baseSettings.tenantIdentifierNumber,
+            username: savedComp.mysoftUsername ?? baseSettings.mysoftCredentials?.username,
+            password: savedComp.mysoftPassword ?? baseSettings.mysoftCredentials?.password,
+          },
           eFaturaPrefix: savedComp.eFaturaPrefix || baseSettings.eFaturaPrefix,
           eFaturaNextNumber: savedComp.eFaturaNextNumber || baseSettings.eFaturaNextNumber,
           eArsivPrefix: savedComp.eArsivPrefix || baseSettings.eArsivPrefix,
@@ -559,6 +569,84 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   React.useEffect(() => {
     void syncSelectedCompanyMysoftPrefixes(selectedMysoftCompId, false);
   }, [selectedMysoftCompId, currentSubTab]);
+
+  // Mysoft Kimlik Bilgileri (Kullanıcı Adı & Şifre) ve İş Ortakları State
+  const [deskMysoftUsername, setDeskMysoftUsername] = useState<string>("");
+  const [deskMysoftPassword, setDeskMysoftPassword] = useState<string>("");
+  const [showDeskMysoftPassword, setShowDeskMysoftPassword] = useState<boolean>(false);
+  const [tenantSearchQuery, setTenantSearchQuery] = useState<string>("");
+
+  const {
+    tenants: mysoftDeskTenants,
+    loading: isMysoftDeskTenantsLoading,
+    error: mysoftDeskTenantsError,
+    partnerHint: mysoftDeskPartnerHint,
+    reload: reloadMysoftDeskTenants,
+    manualVkn: deskManualVkn,
+    setManualVkn: setDeskManualVkn,
+    lookupLoading: isDeskManualVknLoading,
+    lookupByVkn: deskLookupByVkn,
+  } = useMysoftTenants({
+    autoLoad: true,
+  });
+
+  // Seçili şirket değiştiğinde Mysoft kullanıcı adı ve şifresini forma eşitle
+  React.useEffect(() => {
+    const comp = effectiveCompanies.find((c) => c.id === selectedMysoftCompId) || effectiveCompanies[0];
+    if (comp) {
+      setDeskMysoftUsername(comp.mysoftUsername || comp.mysoftCredentials?.username || "");
+      setDeskMysoftPassword(comp.mysoftPassword || comp.mysoftCredentials?.password || "");
+    }
+  }, [selectedMysoftCompId, effectiveCompanies]);
+
+  const handleSaveDeskMysoftCredentials = (compId?: string) => {
+    const targetId = compId || selectedMysoftCompId || currentActiveCompanyId;
+    const targetComp = effectiveCompanies.find((c) => c.id === targetId) || effectiveCompanies[0];
+    if (!targetComp) return;
+
+    const trimmedUser = deskMysoftUsername.trim();
+    const trimmedPass = deskMysoftPassword.trim();
+
+    const updatedComp: CompanyItem = {
+      ...targetComp,
+      mysoftUsername: trimmedUser,
+      mysoftPassword: trimmedPass,
+      mysoftCredentials: {
+        ...targetComp.mysoftCredentials,
+        tenantIdentifierNumber: targetComp.tenantIdentifierNumber || targetComp.vkn || targetComp.tckn,
+        username: trimmedUser,
+        password: trimmedPass,
+      },
+    };
+
+    handleSaveCompanyFromModal(updatedComp, false);
+    setMysoftDeskFeedback(
+      `"${targetComp.companyName}" için Mysoft web servis kullanıcı adı ve şifresi başarıyla kaydedildi.`,
+    );
+    setTimeout(() => setMysoftDeskFeedback(null), 5000);
+  };
+
+  const handleMatchTenantWithSelectedComp = (tenant: MysoftTenant) => {
+    const targetComp = effectiveCompanies.find((c) => c.id === selectedMysoftCompId) || effectiveCompanies[0];
+    if (!targetComp) return;
+    const vkn = String(tenant.taxNumber || "").trim();
+    if (!vkn) return;
+
+    const updatedComp: CompanyItem = {
+      ...targetComp,
+      tenantIdentifierNumber: vkn,
+      mysoftStatus: "verified" as const,
+      vkn: vkn.length === 10 ? vkn : targetComp.vkn,
+      tckn: vkn.length === 11 ? vkn : targetComp.tckn,
+    };
+    handleSaveCompanyFromModal(updatedComp, false);
+    writeStoredMysoftTenantVkn(vkn);
+    void syncSelectedCompanyMysoftPrefixes(targetComp.id, true);
+    setMysoftDeskFeedback(
+      `"${tenant.name || vkn}" iş ortağı başarıyla "${targetComp.companyName}" şirketine eşleştirildi. Resmi ön ekler ve numaratörler güncelleniyor...`,
+    );
+    setTimeout(() => setMysoftDeskFeedback(null), 5000);
+  };
 
   const [isSaved, setIsSaved] = useState(false);
   const [isCredSaved, setIsCredSaved] = useState(false);
@@ -3900,6 +3988,295 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                     </div>
                   </div>
 
+                  {/* KART 1: MYSOFT WEB SERVİS & PORTAL GİRİŞ BİLGİLERİ (KULLANICI ADI & ŞİFRE) */}
+                  <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Key className="w-4 h-4 text-indigo-600" />
+                          <h5 className="text-sm font-bold text-slate-900">
+                            Mysoft Web Servis & Portal Giriş Bilgileri (Kullanıcı Adı & Şifre)
+                          </h5>
+                          {deskMysoftUsername && deskMysoftPassword ? (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Tanımlı
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Giriş Yapılmadı
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          <strong>{selectedComp.companyTitle || selectedComp.companyName}</strong> için e-Fatura, e-Arşiv ve e-İrsaliye servislerinde kimlik doğrulamada kullanılacak yetkili Mysoft kullanıcı adı ve şifresi.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDeskMysoftCredentials(selectedComp.id)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Giriş Bilgilerini Kaydet</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Kullanıcı Adı */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-slate-500" />
+                          Mysoft Kullanıcı Adı
+                        </label>
+                        <input
+                          type="text"
+                          value={deskMysoftUsername}
+                          onChange={(e) => setDeskMysoftUsername(e.target.value)}
+                          placeholder="Örn: 1234567890 veya entegrasyon kullanıcı adı"
+                          className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                        />
+                        <span className="text-[10px] text-slate-400 block">
+                          Mysoft Portal veya web servis entegrasyonu için tanımlanan kullanıcı adı / VKN
+                        </span>
+                      </div>
+
+                      {/* Şifre */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5 text-slate-500" />
+                          Mysoft Web Servis Şifresi
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showDeskMysoftPassword ? "text" : "password"}
+                            value={deskMysoftPassword}
+                            onChange={(e) => setDeskMysoftPassword(e.target.value)}
+                            placeholder="••••••••••••"
+                            className="w-full h-10 px-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowDeskMysoftPassword(!showDeskMysoftPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                            title={showDeskMysoftPassword ? "Şifreyi Gizle" : "Şifreyi Göster"}
+                          >
+                            {showDeskMysoftPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-slate-400 block">
+                          Mysoft portalı tarafından sağlanan web servis / entegratör şifresi
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KART 2: MYSOFT İŞ ORTAKLARI & MÜKELLEF LİSTESİ (EŞLEŞTİRME MASASI) */}
+                  <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-indigo-600" />
+                          <h5 className="text-sm font-bold text-slate-900">
+                            Mysoft İş Ortakları & Mükellef Listesi
+                          </h5>
+                          <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+                            {mysoftDeskTenants.length} İş Ortağı / Mükellef
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Mysoft hesabınızdaki kayıtlı iş ortaklarını görüntüleyebilir, arayabilir veya doğrudan <strong>{selectedComp.companyName}</strong> ile tek tıkla eşleştirebilirsiniz.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void reloadMysoftDeskTenants()}
+                        disabled={isMysoftDeskTenantsLoading}
+                        className="px-3.5 py-2 bg-slate-50 hover:bg-indigo-50 text-indigo-700 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto disabled:opacity-60"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isMysoftDeskTenantsLoading ? "animate-spin" : ""}`} />
+                        <span>İş Ortaklarını Yenile</span>
+                      </button>
+                    </div>
+
+                    {mysoftDeskPartnerHint && (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
+                        <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>{mysoftDeskPartnerHint}</span>
+                      </div>
+                    )}
+
+                    {mysoftDeskTenantsError && (
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>{mysoftDeskTenantsError}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void reloadMysoftDeskTenants()}
+                          className="px-2.5 py-1 bg-white border border-rose-300 rounded-lg text-rose-700 font-bold hover:bg-rose-100"
+                        >
+                          Tekrar Dene
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Arama & Manuel VKN Sorgulama Çubuğu */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                      <div className="md:col-span-7 relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={tenantSearchQuery}
+                          onChange={(e) => setTenantSearchQuery(e.target.value)}
+                          placeholder="İş ortağı adı, VKN veya TCKN ile filtrele..."
+                          className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                        />
+                      </div>
+
+                      <div className="md:col-span-5 flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={deskManualVkn}
+                          onChange={(e) => setDeskManualVkn(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                          placeholder="10 VKN / 11 TCKN getir"
+                          className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await deskLookupByVkn();
+                            if (res) {
+                              handleMatchTenantWithSelectedComp(res);
+                            }
+                          }}
+                          disabled={isDeskManualVknLoading || !deskManualVkn.trim()}
+                          className="h-10 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                        >
+                          {isDeskManualVknLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Search className="w-3.5 h-3.5" />
+                          )}
+                          <span>VKN ile Getir</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* İş Ortakları Kartları / Listesi */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                        <span>Kayıtlı İş Ortakları</span>
+                        <span className="font-normal text-slate-400">
+                          Seçili şirkete atamak için &quot;Bu Şirkete Eşle&quot; butonunu kullanın
+                        </span>
+                      </div>
+
+                      {isMysoftDeskTenantsLoading ? (
+                        <div className="p-8 text-center text-xs text-slate-500 bg-slate-50/50 rounded-xl border border-slate-100 flex flex-col items-center justify-center gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                          <span>Mysoft iş ortakları ve mükellef rehberi yükleniyor...</span>
+                        </div>
+                      ) : (() => {
+                        const q = tenantSearchQuery.trim().toLowerCase();
+                        const filteredTenants = mysoftDeskTenants.filter((t) => {
+                          if (!q) return true;
+                          const name = String(t.name || "").toLowerCase();
+                          const taxNo = String(t.taxNumber || "");
+                          const tid = String(t.id || "");
+                          return name.includes(q) || taxNo.includes(q) || tid.includes(q);
+                        });
+
+                        if (filteredTenants.length === 0) {
+                          return (
+                            <div className="p-6 text-center text-xs text-slate-500 bg-slate-50/50 rounded-xl border border-slate-100">
+                              {tenantSearchQuery ? (
+                                <span>Arama kriterinize uygun Mysoft iş ortağı bulunamadı.</span>
+                              ) : (
+                                <span>Henüz Mysoft iş ortağı kaydı bulunamadı. Yukarıdaki alandan VKN/TCKN ile sorgulama yapabilirsiniz.</span>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        const selectedCompMatchedId = (
+                          selectedComp.tenantIdentifierNumber ||
+                          selectedComp.vkn ||
+                          selectedComp.tckn ||
+                          ""
+                        ).trim();
+
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                            {filteredTenants.map((t, idx) => {
+                              const tTax = String(t.taxNumber || "").trim();
+                              const isMatched = Boolean(tTax && tTax === selectedCompMatchedId);
+
+                              return (
+                                <div
+                                  key={`${tTax}_${t.id || idx}`}
+                                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
+                                    isMatched
+                                      ? "bg-indigo-50/80 border-indigo-400 ring-2 ring-indigo-300 shadow-2xs"
+                                      : "bg-slate-50/70 border-slate-200 hover:border-indigo-300 hover:bg-white"
+                                  }`}
+                                >
+                                  <div>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <h6 className="text-xs font-bold text-slate-900 line-clamp-2" title={t.name}>
+                                        {t.name || "İsimsiz İş Ortağı"}
+                                      </h6>
+                                      {t.id && (
+                                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                                          #{t.id}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <span className="text-[11px] font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                        {tTax}
+                                      </span>
+                                      <span className="text-[10px] text-slate-500">
+                                        {tTax.length === 10 ? "VKN" : tTax.length === 11 ? "TCKN" : "Kimlik"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                                    {isMatched ? (
+                                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>Eşleşmiş Şirket</span>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMatchTenantWithSelectedComp(t)}
+                                        className="w-full py-1.5 px-3 bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-300 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>Bu Şirkete Eşle</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
                   {/* Şirketin Resmi Belge Ön Ekleri (Prefix) ve Ardışık Fatura Numaratörü Masası */}
                   <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
@@ -4217,35 +4594,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                         );
                       })()}
                     </div>
-                  </div>
-
-                  {/* Mysoft Tenant Picker for this company */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                    <h5 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Search className="w-3.5 h-3.5 text-indigo-600" />
-                      Mysoft Mükellef Rehberinden Seç veya Manuel Eşle
-                    </h5>
-                    <MysoftTenantPicker
-                      variant="compact"
-                      value={selectedComp.tenantIdentifierNumber || selectedComp.vkn || selectedComp.tckn || ""}
-                      hintVkn={selectedComp.tenantIdentifierNumber || selectedComp.vkn || selectedComp.tckn}
-                      onSelect={(newVkn) => {
-                        const currentIdentifier =
-                          selectedComp.tenantIdentifierNumber || selectedComp.vkn || selectedComp.tckn || "";
-                        if (newVkn && newVkn !== currentIdentifier) {
-                          const updated = {
-                            ...selectedComp,
-                            tenantIdentifierNumber: newVkn,
-                            mysoftStatus: "verified" as const,
-                            vkn: newVkn.length === 10 ? newVkn : selectedComp.vkn,
-                            tckn: newVkn.length === 11 ? newVkn : selectedComp.tckn,
-                          };
-                          handleSaveCompanyFromModal(updated, false);
-                          writeStoredMysoftTenantVkn(newVkn);
-                          void syncSelectedCompanyMysoftPrefixes(selectedComp.id, true);
-                        }
-                      }}
-                    />
                   </div>
                 </div>
               );
