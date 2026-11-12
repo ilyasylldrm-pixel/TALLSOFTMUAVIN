@@ -2115,6 +2115,90 @@ app.post("/api/cloud-sync/company", (req, res) => {
   }
 });
 
+// E-Ticaret ve Pazaryeri (Trendyol, Trendyol Go / TGO Yemek vb.) Mağaza ve Sipariş Senkronizasyonu
+app.get("/api/ecommerce/stores", (req, res) => {
+  const companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
+  if (!companyId) return res.status(400).json({ success: false, error: "companyId zorunlu" });
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data || {};
+  const stores = Array.isArray(entry.ecommerceStores) ? entry.ecommerceStores : [];
+  res.json({ success: true, stores, companyId, updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || null });
+});
+
+app.post("/api/ecommerce/stores", (req, res) => {
+  try {
+    const { companyId, stores } = req.body || {};
+    const cleanId = String(companyId || "").trim();
+    if (!cleanId || !Array.isArray(stores)) {
+      return res.status(400).json({ success: false, error: "Geçersiz mağaza listesi" });
+    }
+    const nowIso = new Date().toISOString();
+    const entry = memoryCloudSyncStore.companiesData[cleanId] || { data: {}, updatedAt: nowIso };
+    entry.data = { ...(entry.data || {}), ecommerceStores: stores };
+    entry.updatedAt = nowIso;
+    memoryCloudSyncStore.companiesData[cleanId] = entry;
+    memoryCloudSyncStore.updatedAt = nowIso;
+    memoryCloudSyncStore.version = Date.now();
+    persistServerCloudSyncStore();
+    res.json({ success: true, count: stores.length, updatedAt: nowIso });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "E-ticaret mağaza kayıt hatası" });
+  }
+});
+
+app.get("/api/ecommerce/orders", (req, res) => {
+  const companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
+  if (!companyId) return res.status(400).json({ success: false, error: "companyId zorunlu" });
+  const entry = memoryCloudSyncStore.companiesData[companyId]?.data || {};
+  const orders = Array.isArray(entry.ecommerceOrders) ? entry.ecommerceOrders : [];
+  res.json({ success: true, orders, companyId, updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || null });
+});
+
+app.post("/api/ecommerce/orders", (req, res) => {
+  try {
+    const { companyId, orders } = req.body || {};
+    const cleanId = String(companyId || "").trim();
+    if (!cleanId || !Array.isArray(orders)) {
+      return res.status(400).json({ success: false, error: "Geçersiz sipariş listesi" });
+    }
+    const nowIso = new Date().toISOString();
+    const entry = memoryCloudSyncStore.companiesData[cleanId] || { data: {}, updatedAt: nowIso };
+    entry.data = { ...(entry.data || {}), ecommerceOrders: orders };
+    entry.updatedAt = nowIso;
+    memoryCloudSyncStore.companiesData[cleanId] = entry;
+    memoryCloudSyncStore.updatedAt = nowIso;
+    memoryCloudSyncStore.version = Date.now();
+    persistServerCloudSyncStore();
+    res.json({ success: true, count: orders.length, updatedAt: nowIso });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "E-ticaret sipariş kayıt hatası" });
+  }
+});
+
+app.post("/api/cloud-sync/ecommerce", (req, res) => {
+  try {
+    const { companyId, stores, orders, markups } = req.body || {};
+    const cleanId = String(companyId || "").trim();
+    if (!cleanId) return res.status(400).json({ success: false, error: "companyId zorunlu" });
+    const nowIso = new Date().toISOString();
+    const entry = memoryCloudSyncStore.companiesData[cleanId] || { data: {}, updatedAt: nowIso };
+    const currentData = entry.data || {};
+    entry.data = {
+      ...currentData,
+      ...(Array.isArray(stores) ? { ecommerceStores: stores } : {}),
+      ...(Array.isArray(orders) ? { ecommerceOrders: orders } : {}),
+      ...(markups && typeof markups === "object" ? { ecommerceMarkups: markups } : {}),
+    };
+    entry.updatedAt = nowIso;
+    memoryCloudSyncStore.companiesData[cleanId] = entry;
+    memoryCloudSyncStore.updatedAt = nowIso;
+    memoryCloudSyncStore.version = Date.now();
+    persistServerCloudSyncStore();
+    res.json({ success: true, updatedAt: nowIso });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "E-ticaret senkronizasyon hatası" });
+  }
+});
+
 app.post("/api/cloud-sync/broadcast", (req, res) => {
   try {
     const { actionName, performedBy } = req.body || {};

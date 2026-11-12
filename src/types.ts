@@ -2271,7 +2271,8 @@ export function isKeyAllowedInList(
 
 /**
  * Hem Şirket hem Kullanıcı düzeyinde modül ve alt modül erişim yetkisini kontrol eder.
- * Admin ve Sistem Yöneticisi her zaman tam yetkilidir.
+ * Admin ve Sistem Yöneticisi her zaman tam yetkilidir (şirketleri ve kullanıcıları yönetebilir, tüm modülleri görebilir).
+ * Şirketlere ve kullanıcılara hangi modüller aktif edildiyse SADECE onlar görülebilir.
  */
 export function isModuleOrSubModuleAllowed(
   moduleKey: string,
@@ -2288,21 +2289,34 @@ export function isModuleOrSubModuleAllowed(
     eArsivNextNumber?: string;
   } | null
 ): boolean {
+  if (moduleKey === "dashboard") return true;
+
   if (moduleKey === "company_logs" || moduleKey === "e_document_logs") {
     return isCompanyMysoftMatched(activeCompany);
   }
+
+  // 1. Admin veya Sistem Yöneticisi: Şirketler ve kullanıcılar üzerinde tam yetkilidir, tüm modülleri görebilir
   if (isAdminOrSysAdmin(currentUser)) return true;
+
+  // Yönetici paneli ve sistem şirket eşleştirmesi admin harici kullanıcılara kesinlikle kapalıdır
   if (moduleKey === "admin" || moduleKey === "company_companies" || moduleKey === "company_mysoft") return false;
 
-  // 1. Kullanıcı bazlı modül ve alt modül yetkilendirmesi:
-  // Admin tarafından kullanıcıya özel yetkilendirme (allowedModules) tanımlanmışsa doğrudan kullanıcının yetki listesi belirleyicidir
-  if (currentUser && Array.isArray(currentUser.allowedModules)) {
-    return isKeyAllowedInList(moduleKey, parentKey, currentUser.allowedModules);
+  // 2. Şirket bazlı modül kısıtlaması:
+  // Şirkete hangi modüller aktif edildiyse o şirkette sadece o modüller görülebilir
+  const isCompanyRestricted =
+    Boolean(activeCompany?.moduleRestrictionEnabled) ||
+    (Array.isArray(activeCompany?.allowedModules) && activeCompany.allowedModules.length > 0 && activeCompany.moduleRestrictionEnabled !== false);
+
+  if (isCompanyRestricted && Array.isArray(activeCompany?.allowedModules)) {
+    if (!isKeyAllowedInList(moduleKey, parentKey, activeCompany.allowedModules)) {
+      return false;
+    }
   }
 
-  // 2. Kullanıcıya özel yetki listesi tanımlanmamışsa şirket bazlı modül kısıtlamasına bakılır
-  if (activeCompany?.moduleRestrictionEnabled && Array.isArray(activeCompany.allowedModules)) {
-    if (!isKeyAllowedInList(moduleKey, parentKey, activeCompany.allowedModules)) {
+  // 3. Kullanıcı bazlı modül yetkilendirmesi:
+  // Kullanıcıya hangi modüller aktif edildiyse kullanıcı sadece o modülleri görebilir
+  if (currentUser && Array.isArray(currentUser.allowedModules)) {
+    if (!isKeyAllowedInList(moduleKey, parentKey, currentUser.allowedModules)) {
       return false;
     }
   }

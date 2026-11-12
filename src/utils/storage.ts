@@ -86,6 +86,9 @@ const STORAGE_KEYS = {
   PAYROLL_CUSTOMIZATIONS: "muavin_payroll_customizations",
   COMPANIES_LIST: "muavin_companies_list",
   ACTIVE_COMPANY_ID: "muavin_active_company_id",
+  ECOMMERCE_STORES: "muavin_ecommerce_v2_stores",
+  ECOMMERCE_ORDERS: "muavin_ecommerce_v2_orders",
+  ECOMMERCE_MARKUPS: "muavin_ecommerce_v2_markups",
 };
 
 export const DEFAULT_COMPANY: CompanyItem = {

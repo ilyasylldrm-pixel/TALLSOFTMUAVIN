@@ -608,6 +608,9 @@ export default function App() {
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === "visible") {
         void checkServerUpdates();
+        void pullLatestCompanyDataFromCloud(getActiveCompanyId(), true).then(() => {
+          handleCentralSync();
+        });
       }
     };
     window.addEventListener("focus", handleVisibilityOrFocus);
@@ -4153,12 +4156,12 @@ export default function App() {
     );
   };
 
-  // Eğer kullanıcının yetkileri güncellendiğinde mevcut sekme yetkisiz hale gelirse ana sayfaya yönlendir
+  // Eğer kullanıcının veya şirketin yetkileri güncellendiğinde mevcut sekme yetkisiz hale gelirse ana sayfaya yönlendir
   useEffect(() => {
     if (currentTab !== "dashboard" && !isCurrentTabAuthorized(currentTab)) {
       setCurrentTab("dashboard");
     }
-  }, [currentTab, currentUser, activeCompanyId]);
+  }, [currentTab, currentUser, activeCompanyId, activeCompanyObj]);
 
   return (
     <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased md:gap-x-4 lg:gap-x-5">

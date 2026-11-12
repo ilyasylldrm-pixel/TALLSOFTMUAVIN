@@ -8,7 +8,12 @@ import {
   CompanySettings,
 } from "../types";
 import { NavItem } from "./Sidebar";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import {
+  syncCompanyEcommerceToCloud,
+  pullLatestCompanyDataFromCloud,
+} from "../services/systemSyncService";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import {
@@ -1087,7 +1092,55 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     } catch {
       setStores([]);
     }
-  }, [storagePrefix, activeSubTab]);
+
+    // Diğer cihazlarda yapılan mağaza güncellemelerini hem sunucudan hem Firestore'dan anında çek
+    let isMounted = true;
+    const loadRemoteStores = async () => {
+      let remoteStores: MarketplaceStoreConfig[] | null = null;
+      try {
+        const resp = await fetch(`/api/ecommerce/stores?companyId=${encodeURIComponent(activeCompanyId)}`);
+        if (resp.ok) {
+          const json = await resp.json();
+          if (Array.isArray(json.stores) && json.stores.length > 0) {
+            remoteStores = json.stores;
+          }
+        }
+      } catch {}
+
+      if (!remoteStores) {
+        try {
+          const snap = await getDoc(doc(db, "system_settings", `company_data_${activeCompanyId}`));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.ecommerceStores) && data.ecommerceStores.length > 0) {
+              remoteStores = data.ecommerceStores;
+            }
+          }
+        } catch {}
+      }
+
+      if (isMounted && remoteStores && Array.isArray(remoteStores)) {
+        setStores(remoteStores);
+        try {
+          localStorage.setItem(`${storagePrefix}stores`, JSON.stringify(remoteStores));
+        } catch {}
+      }
+    };
+
+    void loadRemoteStores();
+
+    const handleStoresUpdated = (e: any) => {
+      const detail = e.detail;
+      if (detail?.companyId === activeCompanyId && Array.isArray(detail?.stores)) {
+        setStores(detail.stores);
+      }
+    };
+    window.addEventListener("muavin:ecommerce-stores-updated", handleStoresUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("muavin:ecommerce-stores-updated", handleStoresUpdated);
+    };
+  }, [storagePrefix, activeSubTab, activeCompanyId]);
 
   // --- MAĞAZA VE PAZARYERİ API BAĞLANTI PANELİ STATE & HANDLERS ---
   const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
@@ -1099,16 +1152,55 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
+  const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
 
   const showStoreToast = (text: string, type: "success" | "error" | "info" = "success") => {
     setStoreToast({ type, text });
     setTimeout(() => setStoreToast(null), 3500);
   };
 
+  const handleRefreshCloud = async () => {
+    setIsRefreshingCloud(true);
+    try {
+      await pullLatestCompanyDataFromCloud(activeCompanyId, true);
+      let remoteStores: MarketplaceStoreConfig[] | null = null;
+      try {
+        const resp = await fetch(`/api/ecommerce/stores?companyId=${encodeURIComponent(activeCompanyId)}`);
+        if (resp.ok) {
+          const json = await resp.json();
+          if (Array.isArray(json.stores) && json.stores.length > 0) remoteStores = json.stores;
+        }
+      } catch {}
+      if (!remoteStores) {
+        try {
+          const snap = await getDoc(doc(db, "system_settings", `company_data_${activeCompanyId}`));
+          if (snap.exists() && Array.isArray(snap.data().ecommerceStores)) {
+            remoteStores = snap.data().ecommerceStores;
+          }
+        } catch {}
+      }
+      if (remoteStores && Array.isArray(remoteStores)) {
+        setStores(remoteStores);
+        localStorage.setItem(`${storagePrefix}stores`, JSON.stringify(remoteStores));
+      }
+      showStoreToast("Tüm cihazlardaki güncellemeler ve mağazalar buluttan başarıyla çekildi.");
+    } catch {
+      showStoreToast("Bulut güncellemesi kontrol edildi.", "info");
+    } finally {
+      setIsRefreshingCloud(false);
+    }
+  };
+
   const saveStores = (updated: MarketplaceStoreConfig[]) => {
     setStores(updated);
     try {
       localStorage.setItem(`${storagePrefix}stores`, JSON.stringify(updated));
+      window.dispatchEvent(
+        new CustomEvent("muavin:ecommerce-stores-updated", {
+          detail: { companyId: activeCompanyId, stores: updated },
+        })
+      );
+      void syncCompanyEcommerceToCloud(activeCompanyId, updated, ecoOrders, productMarkups);
     } catch (e) {
       console.error("Storage error", e);
     }
@@ -1232,12 +1324,65 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
   });
 
   useEffect(() => {
+    // Diğer cihazlarda yapılan sipariş güncellemelerini hem sunucudan hem Firestore'dan anında çek
+    let isMounted = true;
+    const loadRemoteOrders = async () => {
+      let remoteOrders: ECommerceOrder[] | null = null;
+      try {
+        const resp = await fetch(`/api/ecommerce/orders?companyId=${encodeURIComponent(activeCompanyId)}`);
+        if (resp.ok) {
+          const json = await resp.json();
+          if (Array.isArray(json.orders) && json.orders.length > 0) {
+            remoteOrders = json.orders;
+          }
+        }
+      } catch {}
+
+      if (!remoteOrders) {
+        try {
+          const snap = await getDoc(doc(db, "system_settings", `company_data_${activeCompanyId}`));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.ecommerceOrders) && data.ecommerceOrders.length > 0) {
+              remoteOrders = data.ecommerceOrders;
+            }
+          }
+        } catch {}
+      }
+
+      if (isMounted && remoteOrders && Array.isArray(remoteOrders)) {
+        setEcoOrders(remoteOrders);
+        try {
+          localStorage.setItem(`${storagePrefix}orders`, JSON.stringify(remoteOrders));
+        } catch {}
+      }
+    };
+
+    void loadRemoteOrders();
+
+    const handleOrdersUpdated = (e: any) => {
+      const detail = e.detail;
+      if (detail?.companyId === activeCompanyId && Array.isArray(detail?.orders)) {
+        setEcoOrders(detail.orders);
+      }
+    };
+    window.addEventListener("muavin:ecommerce-orders-updated", handleOrdersUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("muavin:ecommerce-orders-updated", handleOrdersUpdated);
+    };
+  }, [storagePrefix, activeCompanyId]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(`${storagePrefix}orders`, JSON.stringify(ecoOrders));
+      if (ecoOrders.length > 0) {
+        void syncCompanyEcommerceToCloud(activeCompanyId, stores, ecoOrders, productMarkups);
+      }
     } catch {
       // ignore
     }
-  }, [ecoOrders, storagePrefix]);
+  }, [ecoOrders, storagePrefix, activeCompanyId]);
 
   useEffect(() => {
     try {
@@ -2301,7 +2446,18 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshCloud}
+                disabled={isRefreshingCloud}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 font-bold text-xs shadow-2xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                title="Diğer cihazlarda yapılan tüm güncellemeleri ve mağazaları buluttan anında çek"
+              >
+                <RefreshCw className={`w-4 h-4 text-orange-600 ${isRefreshingCloud ? "animate-spin" : ""}`} />
+                <span>{isRefreshingCloud ? "Buluttan Alınıyor..." : "Buluttan Güncellemeleri Al"}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {

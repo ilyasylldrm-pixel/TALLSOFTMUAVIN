@@ -87,7 +87,7 @@ try {
 export const db = firestoreInstance;
 
 const QUOTA_EXHAUSTED_STORAGE_KEY = "muavin_firestore_write_quota_exhausted_ts";
-const QUOTA_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days cooldown when daily quota is hit
+const QUOTA_COOLDOWN_MS = 60 * 1000; // 60 seconds retry cooldown if write quota is hit
 let memoryQuotaExhaustedUntil = 0;
 
 export function isFirestoreWriteQuotaExhausted(): boolean {
@@ -119,8 +119,7 @@ export function checkAndMarkFirestoreQuotaError(error: unknown): boolean {
     code === "resource-exhausted" ||
     msg.includes("resource-exhausted") ||
     msg.includes("Quota limit exceeded") ||
-    msg.includes("Quota exceeded") ||
-    msg.includes("quota")
+    msg.includes("Quota exceeded")
   ) {
     const until = Date.now() + QUOTA_COOLDOWN_MS;
     memoryQuotaExhaustedUntil = until;
@@ -131,11 +130,6 @@ export function checkAndMarkFirestoreQuotaError(error: unknown): boolean {
       } catch {
         // ignore
       }
-    }
-    try {
-      void disableNetwork(db);
-    } catch {
-      // ignore network disable error
     }
     return true;
   }

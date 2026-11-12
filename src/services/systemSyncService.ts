@@ -197,6 +197,9 @@ const COMPANY_SLICE_MAPPING: Array<{ dataKey: string; storageKey: any; maxItems?
   { dataKey: "fixedAssets", storageKey: "FIXED_ASSETS", maxItems: 200 },
   { dataKey: "assetMaintenances", storageKey: "ASSET_MAINTENANCES", maxItems: 200 },
   { dataKey: "assetDisposals", storageKey: "ASSET_DISPOSALS", maxItems: 200 },
+  { dataKey: "ecommerceStores", storageKey: "ECOMMERCE_STORES", maxItems: 100 },
+  { dataKey: "ecommerceOrders", storageKey: "ECOMMERCE_ORDERS", maxItems: 500 },
+  { dataKey: "ecommerceMarkups", storageKey: "ECOMMERCE_MARKUPS", maxItems: 200 },
 ];
 
 let memoryFirebaseIdToken: string | null = null;
@@ -401,6 +404,25 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
     }
   });
 
+  if (!payloadSlices.ecommerceStores && typeof window !== "undefined") {
+    try {
+      const rawStores = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_stores`);
+      if (rawStores) payloadSlices.ecommerceStores = JSON.parse(rawStores);
+    } catch {}
+  }
+  if (!payloadSlices.ecommerceOrders && typeof window !== "undefined") {
+    try {
+      const rawOrders = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_orders`);
+      if (rawOrders) payloadSlices.ecommerceOrders = JSON.parse(rawOrders);
+    } catch {}
+  }
+  if (!payloadSlices.ecommerceMarkups && typeof window !== "undefined") {
+    try {
+      const rawMarkups = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_markups`);
+      if (rawMarkups) payloadSlices.ecommerceMarkups = JSON.parse(rawMarkups);
+    } catch {}
+  }
+
   safeSetStorageItem(`muavin_company_updated_at_${cleanId}`, nowIso);
 
   // 1. Merkezi PostgreSQL veritabanı (/api/db/sync) ve sunucu tarafı kalıcı bulut deposuna anında yaz
@@ -468,6 +490,36 @@ export async function pullLatestCompanyDataFromCloud(
 ): Promise<boolean> {
   let anyUpdated = false;
   const targetId = String(targetCompanyId || "").trim();
+
+  // 0. Firestore'daki merkezi kayıtları (central_sync_state) doğrudan oku; böylece başka cihazda açılan veya güncellenen şirket ve kullanıcılar anında yerel sisteme alınır
+  if (typeof window !== "undefined") {
+    try {
+      const syncSnap = await getDoc(doc(db, "system_settings", "central_sync_state"));
+      if (syncSnap.exists()) {
+        const syncData = syncSnap.data();
+        if (Array.isArray(syncData?.companiesRegistry) && syncData.companiesRegistry.length > 0) {
+          const localCompanies = getCompaniesList();
+          const mergedMap = new Map<string, any>();
+          localCompanies.forEach((c) => {
+            if (c?.id) mergedMap.set(c.id, c);
+          });
+          syncData.companiesRegistry.forEach((remoteComp: any) => {
+            if (remoteComp?.id) {
+              const existing = mergedMap.get(remoteComp.id);
+              mergedMap.set(remoteComp.id, mergeCompanyMetadataNonDestructive(existing, remoteComp));
+            }
+          });
+          saveCompaniesList(Array.from(mergedMap.values()), false);
+          anyUpdated = true;
+        }
+        if (Array.isArray(syncData?.usersRegistry) && syncData.usersRegistry.length > 0) {
+          saveLocalUsersBackup(syncData.usersRegistry, false);
+        }
+      }
+    } catch {
+      // Firestore doğrudan okunamıyorsa devam et
+    }
+  }
 
   // 1. Sunucu tarafı /api/cloud-sync/state uç noktasından en güncel kayıtları çek
   let serverState: any = null;
@@ -634,6 +686,37 @@ export async function pullLatestCompanyDataFromCloud(
           }
         }
       });
+
+      // E-Ticaret ve Pazaryeri (Trendyol, Trendyol Go / TGO vb.) mağaza ve siparişlerini de buluttan aktar
+      if (Array.isArray(chosenRemote.ecommerceStores) && chosenRemote.ecommerceStores.length > 0) {
+        try {
+          const currentLocalRaw = localStorage.getItem(`muavin_ecommerce_v2_${cid}_stores`);
+          const currentLocal = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
+          const storeMap = new Map();
+          currentLocal.forEach((s: any) => { if (s?.id) storeMap.set(s.id, s); });
+          chosenRemote.ecommerceStores.forEach((s: any) => { if (s?.id) storeMap.set(s.id, s); });
+          const mergedStores = Array.from(storeMap.values());
+          localStorage.setItem(`muavin_ecommerce_v2_${cid}_stores`, JSON.stringify(mergedStores));
+          window.dispatchEvent(new CustomEvent("muavin:ecommerce-stores-updated", { detail: { companyId: cid, stores: mergedStores } }));
+        } catch {}
+      }
+      if (Array.isArray(chosenRemote.ecommerceOrders) && chosenRemote.ecommerceOrders.length > 0) {
+        try {
+          const currentOrdersRaw = localStorage.getItem(`muavin_ecommerce_v2_${cid}_orders`);
+          const currentOrders = currentOrdersRaw ? JSON.parse(currentOrdersRaw) : [];
+          const orderMap = new Map();
+          currentOrders.forEach((o: any) => { if (o?.id) orderMap.set(o.id, o); });
+          chosenRemote.ecommerceOrders.forEach((o: any) => { if (o?.id) orderMap.set(o.id, o); });
+          const mergedOrders = Array.from(orderMap.values());
+          localStorage.setItem(`muavin_ecommerce_v2_${cid}_orders`, JSON.stringify(mergedOrders));
+          window.dispatchEvent(new CustomEvent("muavin:ecommerce-orders-updated", { detail: { companyId: cid, orders: mergedOrders } }));
+        } catch {}
+      }
+      if (chosenRemote.ecommerceMarkups && typeof chosenRemote.ecommerceMarkups === "object") {
+        try {
+          localStorage.setItem(`muavin_ecommerce_v2_${cid}_markups`, JSON.stringify(chosenRemote.ecommerceMarkups));
+        } catch {}
+      }
 
       // Hesap bakiyelerini hareketlere göre yeniden senkronize et
       const postSyncData = getStoredData(cid);
@@ -1378,6 +1461,81 @@ export function subscribeToCentralSyncState(
     return () => {};
   }
 }
+
+/**
+ * E-Ticaret ve Pazaryeri (Trendyol, Trendyol Go / TGO Yemek vb.) mağaza ve sipariş
+ * güncellemelerini anında hem merkezi sunucuya hem Firestore bulutuna kaydeder.
+ */
+export async function syncCompanyEcommerceToCloud(
+  companyId: string,
+  stores?: any[],
+  orders?: any[],
+  markups?: any
+): Promise<void> {
+  const cleanId = String(companyId || "").trim();
+  if (!cleanId) return;
+  const nowIso = new Date().toISOString();
+
+  const effectiveStores = stores || (() => {
+    try {
+      const raw = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_stores`);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  })();
+
+  const effectiveOrders = orders || (() => {
+    try {
+      const raw = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_orders`);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  })();
+
+  const effectiveMarkups = markups || (() => {
+    try {
+      const raw = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_markups`);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  })();
+
+  // 1. Merkezi sunucuya gönder
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/cloud-sync/ecommerce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: cleanId,
+          stores: effectiveStores,
+          orders: effectiveOrders,
+          markups: effectiveMarkups,
+          updatedAt: nowIso,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Firestore sistem dokümanına kaydet
+  if (!isFirestoreWriteQuotaExhausted()) {
+    try {
+      const docRef = doc(db, "system_settings", `company_data_${cleanId}`);
+      await setDoc(
+        docRef,
+        sanitizeForFirestore({
+          ecommerceStores: effectiveStores,
+          ecommerceOrders: effectiveOrders,
+          ecommerceMarkups: effectiveMarkups,
+          updatedAt: nowIso,
+        }),
+        { merge: true }
+      );
+    } catch (err) {
+      checkAndMarkFirestoreQuotaError(err);
+    }
+  }
+}
+
 
 
 

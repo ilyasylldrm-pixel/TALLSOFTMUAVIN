@@ -4,7 +4,12 @@ import {
   MarketplaceId,
   MarketplaceStoreConfig,
 } from "./ECommerceModule";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import {
+  syncCompanyEcommerceToCloud,
+  pullLatestCompanyDataFromCloud,
+} from "../services/systemSyncService";
 import { formatCurrency } from "../utils/exportUtils";
 import {
   Globe,
@@ -153,13 +158,22 @@ export function getCompanyMatchedEcommerceStores(companyId: string): Marketplace
 
 export function saveCompanyMatchedEcommerceStores(
   companyId: string,
-  stores: MarketplaceStoreConfig[]
+  stores: MarketplaceStoreConfig[],
+  syncCloud: boolean = true
 ): void {
   try {
     localStorage.setItem(
       `muavin_ecommerce_v2_${companyId}_stores`,
       JSON.stringify(stores)
     );
+    window.dispatchEvent(
+      new CustomEvent("muavin:ecommerce-stores-updated", {
+        detail: { companyId, stores },
+      })
+    );
+    if (syncCloud) {
+      void syncCompanyEcommerceToCloud(companyId, stores);
+    }
   } catch {
     // ignore storage errors
   }
@@ -178,6 +192,31 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   const [searchTerm, setSearchTerm] = useState("");
   const [showSecrets, setShowSecrets] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
+
+  const handleRefreshCloudUpdates = async () => {
+    setIsRefreshingCloud(true);
+    try {
+      await pullLatestCompanyDataFromCloud(undefined, true);
+      if (selectedCompanyId) {
+        const snap = await getDoc(doc(db, "system_settings", `company_data_${selectedCompanyId}`));
+        if (snap.exists() && Array.isArray(snap.data().ecommerceStores)) {
+          saveCompanyMatchedEcommerceStores(selectedCompanyId, snap.data().ecommerceStores, false);
+          setCompanyStoresMap((prev) => ({
+            ...prev,
+            [selectedCompanyId]: snap.data().ecommerceStores,
+          }));
+        }
+      }
+      if (onNotifySuccess) {
+        onNotifySuccess("Tüm cihazlardaki güncellemeler ve mağaza eşleştirmeleri buluttan başarıyla çekildi.");
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsRefreshingCloud(false);
+    }
+  };
 
   // Map of companyId -> matched stores
   const [companyStoresMap, setCompanyStoresMap] = useState<
@@ -203,6 +242,61 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     });
     setCompanyStoresMap(map);
   }, [companies]);
+
+  // Diğer cihazlarda yapılan mağaza güncellemelerini hem sunucudan hem Firestore'dan anında çek
+  useEffect(() => {
+    let isMounted = true;
+    const loadRemoteStores = async () => {
+      if (!selectedCompanyId) return;
+      let remoteStores: MarketplaceStoreConfig[] | null = null;
+      try {
+        const resp = await fetch(`/api/ecommerce/stores?companyId=${encodeURIComponent(selectedCompanyId)}`);
+        if (resp.ok) {
+          const json = await resp.json();
+          if (Array.isArray(json.stores) && json.stores.length > 0) {
+            remoteStores = json.stores;
+          }
+        }
+      } catch {}
+
+      if (!remoteStores) {
+        try {
+          const snap = await getDoc(doc(db, "system_settings", `company_data_${selectedCompanyId}`));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.ecommerceStores) && data.ecommerceStores.length > 0) {
+              remoteStores = data.ecommerceStores;
+            }
+          }
+        } catch {}
+      }
+
+      if (isMounted && remoteStores && Array.isArray(remoteStores)) {
+        saveCompanyMatchedEcommerceStores(selectedCompanyId, remoteStores, false);
+        setCompanyStoresMap((prev) => ({
+          ...prev,
+          [selectedCompanyId]: remoteStores!,
+        }));
+      }
+    };
+
+    void loadRemoteStores();
+
+    const handleStoresUpdated = (e: any) => {
+      const detail = e.detail;
+      if (detail?.companyId && Array.isArray(detail?.stores)) {
+        setCompanyStoresMap((prev) => ({
+          ...prev,
+          [detail.companyId]: detail.stores,
+        }));
+      }
+    };
+    window.addEventListener("muavin:ecommerce-stores-updated", handleStoresUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("muavin:ecommerce-stores-updated", handleStoresUpdated);
+    };
+  }, [selectedCompanyId]);
 
   const selectedCompany = useMemo(
     () => companies.find((c) => c.id === selectedCompanyId) || companies[0] || null,
@@ -453,6 +547,17 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleRefreshCloudUpdates}
+            disabled={isRefreshingCloud}
+            className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-[#0f6bae] font-bold text-xs rounded-xl border border-sky-200 flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+            title="Diğer cihazlarda yapılan tüm güncellemeleri ve mağazaları buluttan anında çek"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshingCloud ? "animate-spin text-[#0f6bae]" : "text-[#0f6bae]"}`} />
+            <span>{isRefreshingCloud ? "Buluttan Alınıyor..." : "Buluttan Güncellemeleri Al"}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowSecrets((prev) => !prev)}
