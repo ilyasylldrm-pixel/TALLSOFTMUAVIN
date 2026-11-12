@@ -11,6 +11,7 @@ import { getExtensionRouter } from "./src/services/extensionRoutes.ts";
 import { getGitHubRouter } from "./src/services/githubRoutes.ts";
 import { createTrendyolModule } from "./src/services/trendyol/trendyolRoutes.ts";
 import { createTgoMealRouter } from "./src/services/tgoMeal.ts";
+import { createYemeksepetiMealRouter } from "./src/services/yemeksepetiMeal.ts";
 import { requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import {
@@ -166,6 +167,7 @@ const trendyolModule = createTrendyolModule({
 });
 app.use("/api/marketplace/trendyol", trendyolModule.router);
 app.use("/api/marketplace/tgo-meal", createTgoMealRouter());
+app.use("/api/marketplace/yemeksepeti-meal", createYemeksepetiMealRouter());
 
 // Initialize Gemini client lazily
 let genAI: GoogleGenAI | null = null;

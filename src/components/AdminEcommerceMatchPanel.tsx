@@ -73,6 +73,16 @@ const MARKETPLACE_TEMPLATES: Record<
     defaultWithholding: 1,
     storeUrl: "https://partner.tgoyemek.com",
   },
+  yemeksepeti: {
+    name: "Yemeksepeti Yemek",
+    shortCode: "YS",
+    badgeColor: "bg-rose-100 text-rose-900 border-rose-300",
+    accentBg: "#e21b70",
+    defaultCommission: 0,
+    defaultCargo: 0,
+    defaultWithholding: 0,
+    storeUrl: "https://integration.yemeksepeti.com",
+  },
   ubereats: {
     name: "Uber Eats",
     shortCode: "UE",
@@ -460,9 +470,9 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       commissionRate: Number(formState.commissionRate),
       shippingDeductionAvg: Number(formState.shippingDeductionAvg),
       withholdingRate: Number(formState.withholdingRate),
-      autoInvoice: formState.id === "trendyol_go" ? false : formState.autoInvoice,
-      autoStockSync: formState.id === "trendyol_go" ? false : formState.autoStockSync,
-      isConnected: formState.id === "trendyol_go" ? false : Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
+      autoInvoice: ["trendyol_go", "yemeksepeti"].includes(formState.id) ? false : formState.autoInvoice,
+      autoStockSync: ["trendyol_go", "yemeksepeti"].includes(formState.id) ? false : formState.autoStockSync,
+      isConnected: ["trendyol_go", "yemeksepeti"].includes(formState.id) ? false : Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
       lastSyncAt: selectedCompanyStores.find((s) => s.id === formState.id)?.lastSyncAt || "",
       storeUrl: formState.storeUrl.trim() || tpl.storeUrl,
     };
@@ -1013,7 +1023,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    {formState.id === "trendyol_go"
+                    {formState.id === "yemeksepeti" ? "Zincir kodu (Chain Code) *" : formState.id === "trendyol_go"
                       ? "Satıcı ID (Cari ID) *"
                       : "Satıcı ID (Supplier / Merchant ID) *"}
                   </label>
@@ -1043,14 +1053,14 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              {formState.id === "ubereats" && (
+              {(formState.id === "ubereats" || formState.id === "yemeksepeti") && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Entegrasyon Referans Kodu {formState.id === "trendyol_go" ? "*" : ""}
+                    {formState.id === "yemeksepeti" ? "Restoran kodu (Vendor ID) *" : "Entegrasyon Referans Kodu"}
                   </label>
                   <input
                     type="text"
-                    required={formState.id === "trendyol_go"}
+                    required={formState.id === "yemeksepeti"}
                     placeholder="Örn: TGO-REF-948201"
                     value={formState.integrationRefCode}
                     onChange={(e) =>
@@ -1064,7 +1074,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    API Key *
+                    {formState.id === "yemeksepeti" ? "POS kullanıcı adı *" : "API Key *"}
                   </label>
                   <input
                     type="text"
@@ -1079,11 +1089,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    API Secret {formState.id === "trendyol_go" ? "*" : ""}
+                    {formState.id === "yemeksepeti" ? "POS şifresi *" : "API Secret"} {formState.id === "trendyol_go" ? "*" : ""}
                   </label>
                   <input
                     type="text"
-                    required={formState.id === "trendyol_go"}
+                    required={formState.id === "trendyol_go" || formState.id === "yemeksepeti"}
                     placeholder="API Secret girin..."
                     value={formState.apiSecret}
                     onChange={(e) =>

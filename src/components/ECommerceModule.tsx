@@ -17,6 +17,7 @@ import {
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { mapTgoPackage, requestTgoPackages } from "../services/tgoMealClient";
+import { mapYemeksepetiOrder, requestYemeksepetiOrders } from "../services/yemeksepetiMealClient";
 import {
   Globe,
   ShoppingCart,
@@ -59,6 +60,7 @@ import {
 export type MarketplaceId =
   | "trendyol"
   | "trendyol_go"
+  | "yemeksepeti"
   | "ubereats"
   | "hepsiburada"
   | "amazon"
@@ -191,6 +193,15 @@ const MARKETPLACE_META: Record<
     shippingDeductionAvg: 29.9,
     withholdingRate: 1,
   },
+  yemeksepeti: {
+    name: "Yemeksepeti Yemek",
+    shortCode: "YS",
+    badgeColor: "bg-rose-100 text-rose-900 border-rose-300",
+    accentBg: "#e21b70",
+    commissionRate: 0,
+    shippingDeductionAvg: 0,
+    withholdingRate: 0,
+  },
   ubereats: {
     name: "Uber Eats",
     shortCode: "UE",
@@ -283,6 +294,20 @@ function getMarketplaceFieldHelp(mp: MarketplaceId): {
         apiSecretPlaceholder: "örn: 5s7axxxxxxxxxxxxxxxxxxxx",
         extraLabel: null,
         hint: "Trendyol Partner > Hesap Bilgilerim > Entegrasyon Bilgileri alanından Satıcı ID, API Key ve API Secret bilgilerini alabilir; TRENDYOL_SECRET_KEY değerini aşağıdan tanımlayabilirsiniz.",
+      };
+    case "yemeksepeti":
+      return {
+        supplierIdLabel: "Zincir kodu (Chain Code)",
+        supplierIdPlaceholder: "Yemeksepeti POS ekibinin verdiği kod",
+        integrationRefLabel: "Restoran kodu (Vendor ID)",
+        integrationRefPlaceholder: "Yemeksepeti POS ekibinin verdiği restoran kodu",
+        integrationRefRequired: true,
+        apiKeyLabel: "POS kullanıcı adı",
+        apiKeyPlaceholder: "Entegrasyon kullanıcı adı",
+        apiSecretLabel: "POS şifresi",
+        apiSecretPlaceholder: "Entegrasyon şifresi",
+        extraLabel: null,
+        hint: "Restoran POS erişimi, zincir/restoran eşlemesi ve üretim API adresi Yemeksepeti tarafından etkinleştirilmeli. Son 24 saatte kabul edilen ve iptal edilen siparişler elle çekilir.",
       };
     case "trendyol_go":
       return {
@@ -590,6 +615,18 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       return;
     }
 
+    if (selectedMarketplace === "yemeksepeti") {
+      try {
+        await requestYemeksepetiOrders({ supplierId, integrationRefCode, apiKey, apiSecret }, "test");
+        setTestState("success");
+        setTestMsg("Yemeksepeti POS bağlantısı doğrulandı.");
+      } catch (error) {
+        setTestState("error");
+        setTestMsg(error instanceof Error ? error.message : "Yemeksepeti bağlantısı başarısız.");
+      }
+      return;
+    }
+
     setTestState("error");
     setTestMsg("Bu pazaryeri için canlı bağlantı testi henüz mevcut değil.");
   };
@@ -622,6 +659,10 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       setValidationError("TGO için API Secret ve işlem yapan kişinin e-postası zorunlu.");
       return;
     }
+    if (selectedMarketplace === "yemeksepeti" && !apiSecret.trim()) {
+      setValidationError("Yemeksepeti POS şifresi zorunlu.");
+      return;
+    }
     if (fieldHelp.tokenRequired && !apiToken.trim()) {
       setValidationError(`Lütfen ${fieldHelp.tokenLabel} alanını doldurunuz.`);
       return;
@@ -650,11 +691,11 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       commissionRate: initialStore?.commissionRate ?? currentMeta.commissionRate,
       shippingDeductionAvg: initialStore?.shippingDeductionAvg ?? currentMeta.shippingDeductionAvg,
       withholdingRate: initialStore?.withholdingRate ?? currentMeta.withholdingRate,
-      autoInvoice: selectedMarketplace === "trendyol_go" ? false : autoInvoice,
-      autoStockSync: selectedMarketplace === "trendyol_go" ? false : autoStockSync,
-      isConnected: selectedMarketplace === "trendyol_go" ? testState === "success" : initialStore?.isConnected ?? false,
+      autoInvoice: ["trendyol_go", "yemeksepeti"].includes(selectedMarketplace) ? false : autoInvoice,
+      autoStockSync: ["trendyol_go", "yemeksepeti"].includes(selectedMarketplace) ? false : autoStockSync,
+      isConnected: ["trendyol_go", "yemeksepeti"].includes(selectedMarketplace) ? testState === "success" : initialStore?.isConnected ?? false,
       lastSyncAt: initialStore?.lastSyncAt || "",
-      status: selectedMarketplace === "trendyol_go" && testState === "success" ? "active" : "paused",
+      status: ["trendyol_go", "yemeksepeti"].includes(selectedMarketplace) && testState === "success" ? "active" : "paused",
     };
 
     onSave(newStore);
@@ -960,7 +1001,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
           </div>
 
           {/* Automation Switches */}
-          {selectedMarketplace !== "trendyol_go" && <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+          {!["trendyol_go", "yemeksepeti"].includes(selectedMarketplace) && <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white">
@@ -1249,8 +1290,9 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
   const handleTestStoreConnection = async (storeConfig: MarketplaceStoreConfig) => {
     setTestingStoreId(storeConfig.id);
     try {
-      if (storeConfig.id !== "trendyol_go") throw new Error("Bu pazaryeri için canlı bağlantı testi bu ekranda mevcut değil.");
-      await requestTgoPackages(storeConfig, "test");
+      if (storeConfig.id === "trendyol_go") await requestTgoPackages(storeConfig, "test");
+      else if (storeConfig.id === "yemeksepeti") await requestYemeksepetiOrders(storeConfig, "test");
+      else throw new Error("Bu pazaryeri için canlı bağlantı testi bu ekranda mevcut değil.");
       saveStores(stores.map((store) => store.id === storeConfig.id ? { ...store, isConnected: true, status: "active" } : store));
       showStoreToast(`${storeConfig.name} API bağlantısı doğrulandı.`, "success");
     } catch (error) {
@@ -1263,9 +1305,10 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
   const handleSyncStoreNow = async (storeConfig: MarketplaceStoreConfig) => {
     setSyncingStoreId(storeConfig.id);
     try {
-      if (storeConfig.id !== "trendyol_go") throw new Error("Bu pazaryeri için canlı sipariş senkronizasyonu henüz mevcut değil.");
-      const packages = await requestTgoPackages(storeConfig, "sync");
-      const incoming = packages.map((pkg) => mapTgoPackage(pkg, storeConfig));
+      if (storeConfig.id !== "trendyol_go" && storeConfig.id !== "yemeksepeti") throw new Error("Bu pazaryeri için canlı sipariş senkronizasyonu henüz mevcut değil.");
+      const incoming = storeConfig.id === "trendyol_go"
+        ? (await requestTgoPackages(storeConfig, "sync")).map((pkg) => mapTgoPackage(pkg, storeConfig))
+        : (await requestYemeksepetiOrders(storeConfig, "sync")).map((order) => mapYemeksepetiOrder(order, storeConfig));
       const existingIds = new Set(ecoOrders.map((order) => order.id));
       const byId = new Map(incoming.map((order) => [order.id, order]));
       const mergedOrders = [
@@ -1286,7 +1329,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
         s.id === storeConfig.id ? { ...s, lastSyncAt: now, isConnected: true, status: "active" as const } : s
       );
       saveStores(updated, mergedOrders);
-      showStoreToast(`${packages.length} TGO paketi alındı, ${incoming.filter((order) => !existingIds.has(order.id)).length} yeni sipariş eklendi.`, "success");
+      showStoreToast(`${incoming.length} sipariş alındı, ${incoming.filter((order) => !existingIds.has(order.id)).length} yeni sipariş eklendi.`, "success");
     } catch (error) {
       showStoreToast(error instanceof Error ? error.message : "TGO senkronizasyonu başarısız.", "error");
     } finally {
