@@ -311,6 +311,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     integrationRefCode: string;
     apiKey: string;
     apiSecret: string;
+    executorEmail: string;
     trendyolSecretKey: string;
     apiToken: string;
     commissionRate: number;
@@ -326,6 +327,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     integrationRefCode: "",
     apiKey: "",
     apiSecret: "",
+    executorEmail: "",
     trendyolSecretKey: "",
     apiToken: "",
     commissionRate: 18.5,
@@ -362,6 +364,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         integrationRefCode: storeToEdit.integrationRefCode || "",
         apiKey: storeToEdit.apiKey || "",
         apiSecret: storeToEdit.apiSecret || "",
+        executorEmail: storeToEdit.executorEmail || "",
         trendyolSecretKey: storeToEdit.trendyolSecretKey || "",
         apiToken: storeToEdit.apiToken || "",
         commissionRate: storeToEdit.commissionRate ?? tpl.defaultCommission,
@@ -388,6 +391,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         integrationRefCode: "",
         apiKey: "",
         apiSecret: "",
+        executorEmail: "",
         trendyolSecretKey: "",
         apiToken: "",
         commissionRate: tpl.defaultCommission,
@@ -469,6 +473,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       integrationRefCode: formState.integrationRefCode.trim() || undefined,
       apiKey: formState.apiKey.trim(),
       apiSecret: formState.apiSecret.trim(),
+      executorEmail: formState.id === "trendyol_go" ? formState.executorEmail.trim() : undefined,
       trendyolSecretKey:
         formState.id === "trendyol" || formState.id === "trendyol_go"
           ? formState.trendyolSecretKey.trim() || undefined
@@ -1108,11 +1113,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                       ? "Entegrasyon / POS Referans Kodu"
                       : formState.id === "migros_yemek"
                       ? "Entegrasyon Referans / Şube Kodu"
-                      : `Entegrasyon Referans Kodu ${formState.id === "trendyol_go" ? "*" : ""}`}
+                      : "Entegrasyon Referans Kodu"}
                   </label>
                   <input
                     type="text"
-                    required={formState.id === "trendyol_go"}
+                    required={false}
                     placeholder={
                       formState.id === "yemeksepeti"
                         ? "Örn: YS-POS-84729"
@@ -1162,6 +1167,24 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
+              {formState.id === "trendyol_go" && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    İşlemi yapan kişinin e-postası *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="ornek@sirket.com"
+                    value={formState.executorEmail}
+                    onChange={(e) =>
+                      setFormState((prev) => ({ ...prev, executorEmail: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
+                  />
+                </div>
+              )}
+
               {(formState.id === "trendyol" || formState.id === "trendyol_go") && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1202,7 +1225,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                   <label className="block font-bold text-slate-700 mb-1">
                     Token{" "}
                     {formState.id === "trendyol_go"
-                      ? "(TGO Yemek Eşleştirme Token) *"
+                      ? "(TGO Yemek Eşleştirme Token)"
                       : formState.id === "yemeksepeti"
                       ? "(Yemeksepeti / Delivery Hero Bearer Token)"
                       : formState.id === "migros_yemek"
@@ -1211,7 +1234,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                   </label>
                   <input
                     type="text"
-                    required={formState.id === "trendyol_go"}
+                    required={false}
                     placeholder="Token değerini girin..."
                     value={formState.apiToken}
                     onChange={(e) =>
