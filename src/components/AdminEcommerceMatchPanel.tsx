@@ -7,10 +7,7 @@ import {
 } from "./ECommerceModule";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import {
-  syncCompanyEcommerceToCloud,
-  pullLatestCompanyDataFromCloud,
-} from "../services/systemSyncService";
+import { syncCompanyEcommerceToCloud } from "../services/systemSyncService";
 import { formatCurrency } from "../utils/exportUtils";
 import {
   Globe,
@@ -25,7 +22,6 @@ import {
   EyeOff,
   Copy,
   Check,
-  RefreshCw,
   ShieldCheck,
   Store,
   Sliders,
@@ -73,6 +69,26 @@ const MARKETPLACE_TEMPLATES: Record<
     defaultCargo: 29.9,
     defaultWithholding: 1,
     storeUrl: "https://partner.tgoyemek.com",
+  },
+  yemeksepeti: {
+    name: "Yemeksepeti Partner",
+    shortCode: "YS",
+    badgeColor: "bg-pink-100 text-pink-900 border-pink-300",
+    accentBg: "#fa0050",
+    defaultCommission: 14.0,
+    defaultCargo: 27.9,
+    defaultWithholding: 1,
+    storeUrl: "https://partner.yemeksepeti.com",
+  },
+  migros_yemek: {
+    name: "Migros Yemek Partner",
+    shortCode: "MY",
+    badgeColor: "bg-orange-100 text-orange-900 border-orange-300",
+    accentBg: "#ff7f00",
+    defaultCommission: 12.5,
+    defaultCargo: 26.9,
+    defaultWithholding: 1,
+    storeUrl: "https://partner.migrosyemek.com",
   },
   ubereats: {
     name: "Uber Eats",
@@ -193,31 +209,6 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   const [searchTerm, setSearchTerm] = useState("");
   const [showSecrets, setShowSecrets] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
-
-  const handleRefreshCloudUpdates = async () => {
-    setIsRefreshingCloud(true);
-    try {
-      await pullLatestCompanyDataFromCloud(undefined, true);
-      if (selectedCompanyId) {
-        const snap = await getDoc(doc(db, "system_settings", `company_data_${selectedCompanyId}`));
-        if (snap.exists() && Array.isArray(snap.data().ecommerceStores)) {
-          saveCompanyMatchedEcommerceStores(selectedCompanyId, snap.data().ecommerceStores, false);
-          setCompanyStoresMap((prev) => ({
-            ...prev,
-            [selectedCompanyId]: snap.data().ecommerceStores,
-          }));
-        }
-      }
-      if (onNotifySuccess) {
-        onNotifySuccess("Tüm cihazlardaki güncellemeler ve mağaza eşleştirmeleri buluttan başarıyla çekildi.");
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsRefreshingCloud(false);
-    }
-  };
 
   // Map of companyId -> matched stores
   const [companyStoresMap, setCompanyStoresMap] = useState<
@@ -572,23 +563,12 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1 max-w-3xl">
-              Sistemdeki şirketlerin VKN/TCKN kayıtlarını Trendyol, Hepsiburada, Amazon Türkiye, N11, Çiçeksepeti ve B2C Web Mağaza API bilgileriyle eşleştirin. Eşleştirilen mağazalar ilgili şirketin <strong>E-Ticaret Modülü &gt; Mağaza Entegrasyonları</strong> ekranına otomatik olarak yansır.
+              Sistemdeki şirketlerin VKN/TCKN kayıtlarını Trendyol, Trendyol Go, Yemeksepeti, Migros Yemek, Uber Eats, Hepsiburada, Amazon Türkiye, N11, Çiçeksepeti ve B2C Web Mağaza API bilgileriyle eşleştirin. Eşleştirilen mağazalar ilgili şirketin <strong>E-Ticaret Modülü &gt; Mağaza Entegrasyonları</strong> ekranına otomatik olarak yansır.
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleRefreshCloudUpdates}
-            disabled={isRefreshingCloud}
-            className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-[#0f6bae] font-bold text-xs rounded-xl border border-sky-200 flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
-            title="Diğer cihazlarda yapılan tüm güncellemeleri ve mağazaları buluttan anında çek"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshingCloud ? "animate-spin text-[#0f6bae]" : "text-[#0f6bae]"}`} />
-            <span>{isRefreshingCloud ? "Buluttan Alınıyor..." : "Buluttan Güncellemeleri Al"}</span>
-          </button>
-
           <button
             type="button"
             onClick={() => setShowSecrets((prev) => !prev)}
@@ -826,7 +806,9 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {selectedCompanyStores.map((st) => (
+              {selectedCompanyStores.map((st) => {
+                const stMp = getStoreMarketplaceId(st);
+                return (
                 <div
                   key={st.id}
                   className="rounded-xl border border-slate-200 p-4 flex flex-col justify-between bg-slate-50/40"
@@ -843,7 +825,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                         <div>
                           <h5 className="font-bold text-slate-900 text-xs">{st.name}</h5>
                           <span className="text-[11px] text-slate-500 font-mono">
-                            Satıcı ID: {st.supplierId || "—"}
+                            {stMp === "yemeksepeti" || stMp === "migros_yemek" || stMp === "ubereats"
+                              ? "Restoran ID"
+                              : "Satıcı ID"}
+                            : {st.supplierId || "—"}
                           </span>
                         </div>
                       </div>
@@ -853,7 +838,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                     </div>
 
                     <div className="mt-3 pt-3 border-t border-slate-200/70 space-y-1.5 text-xs">
-                      {(st.integrationRefCode || st.id === "trendyol_go") && (
+                      {(st.integrationRefCode ||
+                        stMp === "trendyol_go" ||
+                        stMp === "yemeksepeti" ||
+                        stMp === "migros_yemek") && (
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500">Entegrasyon Ref:</span>
                           <span className="font-mono text-[11px] font-semibold text-slate-700">
@@ -886,7 +874,7 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                           )}
                         </div>
                       </div>
-                      {(st.id === "trendyol" || st.id === "trendyol_go") && st.trendyolSecretKey && (
+                      {(stMp === "trendyol" || stMp === "trendyol_go") && st.trendyolSecretKey && (
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500">TRENDYOL_SECRET_KEY:</span>
                           <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-700">
@@ -911,7 +899,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                           </div>
                         </div>
                       )}
-                      {(st.apiToken || st.id === "trendyol_go" || st.id === "ubereats") && (
+                      {(st.apiToken ||
+                        stMp === "trendyol_go" ||
+                        stMp === "yemeksepeti" ||
+                        stMp === "migros_yemek" ||
+                        stMp === "ubereats") && (
                         <div className="flex items-center justify-between">
                           <span className="text-slate-500">Token:</span>
                           <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-700">
@@ -984,7 +976,8 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1073,6 +1066,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                   <label className="block font-bold text-slate-700 mb-1">
                     {formState.id === "trendyol_go"
                       ? "Satıcı ID (Cari ID) *"
+                      : formState.id === "yemeksepeti"
+                      ? "Restoran / Vendor ID (Cari Kodu) *"
+                      : formState.id === "migros_yemek" || formState.id === "ubereats"
+                      ? "Restoran / Mağaza ID (Cari ID) *"
                       : "Satıcı ID (Supplier / Merchant ID) *"}
                   </label>
                   <input
@@ -1101,15 +1098,28 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               </div>
 
-              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
+              {(formState.id === "trendyol_go" ||
+                formState.id === "yemeksepeti" ||
+                formState.id === "migros_yemek" ||
+                formState.id === "ubereats") && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Entegrasyon Referans Kodu {formState.id === "trendyol_go" ? "*" : ""}
+                    {formState.id === "yemeksepeti"
+                      ? "Entegrasyon / POS Referans Kodu"
+                      : formState.id === "migros_yemek"
+                      ? "Entegrasyon Referans / Şube Kodu"
+                      : `Entegrasyon Referans Kodu ${formState.id === "trendyol_go" ? "*" : ""}`}
                   </label>
                   <input
                     type="text"
                     required={formState.id === "trendyol_go"}
-                    placeholder="Örn: TGO-REF-948201"
+                    placeholder={
+                      formState.id === "yemeksepeti"
+                        ? "Örn: YS-POS-84729"
+                        : formState.id === "migros_yemek"
+                        ? "Örn: MY-REF-55201"
+                        : "Örn: TGO-REF-948201"
+                    }
                     value={formState.integrationRefCode}
                     onChange={(e) =>
                       setFormState((prev) => ({ ...prev, integrationRefCode: e.target.value }))
@@ -1184,10 +1194,20 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </div>
               )}
 
-              {(formState.id === "trendyol_go" || formState.id === "ubereats") && (
+              {(formState.id === "trendyol_go" ||
+                formState.id === "yemeksepeti" ||
+                formState.id === "migros_yemek" ||
+                formState.id === "ubereats") && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    Token {formState.id === "trendyol_go" ? "(TGO Yemek Eşleştirme Token) *" : "(OAuth / Access Token)"}
+                    Token{" "}
+                    {formState.id === "trendyol_go"
+                      ? "(TGO Yemek Eşleştirme Token) *"
+                      : formState.id === "yemeksepeti"
+                      ? "(Yemeksepeti / Delivery Hero Bearer Token)"
+                      : formState.id === "migros_yemek"
+                      ? "(Migros Yemek API Token)"
+                      : "(OAuth / Access Token)"}
                   </label>
                   <input
                     type="text"

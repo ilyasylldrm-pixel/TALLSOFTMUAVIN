@@ -10,10 +10,7 @@ import {
 import { NavItem } from "./Sidebar";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import {
-  syncCompanyEcommerceToCloud,
-  pullLatestCompanyDataFromCloud,
-} from "../services/systemSyncService";
+import { syncCompanyEcommerceToCloud } from "../services/systemSyncService";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import {
@@ -58,6 +55,8 @@ import {
 export type MarketplaceId =
   | "trendyol"
   | "trendyol_go"
+  | "yemeksepeti"
+  | "migros_yemek"
   | "ubereats"
   | "hepsiburada"
   | "amazon"
@@ -107,6 +106,8 @@ export function getStoreMarketplaceId(
   const id = store.id || "";
   if (id.startsWith("trendyol_go")) return "trendyol_go";
   if (id.startsWith("trendyol")) return "trendyol";
+  if (id.startsWith("yemeksepeti")) return "yemeksepeti";
+  if (id.startsWith("migros_yemek")) return "migros_yemek";
   if (id.startsWith("ubereats")) return "ubereats";
   if (id.startsWith("hepsiburada")) return "hepsiburada";
   if (id.startsWith("amazon")) return "amazon";
@@ -206,6 +207,24 @@ const MARKETPLACE_META: Record<
     accentBg: "#ff5500",
     commissionRate: 12.0,
     shippingDeductionAvg: 29.9,
+    withholdingRate: 1,
+  },
+  yemeksepeti: {
+    name: "Yemeksepeti",
+    shortCode: "YS",
+    badgeColor: "bg-pink-100 text-pink-900 border-pink-300",
+    accentBg: "#fa0050",
+    commissionRate: 14.0,
+    shippingDeductionAvg: 27.9,
+    withholdingRate: 1,
+  },
+  migros_yemek: {
+    name: "Migros Yemek",
+    shortCode: "MY",
+    badgeColor: "bg-orange-100 text-orange-900 border-orange-300",
+    accentBg: "#ff7f00",
+    commissionRate: 12.5,
+    shippingDeductionAvg: 26.9,
     withholdingRate: 1,
   },
   ubereats: {
@@ -317,6 +336,40 @@ function getMarketplaceFieldHelp(mp: MarketplaceId): {
         tokenRequired: true,
         extraLabel: null,
         hint: "Trendyol Go (TGO Yemek) Partner Paneli > Hesap Bilgileri > Entegrasyon Bilgileri ekranından Satıcı ID (Cari ID), Entegrasyon Referans Kodu, API Key, API Secret ve Token bilgilerini alabilirsiniz.",
+      };
+    case "yemeksepeti":
+      return {
+        supplierIdLabel: "Restoran / Vendor ID (Cari Kodu)",
+        supplierIdPlaceholder: "örn: YS-TR-104928",
+        integrationRefLabel: "Entegrasyon / POS Referans Kodu",
+        integrationRefPlaceholder: "örn: YS-POS-84729",
+        integrationRefRequired: false,
+        apiKeyLabel: "API Key / Kullanıcı Kodu",
+        apiKeyPlaceholder: "örn: ys_api_xxxxxxxxxxxxxxxxxxxx",
+        apiSecretLabel: "API Secret / Entegrasyon Şifresi",
+        apiSecretPlaceholder: "örn: ys_sec_xxxxxxxxxxxxxxxxxxxx",
+        tokenLabel: "Token (Yemeksepeti / Delivery Hero Bearer Token)",
+        tokenPlaceholder: "örn: eyJhbGciOiJIUzI1NiIs...",
+        tokenRequired: false,
+        extraLabel: null,
+        hint: "Yemeksepeti Partner (Delivery Hero Portal) > Entegrasyon & POS Ayarları ekranından Restoran (Vendor) ID, POS Referans Kodu, API Key, API Secret ve Token bilgilerini alabilirsiniz.",
+      };
+    case "migros_yemek":
+      return {
+        supplierIdLabel: "Restoran / Mağaza ID (Cari ID)",
+        supplierIdPlaceholder: "örn: MY-938471",
+        integrationRefLabel: "Entegrasyon Referans / Şube Kodu",
+        integrationRefPlaceholder: "örn: MY-REF-55201",
+        integrationRefRequired: false,
+        apiKeyLabel: "API Key",
+        apiKeyPlaceholder: "örn: my_key_xxxxxxxxxxxxxxxxxxxx",
+        apiSecretLabel: "API Secret",
+        apiSecretPlaceholder: "örn: my_sec_xxxxxxxxxxxxxxxxxxxx",
+        tokenLabel: "Token (Migros Yemek API Token)",
+        tokenPlaceholder: "örn: my_tok_xxxxxxxxxxxxxxxxxxxx",
+        tokenRequired: false,
+        extraLabel: null,
+        hint: "Migros Yemek Partner Paneli > Hesap & API Entegrasyon Ayarları ekranından Restoran / Mağaza ID, Şube Referans Kodu, API Key, API Secret ve Token bilgilerinizi tanımlayabilirsiniz.",
       };
     case "ubereats":
       return {
@@ -516,6 +569,10 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
         setStoreUrl("https://magaza.sirketim.com");
       } else if (mp === "trendyol_go") {
         setStoreUrl("https://partner.tgoyemek.com");
+      } else if (mp === "yemeksepeti") {
+        setStoreUrl("https://partner.yemeksepeti.com");
+      } else if (mp === "migros_yemek") {
+        setStoreUrl("https://partner.migrosyemek.com");
       } else if (mp === "ubereats") {
         setStoreUrl("https://merchants.ubereats.com");
       } else {
@@ -1181,43 +1238,10 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
-  const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
 
   const showStoreToast = (text: string, type: "success" | "error" | "info" = "success") => {
     setStoreToast({ type, text });
     setTimeout(() => setStoreToast(null), 3500);
-  };
-
-  const handleRefreshCloud = async () => {
-    setIsRefreshingCloud(true);
-    try {
-      await pullLatestCompanyDataFromCloud(activeCompanyId, true);
-      let remoteStores: MarketplaceStoreConfig[] | null = null;
-      try {
-        const resp = await fetch(`/api/ecommerce/stores?companyId=${encodeURIComponent(activeCompanyId)}`);
-        if (resp.ok) {
-          const json = await resp.json();
-          if (Array.isArray(json.stores) && json.stores.length > 0) remoteStores = json.stores;
-        }
-      } catch {}
-      if (!remoteStores) {
-        try {
-          const snap = await getDoc(doc(db, "system_settings", `company_data_${activeCompanyId}`));
-          if (snap.exists() && Array.isArray(snap.data().ecommerceStores)) {
-            remoteStores = snap.data().ecommerceStores;
-          }
-        } catch {}
-      }
-      if (remoteStores && Array.isArray(remoteStores)) {
-        setStores(remoteStores);
-        localStorage.setItem(`${storagePrefix}stores`, JSON.stringify(remoteStores));
-      }
-      showStoreToast("Tüm cihazlardaki güncellemeler ve mağazalar buluttan başarıyla çekildi.");
-    } catch {
-      showStoreToast("Bulut güncellemesi kontrol edildi.", "info");
-    } finally {
-      setIsRefreshingCloud(false);
-    }
   };
 
   const saveStores = (updated: MarketplaceStoreConfig[]) => {
@@ -1276,7 +1300,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     }, 900);
   };
 
-  const handleDeleteStoreConfig = (storeId: MarketplaceId) => {
+  const handleDeleteStoreConfig = (storeId: string) => {
     const store = stores.find((s) => s.id === storeId);
     if (
       window.confirm(
@@ -1304,7 +1328,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     }
   };
 
-  const handleToggleStoreActive = (storeId: MarketplaceId) => {
+  const handleToggleStoreActive = (storeId: string) => {
     const updated = stores.map((s) => {
       if (s.id === storeId) {
         const nextConnected = !s.isConnected;
@@ -2471,22 +2495,11 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-                Trendyol, Trendyol Go (TGO Yemek), Uber Eats, Hepsiburada, Amazon TR, N11, Çiçeksepeti ve Shopify mağazalarınızın API anahtarlarını ve token eşleştirmelerini güvenle yönetin, anlık test edin ve siparişlerinizi çekin.
+                Trendyol, Trendyol Go (TGO Yemek), Yemeksepeti, Migros Yemek, Uber Eats, Hepsiburada, Amazon TR, N11, Çiçeksepeti ve Shopify mağazalarınızın API anahtarlarını ve token eşleştirmelerini güvenle yönetin, anlık test edin ve siparişlerinizi çekin.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleRefreshCloud}
-                disabled={isRefreshingCloud}
-                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 font-bold text-xs shadow-2xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                title="Diğer cihazlarda yapılan tüm güncellemeleri ve mağazaları buluttan anında çek"
-              >
-                <RefreshCw className={`w-4 h-4 text-orange-600 ${isRefreshingCloud ? "animate-spin" : ""}`} />
-                <span>{isRefreshingCloud ? "Buluttan Alınıyor..." : "Buluttan Güncellemeleri Al"}</span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => {
@@ -2525,6 +2538,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                       onClick={() => {
                         setEditingStore({
                           id: mpId,
+                          marketplace: mpId,
                           name: `${meta.name} Mağazam`,
                           shortCode: meta.shortCode,
                           badgeColor: meta.badgeColor,
@@ -2588,6 +2602,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
             /* Populated Stores Cards Grid */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {stores.map((st) => {
+                const stMp = getStoreMarketplaceId(st);
                 const isTesting = testingStoreId === st.id;
                 const isSyncing = syncingStoreId === st.id;
                 const isLive = st.isConnected !== false;
@@ -2613,7 +2628,14 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                             </h4>
                             <div className="text-[11px] text-slate-500 font-mono truncate flex items-center gap-1.5">
                               <span>
-                                {st.id === "trendyol_go" ? "Satıcı (Cari) ID" : "ID"}: {st.supplierId || "—"}
+                                {stMp === "trendyol_go"
+                                  ? "Satıcı (Cari) ID"
+                                  : stMp === "yemeksepeti" ||
+                                    stMp === "migros_yemek" ||
+                                    stMp === "ubereats"
+                                  ? "Restoran ID"
+                                  : "ID"}
+                                : {st.supplierId || "—"}
                               </span>
                               {st.supplierId && (
                                 <button
@@ -2656,7 +2678,10 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 
                       {/* Credentials Preview Box */}
                       <div className="mt-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
-                        {(st.integrationRefCode || st.id === "trendyol_go") && (
+                        {(st.integrationRefCode ||
+                          stMp === "trendyol_go" ||
+                          stMp === "yemeksepeti" ||
+                          stMp === "migros_yemek") && (
                           <div className="flex items-center justify-between font-mono text-[11px]">
                             <span className="text-slate-500 flex items-center gap-1">
                               <Barcode className="w-3 h-3 text-slate-400" />
@@ -2742,7 +2767,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                           </div>
                         </div>
 
-                        {(st.trendyolSecretKey || st.id === "trendyol" || st.id === "trendyol_go") && (
+                        {(st.trendyolSecretKey || stMp === "trendyol" || stMp === "trendyol_go") && (
                           <div className="flex items-center justify-between font-mono text-[11px]">
                             <span className="text-slate-500 flex items-center gap-1">
                               <KeyRound className="w-3 h-3 text-orange-500" />
@@ -2776,7 +2801,11 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                           </div>
                         )}
 
-                        {(st.apiToken || st.id === "trendyol_go" || st.id === "ubereats") && (
+                        {(st.apiToken ||
+                          stMp === "trendyol_go" ||
+                          stMp === "yemeksepeti" ||
+                          stMp === "migros_yemek" ||
+                          stMp === "ubereats") && (
                           <div className="flex items-center justify-between font-mono text-[11px]">
                             <span className="text-slate-500 flex items-center gap-1">
                               <ShieldCheck className="w-3 h-3 text-slate-400" />
@@ -3210,9 +3239,22 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                     onChange={(e) => {
                       const mp = e.target.value as MarketplaceId;
                       const stMeta = MARKETPLACE_META[mp];
+                      const defaultCargo =
+                        mp === "yemeksepeti"
+                          ? "Yemeksepeti Vale / Kurye"
+                          : mp === "migros_yemek"
+                          ? "Migros Kurye"
+                          : mp === "trendyol_go"
+                          ? "Trendyol Go Kurye"
+                          : mp === "ubereats"
+                          ? "Uber Eats Kurye"
+                          : mp === "hepsiburada"
+                          ? "HepsiJet"
+                          : "Trendyol Express";
                       setNewOrderForm((prev) => ({
                         ...prev,
                         marketplace: mp,
+                        cargoCompany: defaultCargo,
                         marketplaceOrderNo: `${stMeta.shortCode}-${Math.floor(100000000 + Math.random() * 900000000)}`,
                       }));
                     }}
@@ -3305,7 +3347,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kargo Firması
+                    Kargo / Kurye Firması
                   </label>
                   <select
                     value={newOrderForm.cargoCompany}
@@ -3315,6 +3357,11 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                     className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
                   >
                     <option value="Trendyol Express">Trendyol Express</option>
+                    <option value="Trendyol Go Kurye">Trendyol Go Kurye</option>
+                    <option value="Yemeksepeti Vale / Kurye">Yemeksepeti Vale / Kurye</option>
+                    <option value="Migros Kurye">Migros Kurye</option>
+                    <option value="Uber Eats Kurye">Uber Eats Kurye</option>
+                    <option value="Restoran Kuryesi">Restoran Kuryesi</option>
                     <option value="HepsiJet">HepsiJet</option>
                     <option value="Yurtiçi Kargo">Yurtiçi Kargo</option>
                     <option value="Aras Kargo">Aras Kargo</option>
