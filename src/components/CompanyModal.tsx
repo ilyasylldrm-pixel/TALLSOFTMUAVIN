@@ -39,14 +39,19 @@ import {
   isKeyAllowedInList,
   toggleModuleSelectionWithSubModules,
 } from "../types";
-import { saveUserProfile, UserProfileData } from "../lib/firebase";
+import { getLocalUsersBackup, saveUserProfile, UserProfileData } from "../lib/firebase";
 import {
   getMysoftTenant,
   getMysoftMappingDefaults,
   getNextMysoftInvoiceNumber,
   checkRecipientTaxpayerStatus,
 } from "../services/mysoftEDocumentService";
-import { parseSeparateAddressFields, appendCityDistrictToAddress, compileStructuredAddress } from "../utils/storage";
+import {
+  parseSeparateAddressFields,
+  appendCityDistrictToAddress,
+  compileStructuredAddress,
+  getCompaniesList,
+} from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
 
@@ -141,16 +146,60 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
     }
   };
 
+  // En güncel kayıtlı şirket ve bağlı kullanıcı yetkilerini oku (Admin tarafından tanımlanan modülleri koru)
+  const initialPermissionSnapshot = React.useMemo(() => {
+    if (!initialCompany?.id) {
+      return {
+        restrictionEnabled: false,
+        modules: SYSTEM_COMPANY_MODULES.map((m) => m.id),
+      };
+    }
+    const storedComp = getCompaniesList().find((c) => c.id === initialCompany.id) || initialCompany;
+    const localUsers = getLocalUsersBackup();
+    const cleanInitUser = (storedComp.loginUsername || initialCompany.loginUsername || "").trim().toLowerCase();
+    const cleanInitEmail = (storedComp.loginEmail || initialCompany.loginEmail || "").trim().toLowerCase();
+    const linkedUser = localUsers.find(
+      (u) =>
+        u &&
+        (u.companyId === initialCompany.id ||
+          u.userId === `usr_comp_${initialCompany.id}` ||
+          (cleanInitUser && (u.username?.toLowerCase() === cleanInitUser || u.userId === `usr_${cleanInitUser}`)) ||
+          (cleanInitEmail && u.email?.toLowerCase() === cleanInitEmail))
+    );
+
+    if (storedComp.moduleRestrictionEnabled && Array.isArray(storedComp.allowedModules) && storedComp.allowedModules.length > 0) {
+      return {
+        restrictionEnabled: true,
+        modules: storedComp.allowedModules,
+      };
+    }
+    if (Array.isArray(linkedUser?.allowedModules) && linkedUser.allowedModules.length > 0) {
+      const isRestricted = linkedUser.allowedModules.length < SYSTEM_COMPANY_MODULES.length;
+      return {
+        restrictionEnabled: isRestricted,
+        modules: linkedUser.allowedModules as string[],
+      };
+    }
+    if (Array.isArray(storedComp.allowedModules) && storedComp.allowedModules.length > 0) {
+      return {
+        restrictionEnabled: Boolean(storedComp.moduleRestrictionEnabled),
+        modules: storedComp.allowedModules,
+      };
+    }
+    return {
+      restrictionEnabled: false,
+      modules: SYSTEM_COMPANY_MODULES.map((m) => m.id),
+    };
+  }, [initialCompany]);
+
   // Modül Kısıtlaması State
   const [moduleRestrictionEnabled, setModuleRestrictionEnabled] = useState<boolean>(
-    initialCompany?.moduleRestrictionEnabled ?? false
+    initialPermissionSnapshot.restrictionEnabled
   );
-  const [allowedModules, setAllowedModules] = useState<string[]>(() => {
-    if (initialCompany?.allowedModules && initialCompany.allowedModules.length > 0) {
-      return initialCompany.allowedModules;
-    }
-    return SYSTEM_COMPANY_MODULES.map((m) => m.id);
-  });
+  const [allowedModules, setAllowedModules] = useState<string[]>(
+    initialPermissionSnapshot.modules
+  );
+  const [modulesModifiedByAdmin, setModulesModifiedByAdmin] = useState<boolean>(false);
 
   // Uygulama Giriş Bilgileri (Kullanıcı Adı & Şifre) State
   const [createLoginAccount, setCreateLoginAccount] = useState<boolean>(
@@ -564,7 +613,15 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
         ? vkn.trim() || tckn.trim() || initialCompany?.taxNumber || "1111111111"
         : tckn.trim() || vkn.trim() || initialCompany?.taxNumber || "1111111111";
     const companyId = initialCompany?.id || `comp_${Date.now()}`;
-    const targetModules = moduleRestrictionEnabled ? allowedModules : SYSTEM_COMPANY_MODULES.map((m) => m.id);
+    const shouldUpdateModules =
+      canManageModules && (mode === "create" || (mode === "edit" && modulesModifiedByAdmin));
+    const latestStoredComp =
+      mode !== "create"
+        ? getCompaniesList().find((c) => c.id === companyId) || initialCompany
+        : null;
+    const targetModules = moduleRestrictionEnabled
+      ? allowedModules
+      : SYSTEM_COMPANY_MODULES.map((m) => m.id);
 
     const finalLoginUser = effectiveUsername ? effectiveUsername.toLowerCase() : undefined;
     const finalLoginPass = effectivePassword;
@@ -575,7 +632,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       ? (loginFullName.trim() || `${cleanName} Yöneticisi`)
       : undefined;
 
-    const companyData: CompanyItem = {
+    const companyData: CompanyItem & { _allowModulePermissionChange?: boolean } = {
       id: companyId,
       companyName: cleanName,
       name: cleanName,
@@ -619,8 +676,13 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       defaultBankName: defaultBankName.trim() || undefined,
       defaultBankIban: defaultBankIban.trim() || undefined,
       isDefault: initialCompany?.isDefault || false,
-      moduleRestrictionEnabled,
-      allowedModules: targetModules,
+      moduleRestrictionEnabled: shouldUpdateModules
+        ? moduleRestrictionEnabled
+        : latestStoredComp?.moduleRestrictionEnabled,
+      allowedModules: shouldUpdateModules
+        ? targetModules
+        : latestStoredComp?.allowedModules,
+      ...(shouldUpdateModules ? { _allowModulePermissionChange: true } : {}),
       loginUsername: finalLoginUser,
       loginPasswordPlain: finalLoginPass,
       loginEmail: finalLoginEmail,
@@ -649,34 +711,51 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       createdAt: initialCompany?.createdAt || new Date().toISOString(),
     };
 
-    // If login account is specified, register user profile to Firestore & local storage
+    // If login account is specified, register/update user profile while preserving Admin-defined allowedModules
     if (createLoginAccount && finalLoginUser && finalLoginPass) {
       try {
-        const generatedUserId = `usr_comp_${companyId}`;
+        const localUsers = getLocalUsersBackup();
+        const prevUsername = (latestStoredComp?.loginUsername || initialCompany?.loginUsername || "").trim().toLowerCase();
+        const prevLoginEmail = (latestStoredComp?.loginEmail || initialCompany?.loginEmail || "").trim().toLowerCase();
+        const existingUser = localUsers.find(
+          (u) =>
+            u &&
+            (u.userId === `usr_${finalLoginUser}` ||
+              u.userId === `usr_comp_${companyId}` ||
+              (prevUsername && (u.username?.toLowerCase() === prevUsername || u.userId === `usr_${prevUsername}`)) ||
+              (u.username && u.username.toLowerCase() === finalLoginUser) ||
+              (finalLoginEmail && u.email?.toLowerCase() === finalLoginEmail) ||
+              (prevLoginEmail && u.email?.toLowerCase() === prevLoginEmail))
+        );
+
+        const resolvedUserId = existingUser?.userId || `usr_${finalLoginUser}`;
+        const resolvedUserModules: AppModuleKey[] | undefined = shouldUpdateModules
+          ? (targetModules as AppModuleKey[])
+          : existingUser?.allowedModules;
 
         const newUserProfile: UserProfileData = {
-          userId: generatedUserId,
+          userId: resolvedUserId,
           username: finalLoginUser,
-          name: finalLoginName || "Firma Yöneticisi",
+          name: finalLoginName || existingUser?.name || "Firma Yöneticisi",
           email: finalLoginEmail || `${finalLoginUser}@muavin.com`,
           companyName: companyData.companyName,
           companyId: companyId,
-          phone: phone.trim() || "+90 (212) 555 0100",
+          phone: phone.trim() || existingUser?.phone || "+90 (212) 555 0100",
           taxNumber: selectedTenantNumber || "1234567890",
-          selectedLogoId: 1,
-          selectedLogoName: "E-MUAVİN Kurumsal Logo",
+          selectedLogoId: existingUser?.selectedLogoId || 1,
+          selectedLogoName: existingUser?.selectedLogoName || "E-MUAVİN Kurumsal Logo",
           selectedLogoUrl: logoUrl || "/logo.svg",
-          role: loginRole || "Firma Yöneticisi",
-          allowedModules: moduleRestrictionEnabled ? (targetModules as AppModuleKey[]) : undefined,
+          role: loginRole || existingUser?.role || "Firma Yöneticisi",
+          allowedModules: resolvedUserModules,
           passwordPlain: finalLoginPass,
           createdByAdmin: true,
-          createdAt: new Date().toISOString(),
+          createdAt: existingUser?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
 
         await saveUserProfile(newUserProfile);
       } catch (userErr) {
-        console.warn("Could not save user profile for new company:", userErr);
+        console.warn("Could not save user profile for company:", userErr);
       }
     }
 
@@ -1574,7 +1653,10 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setModuleRestrictionEnabled(!moduleRestrictionEnabled)}
+                    onClick={() => {
+                      setModulesModifiedByAdmin(true);
+                      setModuleRestrictionEnabled(!moduleRestrictionEnabled);
+                    }}
                     className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto ${
                       moduleRestrictionEnabled
                         ? "bg-amber-500 hover:bg-amber-600 text-white shadow-xs"
@@ -1606,7 +1688,10 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setAllowedModules(SYSTEM_COMPANY_MODULES.map((m) => m.id))}
+                          onClick={() => {
+                            setModulesModifiedByAdmin(true);
+                            setAllowedModules(SYSTEM_COMPANY_MODULES.map((m) => m.id));
+                          }}
                           className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
                         >
                           Tümünü Seç ({SYSTEM_COMPANY_MODULES.length})
@@ -1614,6 +1699,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
+                            setModulesModifiedByAdmin(true);
                             const parents = ["dashboard", "company", "invoices", "contacts", "accounts", "products", "reports"];
                             const withSubs = SYSTEM_COMPANY_MODULES.filter(
                               (m) => parents.includes(m.id) || (m.parentId && parents.includes(m.parentId))
@@ -1627,6 +1713,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
+                            setModulesModifiedByAdmin(true);
                             const parents = ["dashboard", "company", "e_services", "invoices", "orders_module", "ecommerce", "contacts", "accounts", "products", "whatsapp"];
                             const withSubs = SYSTEM_COMPANY_MODULES.filter(
                               (m) => parents.includes(m.id) || (m.parentId && parents.includes(m.parentId))
@@ -1640,6 +1727,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
+                            setModulesModifiedByAdmin(true);
                             const parents = ["dashboard", "company", "products", "auto_service", "it_service", "appliance_service", "contacts", "accounts", "invoices"];
                             const withSubs = SYSTEM_COMPANY_MODULES.filter(
                               (m) => parents.includes(m.id) || (m.parentId && parents.includes(m.parentId))
@@ -1653,6 +1741,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
+                            setModulesModifiedByAdmin(true);
                             const parents = ["dashboard", "company", "production", "construction_costing", "products", "invoices", "contacts", "accounts"];
                             const withSubs = SYSTEM_COMPANY_MODULES.filter(
                               (m) => parents.includes(m.id) || (m.parentId && parents.includes(m.parentId))
@@ -1665,7 +1754,10 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setAllowedModules(["dashboard"])}
+                          onClick={() => {
+                            setModulesModifiedByAdmin(true);
+                            setAllowedModules(["dashboard"]);
+                          }}
                           className="px-2.5 py-1 text-[11px] font-bold bg-rose-50 border border-rose-200 rounded-lg text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
                         >
                           Sıfırla
@@ -1684,6 +1776,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                             key={module.id}
                             onClick={() => {
                               if (isCore) return;
+                              setModulesModifiedByAdmin(true);
                               const next = toggleModuleSelectionWithSubModules(
                                 allowedModules,
                                 module.id,

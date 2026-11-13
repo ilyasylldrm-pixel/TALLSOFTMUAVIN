@@ -349,8 +349,20 @@ export function saveLocalUsersBackup(usersList: UserProfileData[], allowRemoval 
       }
       const key = (u.email || u.userId || u.username || "").trim().toLowerCase();
       if (key) {
-        const existing = mergedMap.get(key);
-        mergedMap.set(key, existing ? { ...existing, ...u } : u);
+        let existing = mergedMap.get(key);
+        if (!existing) {
+          for (const [existingKey, candidate] of mergedMap.entries()) {
+            if (
+              (u.userId && candidate.userId === u.userId) ||
+              (u.username && candidate.username && candidate.username.toLowerCase() === u.username.toLowerCase())
+            ) {
+              existing = candidate;
+              mergedMap.delete(existingKey);
+              break;
+            }
+          }
+        }
+        mergedMap.set(key, mergeUserProfilePreservingModules(existing, u));
       }
     });
 
@@ -358,6 +370,22 @@ export function saveLocalUsersBackup(usersList: UserProfileData[], allowRemoval 
   } catch (err) {
     console.warn("Local users backup save warning:", err);
   }
+}
+
+function mergeUserProfilePreservingModules(
+  existing: UserProfileData | undefined,
+  incoming: UserProfileData
+): UserProfileData {
+  if (!existing) return incoming;
+  return {
+    ...existing,
+    ...incoming,
+    username: incoming.username || existing.username,
+    passwordPlain: incoming.passwordPlain || existing.passwordPlain,
+    allowedModules: Array.isArray(incoming.allowedModules)
+      ? incoming.allowedModules
+      : existing.allowedModules,
+  };
 }
 
 export async function saveUserProfile(user: UserProfileData): Promise<void> {
@@ -378,7 +406,7 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
         (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase())
     );
     if (index >= 0) {
-      existing[index] = { ...existing[index], ...user };
+      existing[index] = mergeUserProfilePreservingModules(existing[index], user);
     } else {
       existing.unshift(user);
     }
@@ -394,10 +422,19 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
           const parsedU = JSON.parse(storedUserRaw);
           const isSameUser =
             parsedU.userId === user.userId ||
+            parsedU.id === user.userId ||
             (parsedU.email && user.email && parsedU.email.toLowerCase() === user.email.toLowerCase()) ||
             (parsedU.username && user.username && parsedU.username.toLowerCase() === user.username.toLowerCase());
           if (isSameUser) {
-            const updatedActive = { ...parsedU, ...user };
+            const preservedModules = Array.isArray(user.allowedModules)
+              ? user.allowedModules
+              : parsedU.allowedModules;
+            const updatedActive = {
+              ...parsedU,
+              ...user,
+              id: parsedU.id || user.userId,
+              allowedModules: preservedModules,
+            };
             if (window.localStorage?.getItem("muavin_active_user")) {
               window.localStorage.setItem("muavin_active_user", JSON.stringify(updatedActive));
             }
@@ -570,29 +607,43 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
   };
   mergedMap.set(defaultAdmin.email.toLowerCase(), defaultAdmin);
 
-  // 2. Include company login accounts from defined companies
+  // 2. Include company login accounts from defined companies (preserving any Admin-defined user permissions)
   companies.forEach((comp) => {
     if (!isProtectedCompanyId(comp.id) && (deletedCompIds.has(comp.id) || comp.loginUserDeleted)) return;
     if (comp.loginUsername) {
       const cleanUser = comp.loginUsername.trim().toLowerCase();
       const email = (comp.loginEmail || `${cleanUser}@muavin.com`).trim().toLowerCase();
+      const existingLocalMatch = localList.find(
+        (u) =>
+          u &&
+          ((u.email && u.email.trim().toLowerCase() === email) ||
+            (u.username && u.username.trim().toLowerCase() === cleanUser) ||
+            u.userId === `usr_${cleanUser}` ||
+            u.userId === `usr_comp_${comp.id}`)
+      );
+      const resolvedAllowedModules = Array.isArray(existingLocalMatch?.allowedModules)
+        ? existingLocalMatch.allowedModules
+        : comp.moduleRestrictionEnabled && Array.isArray(comp.allowedModules)
+        ? (comp.allowedModules as AppModuleKey[])
+        : undefined;
+
       const compUser: UserProfileData = {
-        userId: `usr_${cleanUser}`,
+        userId: existingLocalMatch?.userId || `usr_${cleanUser}`,
         username: cleanUser,
-        name: comp.loginFullName || `${comp.companyName} Yöneticisi`,
+        name: comp.loginFullName || existingLocalMatch?.name || `${comp.companyName} Yöneticisi`,
         email,
         companyName: comp.companyName,
         companyId: comp.id,
-        phone: comp.phone || "+90 (212) 555 0100",
+        phone: comp.phone || existingLocalMatch?.phone || "+90 (212) 555 0100",
         taxNumber: comp.tenantIdentifierNumber || comp.vkn || comp.tckn || comp.taxNumber || "1234567890",
-        selectedLogoId: 1,
-        selectedLogoName: "E-MUAVİN Kurumsal Logo",
-        selectedLogoUrl: "/logo.svg",
-        role: comp.loginRole || "Firma Yöneticisi",
-        allowedModules: comp.moduleRestrictionEnabled ? (comp.allowedModules as AppModuleKey[]) : undefined,
-        passwordPlain: comp.loginPasswordPlain || "Muavin2026!",
+        selectedLogoId: existingLocalMatch?.selectedLogoId || 1,
+        selectedLogoName: existingLocalMatch?.selectedLogoName || "E-MUAVİN Kurumsal Logo",
+        selectedLogoUrl: comp.logoUrl || existingLocalMatch?.selectedLogoUrl || "/logo.svg",
+        role: comp.loginRole || existingLocalMatch?.role || "Firma Yöneticisi",
+        allowedModules: resolvedAllowedModules,
+        passwordPlain: comp.loginPasswordPlain || existingLocalMatch?.passwordPlain || "Muavin2026!",
         createdByAdmin: true,
-        createdAt: comp.createdAt || new Date().toISOString(),
+        createdAt: comp.createdAt || existingLocalMatch?.createdAt || new Date().toISOString(),
       };
       if (isProtectedUserIdentifier(compUser) || !isUserMarkedDeleted(compUser)) {
         mergedMap.set(email, compUser);
@@ -600,7 +651,7 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
     }
   });
 
-  // 3. Add local backup users
+  // 3. Add local backup users (preserving Admin-defined allowedModules)
   localList.forEach((u) => {
     if (!u) return;
     if (!isProtectedUserIdentifier(u)) {
@@ -609,7 +660,9 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
     }
     const key = (u.email || u.userId || "").toLowerCase();
     if (key) {
-      mergedMap.set(key, enrichUserProfileCredentials(u, companies));
+      const existing = mergedMap.get(key);
+      const mergedLocal = mergeUserProfilePreservingModules(existing, u);
+      mergedMap.set(key, enrichUserProfileCredentials(mergedLocal, companies));
     }
   });
 
@@ -633,12 +686,7 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
         const key = (docWithId.email || docWithId.userId || "").toLowerCase();
         if (key) {
           const existing = mergedMap.get(key);
-          const mergedUser: UserProfileData = {
-            ...existing,
-            ...docWithId,
-            username: docWithId.username || existing?.username,
-            passwordPlain: docWithId.passwordPlain || existing?.passwordPlain,
-          };
+          const mergedUser = mergeUserProfilePreservingModules(existing, docWithId);
           if (isProtectedUserIdentifier(mergedUser) || !isUserMarkedDeleted(mergedUser)) {
             mergedMap.set(key, enrichUserProfileCredentials(mergedUser, companies));
           }

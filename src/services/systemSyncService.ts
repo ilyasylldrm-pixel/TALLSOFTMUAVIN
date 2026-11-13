@@ -49,6 +49,7 @@ import {
   sanitizeNonDefaultCompanySlices,
   syncAccountBalancesFromTransactions,
 } from "../utils/storage";
+import { isAdminOrSysAdmin } from "../types";
 
 export interface SystemAuditLogItem {
   id?: string;
@@ -756,9 +757,10 @@ export async function pullLatestCompanyDataFromCloud(
         const allComps = getCompaniesList();
         const matchedProfile = allUsers.find(
           (u) =>
+            (parsedUser.userId && u.userId === parsedUser.userId) ||
+            (parsedUser.id && u.userId === parsedUser.id) ||
             (parsedUser.email && u.email?.toLowerCase() === parsedUser.email.toLowerCase()) ||
-            (parsedUser.username && u.username?.toLowerCase() === parsedUser.username.toLowerCase()) ||
-            (parsedUser.id && u.userId === parsedUser.id)
+            (parsedUser.username && u.username?.toLowerCase() === parsedUser.username.toLowerCase())
         );
         const cleanTax = String(parsedUser.taxNumber || matchedProfile?.taxNumber || "").replace(/\D/g, "");
         const matchedComp =
@@ -773,6 +775,12 @@ export async function pullLatestCompanyDataFromCloud(
               )
             : undefined);
 
+        const resolvedAllowedModules = Array.isArray(matchedProfile?.allowedModules)
+          ? matchedProfile.allowedModules
+          : matchedComp?.moduleRestrictionEnabled && Array.isArray(matchedComp?.allowedModules)
+          ? matchedComp.allowedModules
+          : parsedUser.allowedModules;
+
         const nextUser = {
           ...parsedUser,
           companyId: matchedComp?.id || matchedProfile?.companyId || parsedUser.companyId,
@@ -783,7 +791,7 @@ export async function pullLatestCompanyDataFromCloud(
             matchedComp?.tckn ||
             matchedProfile?.taxNumber ||
             parsedUser.taxNumber,
-          allowedModules: matchedProfile?.allowedModules || matchedComp?.allowedModules || parsedUser.allowedModules,
+          allowedModules: resolvedAllowedModules,
           role: matchedProfile?.role || parsedUser.role,
         };
         if (window.localStorage.getItem("muavin_active_user")) {
@@ -1321,6 +1329,18 @@ export async function verifyAndSyncAllUsersLocalDb(
           ]);
         }
         if (Array.isArray(existingData?.companiesRegistry) && existingData.companiesRegistry.length > 0) {
+          let isCurrentSessionAdmin = false;
+          if (typeof window !== "undefined") {
+            try {
+              const rawActive =
+                window.localStorage.getItem("muavin_active_user") ||
+                window.sessionStorage.getItem("muavin_active_user");
+              if (rawActive) {
+                isCurrentSessionAdmin = isAdminOrSysAdmin(JSON.parse(rawActive));
+              }
+            } catch {}
+          }
+
           const localCompanies = getCompaniesList();
           const deletedCompSet = new Set(getDeletedCompanyIds());
           const mergedMap = new Map<string, any>();
@@ -1340,10 +1360,12 @@ export async function verifyAndSyncAllUsersLocalDb(
               (isProtectedCompanyId(localComp.id) || !deletedCompSet.has(localComp.id))
             ) {
               const remoteExisting = mergedMap.get(localComp.id);
-              mergedMap.set(
-                localComp.id,
-                mergeCompanyMetadataNonDestructive(remoteExisting, localComp)
-              );
+              const mergedComp = mergeCompanyMetadataNonDestructive(remoteExisting, localComp);
+              if (!isCurrentSessionAdmin && remoteExisting) {
+                mergedComp.moduleRestrictionEnabled = remoteExisting.moduleRestrictionEnabled;
+                mergedComp.allowedModules = remoteExisting.allowedModules;
+              }
+              mergedMap.set(localComp.id, mergedComp);
             }
           });
           saveCompaniesList(Array.from(mergedMap.values()), false);

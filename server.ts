@@ -1989,7 +1989,20 @@ app.post("/api/cloud-sync/system", (req, res) => {
       companiesRegistry.forEach((c: any) => {
         if (c && c.id && !delCompSet.has(c.id)) {
           const existing = compMap.get(c.id);
-          compMap.set(c.id, sanitizeLegacyDemoIdentity(existing ? { ...existing, ...c } : c));
+          const merged = existing
+            ? {
+                ...existing,
+                ...c,
+                moduleRestrictionEnabled:
+                  typeof c.moduleRestrictionEnabled === "boolean"
+                    ? c.moduleRestrictionEnabled
+                    : existing.moduleRestrictionEnabled,
+                allowedModules: Array.isArray(c.allowedModules)
+                  ? c.allowedModules
+                  : existing.allowedModules,
+              }
+            : c;
+          compMap.set(c.id, sanitizeLegacyDemoIdentity(merged));
         }
       });
       memoryCloudSyncStore.companiesRegistry = Array.from(compMap.values());
@@ -2006,8 +2019,33 @@ app.post("/api/cloud-sync/system", (req, res) => {
         if (!u) return;
         const key = String(u.email || u.userId || u.username || "").trim().toLowerCase();
         if (key && !delUserSet.has(key)) {
-          const existing = userMap.get(key);
-          userMap.set(key, existing ? { ...existing, ...u } : u);
+          let existing = userMap.get(key);
+          if (!existing) {
+            for (const [existingKey, candidate] of userMap.entries()) {
+              if (
+                (u.userId && candidate?.userId === u.userId) ||
+                (u.username && candidate?.username && String(candidate.username).toLowerCase() === String(u.username).toLowerCase())
+              ) {
+                existing = candidate;
+                userMap.delete(existingKey);
+                break;
+              }
+            }
+          }
+          userMap.set(
+            key,
+            existing
+              ? {
+                  ...existing,
+                  ...u,
+                  username: u.username || existing.username,
+                  passwordPlain: u.passwordPlain || existing.passwordPlain,
+                  allowedModules: Array.isArray(u.allowedModules)
+                    ? u.allowedModules
+                    : existing.allowedModules,
+                }
+              : u
+          );
         }
       });
       memoryCloudSyncStore.usersRegistry = Array.from(userMap.values());
@@ -2059,12 +2097,26 @@ app.post("/api/cloud-sync/company", (req, res) => {
     if (companyMeta && companyMeta.id) {
       const idx = memoryCloudSyncStore.companiesRegistry.findIndex((c: any) => c && c.id === companyMeta.id);
       if (idx >= 0) {
+        const existingComp = memoryCloudSyncStore.companiesRegistry[idx];
+        const allowPermChange = Boolean(
+          req.body?.allowModulePermissionChange || companyMeta._allowModulePermissionChange
+        );
+        const { _allowModulePermissionChange, ...cleanMeta } = companyMeta;
+        void _allowModulePermissionChange;
         memoryCloudSyncStore.companiesRegistry[idx] = sanitizeLegacyDemoIdentity({
-          ...memoryCloudSyncStore.companiesRegistry[idx],
-          ...companyMeta,
+          ...existingComp,
+          ...cleanMeta,
+          moduleRestrictionEnabled: allowPermChange
+            ? cleanMeta.moduleRestrictionEnabled
+            : existingComp.moduleRestrictionEnabled,
+          allowedModules: allowPermChange
+            ? cleanMeta.allowedModules
+            : existingComp.allowedModules,
         });
       } else {
-        memoryCloudSyncStore.companiesRegistry.push(sanitizeLegacyDemoIdentity(companyMeta));
+        const { _allowModulePermissionChange, ...cleanMeta } = companyMeta;
+        void _allowModulePermissionChange;
+        memoryCloudSyncStore.companiesRegistry.push(sanitizeLegacyDemoIdentity(cleanMeta));
       }
     } else if (mergedSettings) {
       const idx = memoryCloudSyncStore.companiesRegistry.findIndex((c: any) => c && c.id === cleanId);

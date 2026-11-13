@@ -518,7 +518,24 @@ export function saveCompaniesList(list: CompanyItem[], allowRemoval = false): vo
   (Array.isArray(list) ? list : []).forEach((c) => {
     if (c && c.id && (PROTECTED_COMPANY_IDS.has(c.id) || !deletedIds.has(c.id))) {
       const existing = mergedMap.get(c.id);
-      mergedMap.set(c.id, ensureCompanyCredentials(existing ? { ...existing, ...c } : c).comp);
+      const mergedComp: CompanyItem = existing
+        ? {
+            ...existing,
+            ...c,
+            moduleRestrictionEnabled:
+              typeof c.moduleRestrictionEnabled === "boolean"
+                ? c.moduleRestrictionEnabled
+                : existing.moduleRestrictionEnabled,
+            allowedModules: Array.isArray(c.allowedModules)
+              ? c.allowedModules
+              : existing.allowedModules,
+          }
+        : c;
+      const { _allowModulePermissionChange, ...cleanComp } = mergedComp as CompanyItem & {
+        _allowModulePermissionChange?: boolean;
+      };
+      void _allowModulePermissionChange;
+      mergedMap.set(c.id, ensureCompanyCredentials(cleanComp).comp);
     }
   });
 
@@ -565,8 +582,12 @@ export function addCompanyItem(comp: CompanyItem): CompanyItem[] {
     });
   }
   const current = getCompaniesList();
+  const { _allowModulePermissionChange, ...cleanComp } = comp as CompanyItem & {
+    _allowModulePermissionChange?: boolean;
+  };
+  void _allowModulePermissionChange;
   const normalizedComp: CompanyItem = {
-    ...comp,
+    ...cleanComp,
     loginUserDeleted: false,
   };
   const exists = current.some((c) => c.id === normalizedComp.id);
@@ -577,7 +598,10 @@ export function addCompanyItem(comp: CompanyItem): CompanyItem[] {
   return getCompaniesList();
 }
 
-export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
+export function updateCompanyItem(
+  comp: CompanyItem,
+  options?: { allowModulePermissionChange?: boolean }
+): CompanyItem[] {
   unmarkCompanyAsDeleted(comp.id);
   if (comp.loginUsername) {
     unmarkUserAsDeleted({
@@ -587,11 +611,26 @@ export function updateCompanyItem(comp: CompanyItem): CompanyItem[] {
     });
   }
   const current = getCompaniesList();
+  const existing = current.find((c) => c.id === comp.id);
+  const compWithFlag = comp as CompanyItem & { _allowModulePermissionChange?: boolean };
+  const canMutateModules = Boolean(
+    options?.allowModulePermissionChange || compWithFlag._allowModulePermissionChange
+  );
+  const { _allowModulePermissionChange, ...cleanComp } = compWithFlag;
+  void _allowModulePermissionChange;
+
   const normalizedComp: CompanyItem = {
-    ...comp,
+    ...(existing || {}),
+    ...cleanComp,
+    moduleRestrictionEnabled: canMutateModules
+      ? cleanComp.moduleRestrictionEnabled
+      : existing?.moduleRestrictionEnabled,
+    allowedModules: canMutateModules
+      ? cleanComp.allowedModules
+      : existing?.allowedModules,
     loginUserDeleted: false,
   };
-  const exists = current.some((c) => c.id === normalizedComp.id);
+  const exists = Boolean(existing);
   const updated = exists
     ? current.map((c) => (c.id === normalizedComp.id ? normalizedComp : c))
     : [...current, normalizedComp];

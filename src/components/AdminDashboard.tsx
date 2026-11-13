@@ -708,6 +708,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const pendingUsersList = users.filter((u) => hasUserPendingChanges(u.userId));
   const pendingChangesCount = pendingUsersList.length;
 
+  const syncCompanyModulesFromUserUpdate = (
+    targetUser: UserProfileData,
+    newModules: AppModuleKey[],
+    overrideUsersList?: UserProfileData[]
+  ) => {
+    if (isAdminOrSysAdmin(targetUser)) return;
+    const targetCompId =
+      targetUser.companyId ||
+      (targetUser.userId.startsWith("usr_comp_") ? targetUser.userId.replace("usr_comp_", "") : undefined);
+    if (!targetCompId) return;
+
+    const currentCompanies = getCompaniesList();
+    const matchedComp = currentCompanies.find((c) => c.id === targetCompId);
+    if (!matchedComp) return;
+
+    const sourceUsers = overrideUsersList || users;
+    const companyUsers = sourceUsers.filter(
+      (u) =>
+        u &&
+        !isUserMarkedDeleted(u) &&
+        !isAdminOrSysAdmin(u) &&
+        (u.companyId === targetCompId || u.userId === `usr_comp_${targetCompId}`)
+    );
+
+    let nextCompModules: string[] = newModules;
+    if (companyUsers.length > 1) {
+      const unionSet = new Set<string>(newModules);
+      companyUsers.forEach((cu) => {
+        if (cu.userId === targetUser.userId) return;
+        const cuMods = Array.isArray(cu.allowedModules)
+          ? cu.allowedModules
+          : allAppModules.map((m) => m.key);
+        cuMods.forEach((k) => unionSet.add(k));
+      });
+      nextCompModules = Array.from(unionSet);
+    }
+
+    const isRestricted = nextCompModules.length < allAppModules.length;
+    const updatedComp: CompanyItem & { _allowModulePermissionChange?: boolean } = {
+      ...matchedComp,
+      moduleRestrictionEnabled: isRestricted,
+      allowedModules: nextCompModules,
+      _allowModulePermissionChange: true,
+    };
+    updateCompanyItem(updatedComp, { allowModulePermissionChange: true });
+    setLocalCompanies(getCompaniesList());
+  };
+
   // Hızlı & Beklemesiz modül yetki kaydı yardımcısı (0ms anında UI güncelleme, arka planda senkronizasyon)
   const persistUserModulesInstantly = (user: UserProfileData, newModules: AppModuleKey[], actionSummary: string) => {
     const updatedUser: UserProfileData = {
@@ -720,13 +768,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setUsers((prev) => prev.map((u) => (u.userId === user.userId ? updatedUser : u)));
     handleCancelUserDraft(user.userId);
 
-    // 2. Yerel kalıcı depoyu hemen tazele
+    // 2. Yerel kalıcı depoyu ve bağlı şirket modül yetkilerini hemen tazele
     try {
       const existing = getLocalUsersBackup();
       const idx = existing.findIndex((u) => u.userId === user.userId);
       if (idx >= 0) existing[idx] = updatedUser;
       else existing.unshift(updatedUser);
       saveLocalUsersBackup(existing);
+      syncCompanyModulesFromUserUpdate(updatedUser, newModules);
     } catch (e) {
       console.warn("Local users update error:", e);
     }
@@ -862,6 +911,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setUsers((prev) => prev.map((u) => (u.userId === userId ? updatedUser : u)));
     handleCancelUserDraft(userId);
     setConfirmSaveUser(null);
+    syncCompanyModulesFromUserUpdate(updatedUser, effectiveModules);
     setFastSaveNotification(`⚡ "${confirmSaveUser.name}" yetkileri kaydedildi.`);
     setTimeout(() => setFastSaveNotification(null), 2500);
 
@@ -919,11 +969,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setFastSaveNotification(`⚡ ${targetCount} personelin yetkisi başarıyla kaydedildi.`);
     setTimeout(() => setFastSaveNotification(null), 3000);
 
-    // 2. Yerel yedek depoyu hemen güncelle
+    // 2. Yerel yedek depoyu ve bağlı şirket modül yetkilerini hemen güncelle
+    const mergedAllUsers = users.map((u) => updatedUsersMap.get(u.userId) || u);
     try {
       const existing = getLocalUsersBackup();
       const updatedList = existing.map((u) => updatedUsersMap.get(u.userId) || u);
       saveLocalUsersBackup(updatedList);
+      usersToPersist.forEach((u) => {
+        if (Array.isArray(u.allowedModules)) {
+          syncCompanyModulesFromUserUpdate(u, u.allowedModules, mergedAllUsers);
+        }
+      });
     } catch {}
 
     // 3. Arka planda paralel olarak sunucu ve Firestore'a yaz (UI'yi dondurmadan)
@@ -1238,20 +1294,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       };
       await saveUserProfile(updatedUser);
 
-      // Eğer bu kullanıcı bir şirketin ana giriş hesabıysa, şirketin giriş bilgilerini de senkronize et
+      // Eğer bu kullanıcı bir şirkete bağlıysa, şirketin giriş ve modül yetki bilgilerini de senkronize et
       if (editingPermissionsUser.companyId || editingPermissionsUser.userId.startsWith("usr_comp_")) {
         const targetCompId = editingPermissionsUser.companyId || editingPermissionsUser.userId.replace("usr_comp_", "");
-        const matchedComp = adminCompanies.find((c) => c.id === targetCompId);
+        const matchedComp = getCompaniesList().find((c) => c.id === targetCompId);
         if (matchedComp) {
-          const updatedComp: CompanyItem = {
-            ...matchedComp,
-            loginUsername: updatedUser.username || matchedComp.loginUsername,
-            loginPasswordPlain: updatedUser.passwordPlain || matchedComp.loginPasswordPlain,
+          syncCompanyModulesFromUserUpdate(updatedUser, selectedModulesToEdit);
+          const refreshedComp = getCompaniesList().find((c) => c.id === targetCompId) || matchedComp;
+          const updatedComp: CompanyItem & { _allowModulePermissionChange?: boolean } = {
+            ...refreshedComp,
+            loginUsername: updatedUser.username || refreshedComp.loginUsername,
+            loginPasswordPlain: updatedUser.passwordPlain || refreshedComp.loginPasswordPlain,
+            _allowModulePermissionChange: true,
           };
           if (onUpdateCompany) {
             onUpdateCompany(updatedComp);
           } else {
-            updateCompanyItem(updatedComp);
+            updateCompanyItem(updatedComp, { allowModulePermissionChange: true });
           }
           setLocalCompanies(getCompaniesList());
         }

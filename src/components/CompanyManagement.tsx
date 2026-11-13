@@ -1088,7 +1088,9 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       onSaveSettings(cleanedProfile);
 
-      const activeComp = effectiveCompanies.find((c) => c.id === currentActiveCompanyId);
+      const activeComp =
+        getCompaniesList().find((c) => c.id === currentActiveCompanyId) ||
+        effectiveCompanies.find((c) => c.id === currentActiveCompanyId);
       if (activeComp) {
         const updatedComp: CompanyItem = {
           ...activeComp,
@@ -1128,6 +1130,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           invoiceDesign: cleanedProfile.invoiceDesign || activeComp.invoiceDesign,
           logoUrl: cleanedProfile.logoUrl || activeComp.logoUrl,
           logoScale: cleanedProfile.logoScale ?? activeComp.logoScale,
+          moduleRestrictionEnabled: activeComp.moduleRestrictionEnabled,
+          allowedModules: activeComp.allowedModules,
         };
         const updatedList = updateCompanyItem(updatedComp);
         setLocalCompanies(updatedList);

@@ -331,7 +331,12 @@ export default function App() {
   };
 
   const handleUpdateCompany = (comp: CompanyItem) => {
-    const updatedList = updateCompanyItem(comp);
+    const canAdminMutateModules =
+      isAdminOrSysAdmin(currentUser) &&
+      Boolean((comp as CompanyItem & { _allowModulePermissionChange?: boolean })._allowModulePermissionChange);
+    const updatedList = updateCompanyItem(comp, {
+      allowModulePermissionChange: canAdminMutateModules,
+    });
     setCompanies(updatedList);
     saveCloudLogo(
       comp.logoUrl || "/logo.svg",
@@ -399,12 +404,14 @@ export default function App() {
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
     }
     void pushCompanyDataToCloud(comp.id);
-    void verifyAndSyncAllUsersLocalDb(
-      0,
-      "Sistem Yöneticisi",
-      `Şirket Bilgileri Güncellendi (${comp.companyName}) ve Tüm Kullanıcılara Gönderildi`,
-      true
-    );
+    if (isAdminOrSysAdmin(currentUser)) {
+      void verifyAndSyncAllUsersLocalDb(
+        0,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        `Şirket Bilgileri Güncellendi (${comp.companyName}) ve Tüm Kullanıcılara Gönderildi`,
+        true
+      );
+    }
   };
 
   const handleDeleteCompany = (id: string) => {
@@ -3594,12 +3601,14 @@ export default function App() {
       void pushCompanyDataToCloud(targetCompanyId, nextState);
       return nextState;
     });
-    void verifyAndSyncAllUsersLocalDb(
-      0,
-      currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
-      `Şirket Ayarları ve Logosu Güncellendi (${normalizedSettings.companyName || targetCompanyId})`,
-      true
-    );
+    if (isAdminOrSysAdmin(currentUser)) {
+      void verifyAndSyncAllUsersLocalDb(
+        0,
+        currentUser?.name || currentUser?.email || "Sistem Yöneticisi",
+        `Şirket Ayarları ve Logosu Güncellendi (${normalizedSettings.companyName || targetCompanyId})`,
+        true
+      );
+    }
   };
 
   const handleResetDemoData = () => {
