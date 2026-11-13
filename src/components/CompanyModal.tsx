@@ -30,6 +30,7 @@ import {
   Trash2,
   Upload,
   Save,
+  AlertTriangle,
 } from "lucide-react";
 import {
   CompanyItem,
@@ -44,6 +45,8 @@ import {
   getMysoftTenant,
   getMysoftMappingDefaults,
   getNextMysoftInvoiceNumber,
+  getLocalNextSequentialInvoiceNumber,
+  validateSequentialInvoiceNumber,
   checkRecipientTaxpayerStatus,
 } from "../services/mysoftEDocumentService";
 import {
@@ -239,10 +242,14 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
     initialCompany?.eArsivNextNumber || `EAR${currentYear}000000001`
   );
   const [eArsivLastNumber, setEArsivLastNumber] = useState<string | undefined>(undefined);
+  const [defaultInvoicePrefix, setDefaultInvoicePrefix] = useState<string>(
+    initialCompany?.defaultInvoicePrefix || initialCompany?.eFaturaPrefix || "GIB"
+  );
   const [availablePrefixes, setAvailablePrefixes] = useState<
     Array<{
       prefix: string;
-      edocumentType?: number;
+      edocumentType?: number | string;
+      year?: number;
       currentNumber?: number;
       lastNumber?: string;
       nextNumber?: string;
@@ -291,7 +298,26 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       .replace(/\D/g, "")
       .trim();
 
-    if (cleanTarget.length !== 10 && cleanTarget.length !== 11) return;
+    const localEFat = getLocalNextSequentialInvoiceNumber(
+      "e_fatura",
+      initialCompany?.id,
+      initialCompany?.eFaturaPrefix,
+    );
+    const localEArs = getLocalNextSequentialInvoiceNumber(
+      "e_arsiv",
+      initialCompany?.id,
+      initialCompany?.eArsivPrefix,
+    );
+
+    if (cleanTarget.length !== 10 && cleanTarget.length !== 11) {
+      setEFaturaPrefix(localEFat.prefix);
+      setEFaturaNextNumber(localEFat.nextInvoiceNumber);
+      setEFaturaLastNumber(localEFat.lastInvoiceNumber);
+      setEArsivPrefix(localEArs.prefix);
+      setEArsivNextNumber(localEArs.nextInvoiceNumber);
+      setEArsivLastNumber(localEArs.lastInvoiceNumber);
+      return;
+    }
 
     setIsFetchingPrefixes(true);
     try {
@@ -313,55 +339,132 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       const efatNext = efatNextSettled.status === "fulfilled" ? efatNextSettled.value : null;
       const earsNext = earsNextSettled.status === "fulfilled" ? earsNextSettled.value : null;
 
-      const resolvedEFatPrefix =
-        (efatNext?.prefix && efatNext.prefix !== "GIB" ? efatNext.prefix : "") ||
-        (defaults?.eFaturaPrefix && defaults.eFaturaPrefix !== "GIB" ? defaults.eFaturaPrefix : "") ||
+      const nonGenEFat = (p?: string) => {
+        const clean = (p || "").trim().toUpperCase().slice(0, 3);
+        return clean && clean !== "GIB" ? clean : "";
+      };
+      const nonGenEArs = (p?: string) => {
+        const clean = (p || "").trim().toUpperCase().slice(0, 3);
+        return clean && clean !== "EAR" ? clean : "";
+      };
+
+      const resolvedEFatPrefix = (
+        nonGenEFat(efatNext?.prefix) ||
+        nonGenEFat(defaults?.eFaturaPrefix) ||
+        nonGenEFat(localEFat.prefix) ||
+        nonGenEFat(initialCompany?.eFaturaPrefix) ||
         efatNext?.prefix ||
         defaults?.eFaturaPrefix ||
-        "GIB";
+        localEFat.prefix ||
+        initialCompany?.eFaturaPrefix ||
+        "GIB"
+      )
+        .toUpperCase()
+        .slice(0, 3);
 
       const resolvedEFatSeq = Math.max(
+        1,
         efatNext?.nextSequence || 1,
         defaults?.eFaturaSequence || 1,
+        localEFat.prefix === resolvedEFatPrefix ? localEFat.nextSequence || 1 : 1,
       );
       const resolvedEFatNextNo = `${resolvedEFatPrefix}${currentYear}${String(resolvedEFatSeq).padStart(9, "0")}`;
+      const resolvedEFatLastNo =
+        resolvedEFatSeq > 1
+          ? `${resolvedEFatPrefix}${currentYear}${String(resolvedEFatSeq - 1).padStart(9, "0")}`
+          : efatNext?.lastInvoiceNumber ||
+            defaults?.eFaturaLastNumber ||
+            localEFat.lastInvoiceNumber ||
+            undefined;
 
-      const resolvedEArsPrefix =
-        (earsNext?.prefix && earsNext.prefix !== "EAR" ? earsNext.prefix : "") ||
-        (defaults?.eArsivPrefix && defaults.eArsivPrefix !== "EAR" ? defaults.eArsivPrefix : "") ||
+      const resolvedEArsPrefix = (
+        nonGenEArs(earsNext?.prefix) ||
+        nonGenEArs(defaults?.eArsivPrefix) ||
+        nonGenEArs(localEArs.prefix) ||
+        nonGenEArs(initialCompany?.eArsivPrefix) ||
         earsNext?.prefix ||
         defaults?.eArsivPrefix ||
-        "EAR";
+        localEArs.prefix ||
+        initialCompany?.eArsivPrefix ||
+        "EAR"
+      )
+        .toUpperCase()
+        .slice(0, 3);
 
       const resolvedEArsSeq = Math.max(
+        1,
         earsNext?.nextSequence || 1,
         defaults?.eArsivSequence || 1,
+        localEArs.prefix === resolvedEArsPrefix ? localEArs.nextSequence || 1 : 1,
       );
       const resolvedEArsNextNo = `${resolvedEArsPrefix}${currentYear}${String(resolvedEArsSeq).padStart(9, "0")}`;
+      const resolvedEArsLastNo =
+        resolvedEArsSeq > 1
+          ? `${resolvedEArsPrefix}${currentYear}${String(resolvedEArsSeq - 1).padStart(9, "0")}`
+          : earsNext?.lastInvoiceNumber ||
+            defaults?.eArsivLastNumber ||
+            localEArs.lastInvoiceNumber ||
+            undefined;
 
       setEFaturaPrefix(resolvedEFatPrefix);
       setEFaturaNextNumber(resolvedEFatNextNo);
-      setEFaturaLastNumber(
-        efatNext?.lastInvoiceNumber ||
-          defaults?.eFaturaLastNumber ||
-          (resolvedEFatSeq > 1
-            ? `${resolvedEFatPrefix}${currentYear}${String(resolvedEFatSeq - 1).padStart(9, "0")}`
-            : undefined),
-      );
+      setEFaturaLastNumber(resolvedEFatLastNo);
 
       setEArsivPrefix(resolvedEArsPrefix);
       setEArsivNextNumber(resolvedEArsNextNo);
-      setEArsivLastNumber(
-        earsNext?.lastInvoiceNumber ||
-          defaults?.eArsivLastNumber ||
-          (resolvedEArsSeq > 1
-            ? `${resolvedEArsPrefix}${currentYear}${String(resolvedEArsSeq - 1).padStart(9, "0")}`
-            : undefined),
+      setEArsivLastNumber(resolvedEArsLastNo);
+      setDefaultInvoicePrefix((prev) =>
+        prev && prev !== "GIB" ? prev : resolvedEFatPrefix
       );
 
-      if (defaults?.prefixes && defaults.prefixes.length > 0) {
-        setAvailablePrefixes(defaults.prefixes);
+      const portalSeries = (defaults?.prefixes || [])
+        .filter((b) => typeof b.prefix === "string" && b.prefix.trim().length > 0)
+        .map((b) => {
+          const pfx = String(b.prefix || "").trim().toUpperCase().slice(0, 3);
+          const curNum = Number(b.currentNumber ?? 0) || 0;
+          const yr = Number((b as any).year) || currentYear;
+          return {
+            prefix: pfx,
+            edocumentType: b.edocumentType,
+            year: yr,
+            currentNumber: curNum,
+            lastNumber:
+              b.lastNumber ||
+              (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : undefined),
+            nextNumber:
+              b.nextNumber ||
+              `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`,
+            isDefault: b.isDefault,
+          };
+        });
+
+      const seenPfx = new Set(portalSeries.map((s) => `${s.prefix}_${s.edocumentType ?? ""}`));
+      if (!portalSeries.some((s) => s.prefix === resolvedEFatPrefix && Number(s.edocumentType) !== 2)) {
+        seenPfx.add(`${resolvedEFatPrefix}_1`);
+        portalSeries.unshift({
+          prefix: resolvedEFatPrefix,
+          edocumentType: 1,
+          year: currentYear,
+          currentNumber: resolvedEFatSeq - 1,
+          lastNumber: resolvedEFatLastNo,
+          nextNumber: resolvedEFatNextNo,
+          isDefault: true,
+        });
       }
+      if (!portalSeries.some((s) => s.prefix === resolvedEArsPrefix && Number(s.edocumentType) === 2)) {
+        seenPfx.add(`${resolvedEArsPrefix}_2`);
+        portalSeries.push({
+          prefix: resolvedEArsPrefix,
+          edocumentType: 2,
+          year: currentYear,
+          currentNumber: resolvedEArsSeq - 1,
+          lastNumber: resolvedEArsLastNo,
+          nextNumber: resolvedEArsNextNo,
+          isDefault: true,
+        });
+      }
+
+      setAvailablePrefixes(portalSeries);
       setPrefixesFetched(true);
     } catch {
       // Keep current values on error
@@ -705,7 +808,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       eFaturaNextNumber: (eFaturaNextNumber || "").trim() || undefined,
       eArsivPrefix: (eArsivPrefix || "EAR").trim().toUpperCase(),
       eArsivNextNumber: (eArsivNextNumber || "").trim() || undefined,
-      defaultInvoicePrefix: (eFaturaPrefix || "GIB").trim().toUpperCase(),
+      defaultInvoicePrefix: (defaultInvoicePrefix || eFaturaPrefix || "GIB").trim().toUpperCase(),
       logoUrl: logoUrl || "/logo.svg",
       logoScale: clampLogoScale(logoScale),
       createdAt: initialCompany?.createdAt || new Date().toISOString(),
@@ -774,12 +877,18 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                {mode === "create" ? "Yeni Şirket Tanımla" : mode === "mysoft_match" ? "Mysoft VKN & TCKN Eşleştirme" : "Şirket Bilgilerini Düzenle"}
+                {mode === "create"
+                  ? "Yeni Şirket Tanımla"
+                  : mode === "mysoft_match"
+                    ? "Mysoft Eşleştir & e-Fatura / e-Arşiv Seri Numaraları"
+                    : "Şirket Bilgilerini Düzenle"}
               </h3>
               <p className="text-xs text-white/80">
                 {mode === "create"
                   ? "Yeni şirket tanımlandığında tüm modüller tertemiz ve boş olarak başlatılır."
-                  : "Şirket Vergi Kimlik No ve TC Kimlik No eşleştirmesini Mysoft e-Belge ile bağlayın."}
+                  : mode === "mysoft_match"
+                    ? "Mysoft tarafında eşleştirilen firmanın VKN/TCKN bağlantısını ve e-Fatura / e-Arşiv seri numaralarını yönetin."
+                    : "Şirket Vergi Kimlik No ve TC Kimlik No eşleştirmesini Mysoft e-Belge ile bağlayın."}
               </p>
             </div>
           </div>
@@ -823,7 +932,30 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
             </div>
           )}
 
+          {/* Mysoft Eşleştir modunda kompakt firma başlığı */}
+          {mode === "mysoft_match" && (
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-indigo-600/10 border border-indigo-200 flex items-center justify-center shrink-0">
+                  <Building2 className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                    {companyTitle || companyName || "Seçili Firma"}
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Vergi Dairesi: <strong>{taxOffice || "Merkez"}</strong> • İl: <strong>{city || "İstanbul"}</strong>
+                  </div>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-mono font-bold">
+                {(mysoftMatchedType === "vkn" ? vkn : tckn) || vkn || tckn || "Kimlik Bekleniyor"}
+              </span>
+            </div>
+          )}
+
           {/* Şirket Temel Bilgileri */}
+          {mode !== "mysoft_match" && (
           <div className="space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 border-b pb-1.5 flex items-center gap-1.5">
               <Building className="w-3.5 h-3.5 text-[#0f6bae]" />
@@ -972,6 +1104,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* 🌟 MYSOFT ENTEGRASYON VE VKN / TCKN EŞLEŞTİRME BÖLÜMÜ (Admin Eşleştirme) */}
           <div className="p-4 bg-gradient-to-br from-indigo-50/70 via-purple-50/50 to-blue-50/70 dark:from-slate-800/80 dark:to-slate-800/50 border border-indigo-200 dark:border-indigo-900/60 rounded-2xl space-y-4 shadow-2xs">
@@ -1167,13 +1300,343 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                 </div>
               )}
 
+              {/* 🌟 EŞLEŞEN FİRMANIN MYSOFT E-FATURA & E-ARŞİV SERİ NUMARALARI */}
+              <div className="p-4 bg-white dark:bg-slate-900/90 rounded-xl border border-indigo-200 dark:border-indigo-900/70 space-y-3.5 shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h5 className="text-xs font-extrabold text-slate-900 dark:text-slate-100">
+                      Eşleşen Firmanın e-Fatura &amp; e-Arşiv Seri Numaraları
+                    </h5>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => void fetchMysoftSequentialSerials()}
+                      disabled={isFetchingPrefixes || (!vkn && !tckn)}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+                      title="Mysoft'tan eşleşen firmanın e-Fatura ve e-Arşiv seri numaralarını çek"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isFetchingPrefixes ? "animate-spin" : ""}`} />
+                      <span>
+                        {isFetchingPrefixes
+                          ? "Mysoft'tan Seri Numaraları Çekiliyor..."
+                          : "Mysoft'tan Seri Numaralarını Çek"}
+                      </span>
+                    </button>
+                    {prefixesFetched && !isFetchingPrefixes && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Seri Numaraları Eşleşti
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Mysoft tarafında eşleştirmesi yapılan firmanın <strong>e-Fatura</strong> ve <strong>e-Arşiv</strong> seri ön ekleri, son kesilen belge numaraları ve sıradaki ardışık seri numaraları aşağıda listelenmektedir.
+                </p>
+
+                {/* Mysoft Portalında Tanımlı Tüm e-Fatura & e-Arşiv Serileri Listesi */}
+                {availablePrefixes.length > 0 && (
+                  <div className="space-y-1.5 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                      <span>Mysoft Portalında Tanımlı e-Fatura &amp; e-Arşiv Serileri ({availablePrefixes.length})</span>
+                      <span className="font-normal text-slate-500">Seçmek için seriye tıklayın</span>
+                    </div>
+                    <div className="space-y-1">
+                      {availablePrefixes.map((p, idx) => {
+                        const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
+                        const yr = Number(p.year) || currentYear;
+                        const curNum = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
+                        const isEarsiv =
+                          Number(p.edocumentType) === 2 ||
+                          String(p.edocumentType || "").toUpperCase().includes("ARSIV") ||
+                          pfx === eArsivPrefix.toUpperCase();
+                        const nextNo =
+                          p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
+                        const lastNo =
+                          p.lastNumber ||
+                          (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
+                        const isSelected = isEarsiv
+                          ? pfx === eArsivPrefix.toUpperCase()
+                          : pfx === eFaturaPrefix.toUpperCase();
+                        const isDefaultRow =
+                          String(defaultInvoicePrefix || eFaturaPrefix).toUpperCase() === pfx;
+
+                        return (
+                          <div
+                            key={`${pfx}_${idx}`}
+                            onClick={() => {
+                              if (isEarsiv) {
+                                setEArsivPrefix(pfx);
+                                setEArsivNextNumber(nextNo);
+                                setEArsivLastNumber(lastNo || undefined);
+                              } else {
+                                setEFaturaPrefix(pfx);
+                                setEFaturaNextNumber(nextNo);
+                                setEFaturaLastNumber(lastNo || undefined);
+                                setDefaultInvoicePrefix(pfx);
+                              }
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-mono flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                              isSelected
+                                ? isEarsiv
+                                  ? "bg-purple-50 border-purple-400 text-purple-950 font-bold"
+                                  : "bg-blue-50 border-blue-400 text-blue-950 font-bold"
+                                : "bg-white hover:bg-indigo-50/50 border-slate-200 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 truncate">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-white font-extrabold shrink-0 ${
+                                  isEarsiv ? "bg-purple-600" : "bg-blue-600"
+                                }`}
+                              >
+                                {pfx}
+                              </span>
+                              <span className="font-sans font-bold text-slate-600 shrink-0">
+                                {isEarsiv ? "e-Arşiv" : "e-Fatura"}
+                              </span>
+                              <span className="truncate">
+                                Son: <strong>{lastNo || "Henüz kesilmedi (0)"}</strong> → Sıradaki:{" "}
+                                <strong className={isEarsiv ? "text-purple-700" : "text-blue-700"}>
+                                  {nextNo}
+                                </strong>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setDefaultInvoicePrefix(pfx);
+                                if (!isEarsiv) {
+                                  setEFaturaPrefix(pfx);
+                                  setEFaturaNextNumber(nextNo);
+                                  setEFaturaLastNumber(lastNo || undefined);
+                                } else {
+                                  setEArsivPrefix(pfx);
+                                  setEArsivNextNumber(nextNo);
+                                  setEArsivLastNumber(lastNo || undefined);
+                                }
+                              }}
+                              className={`px-2 py-0.5 rounded text-[9px] font-sans font-extrabold shrink-0 cursor-pointer ${
+                                isDefaultRow
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200"
+                              }`}
+                            >
+                              {isDefaultRow ? "Varsayılan Seri ✓" : "Varsayılan Yap"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* e-Fatura Seri Numarası Kartı */}
+                  {(() => {
+                    const efatSeqCheck = validateSequentialInvoiceNumber({
+                      enteredNumber: eFaturaNextNumber,
+                      expectedPrefix: eFaturaPrefix || "GIB",
+                      lastUsedNumber: eFaturaLastNumber,
+                      year: currentYear,
+                    });
+                    return (
+                      <div className="p-3 bg-gradient-to-br from-blue-50/70 to-indigo-50/50 dark:from-slate-800/90 dark:to-slate-800/60 rounded-xl border border-blue-200 dark:border-blue-900/60 space-y-2">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1">
+                            <Hash className="w-3.5 h-3.5 text-blue-600" />
+                            e-Fatura Seri Numarası
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-800">
+                            Son: {eFaturaLastNumber || "Yok (0)"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-1">
+                            <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                              Seri Ön Ek
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={3}
+                              value={eFaturaPrefix}
+                              onChange={(e) => {
+                                const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                setEFaturaPrefix(p);
+                                if (p.length === 3) {
+                                  const localInfo = getLocalNextSequentialInvoiceNumber(
+                                    "e_fatura",
+                                    initialCompany?.id,
+                                    p,
+                                  );
+                                  setEFaturaLastNumber(localInfo.lastInvoiceNumber);
+                                  setEFaturaNextNumber(localInfo.nextInvoiceNumber);
+                                }
+                              }}
+                              placeholder="GIB"
+                              className="w-full h-8 px-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg text-xs font-mono font-bold text-blue-900 dark:text-blue-200 uppercase text-center outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                              Sıradaki e-Fatura Seri No
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={16}
+                              value={eFaturaNextNumber}
+                              onChange={(e) => setEFaturaNextNumber(e.target.value.toUpperCase().trim())}
+                              placeholder={`GIB${currentYear}000000001`}
+                              className={`w-full h-8 px-2 bg-white dark:bg-slate-900 border rounded-lg text-xs font-mono font-bold outline-none focus:ring-1 ${
+                                efatSeqCheck.hasWarning
+                                  ? "border-rose-400 text-rose-900 focus:ring-rose-500"
+                                  : "border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 focus:ring-blue-500"
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        <div
+                          className={`p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
+                            efatSeqCheck.hasWarning
+                              ? efatSeqCheck.status === "gap"
+                                ? "bg-amber-50 border-amber-200 text-amber-900"
+                                : "bg-rose-50 border-rose-200 text-rose-900"
+                              : "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                          }`}
+                        >
+                          <div className="flex items-start gap-1.5 min-w-0">
+                            {efatSeqCheck.hasWarning ? (
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+                            ) : (
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                            )}
+                            <span className="leading-snug">{efatSeqCheck.message}</span>
+                          </div>
+                          {efatSeqCheck.hasWarning && efatSeqCheck.expectedNextNumber && (
+                            <button
+                              type="button"
+                              onClick={() => setEFaturaNextNumber(efatSeqCheck.expectedNextNumber)}
+                              className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer"
+                            >
+                              Sıradaki No Ata
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* e-Arşiv Seri Numarası Kartı */}
+                  {(() => {
+                    const earsSeqCheck = validateSequentialInvoiceNumber({
+                      enteredNumber: eArsivNextNumber,
+                      expectedPrefix: eArsivPrefix || "EAR",
+                      lastUsedNumber: eArsivLastNumber,
+                      year: currentYear,
+                    });
+                    return (
+                      <div className="p-3 bg-gradient-to-br from-purple-50/70 to-pink-50/50 dark:from-slate-800/90 dark:to-slate-800/60 rounded-xl border border-purple-200 dark:border-purple-900/60 space-y-2">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1">
+                            <Hash className="w-3.5 h-3.5 text-purple-600" />
+                            e-Arşiv Seri Numarası
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 font-mono font-bold border border-purple-200 dark:border-purple-800">
+                            Son: {eArsivLastNumber || "Yok (0)"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-1">
+                            <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                              Seri Ön Ek
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={3}
+                              value={eArsivPrefix}
+                              onChange={(e) => {
+                                const p = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+                                setEArsivPrefix(p);
+                                if (p.length === 3) {
+                                  const localInfo = getLocalNextSequentialInvoiceNumber(
+                                    "e_arsiv",
+                                    initialCompany?.id,
+                                    p,
+                                  );
+                                  setEArsivLastNumber(localInfo.lastInvoiceNumber);
+                                  setEArsivNextNumber(localInfo.nextInvoiceNumber);
+                                }
+                              }}
+                              placeholder="EAR"
+                              className="w-full h-8 px-2 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 rounded-lg text-xs font-mono font-bold text-purple-900 dark:text-purple-200 uppercase text-center outline-none focus:ring-1 focus:ring-purple-500"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                              Sıradaki e-Arşiv Seri No
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={16}
+                              value={eArsivNextNumber}
+                              onChange={(e) => setEArsivNextNumber(e.target.value.toUpperCase().trim())}
+                              placeholder={`EAR${currentYear}000000001`}
+                              className={`w-full h-8 px-2 bg-white dark:bg-slate-900 border rounded-lg text-xs font-mono font-bold outline-none focus:ring-1 ${
+                                earsSeqCheck.hasWarning
+                                  ? "border-rose-400 text-rose-900 focus:ring-rose-500"
+                                  : "border-purple-300 dark:border-purple-800 text-purple-900 dark:text-purple-200 focus:ring-purple-500"
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        <div
+                          className={`p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
+                            earsSeqCheck.hasWarning
+                              ? earsSeqCheck.status === "gap"
+                                ? "bg-amber-50 border-amber-200 text-amber-900"
+                                : "bg-rose-50 border-rose-200 text-rose-900"
+                              : "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                          }`}
+                        >
+                          <div className="flex items-start gap-1.5 min-w-0">
+                            {earsSeqCheck.hasWarning ? (
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+                            ) : (
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                            )}
+                            <span className="leading-snug">{earsSeqCheck.message}</span>
+                          </div>
+                          {earsSeqCheck.hasWarning && earsSeqCheck.expectedNextNumber && (
+                            <button
+                              type="button"
+                              onClick={() => setEArsivNextNumber(earsSeqCheck.expectedNextNumber)}
+                              className="px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold shrink-0 cursor-pointer"
+                            >
+                              Sıradaki No Ata
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
               {/* Mysoft İş Ortağı Merkezi API Erişimi & Opsiyonel Portal Bilgileri */}
               <div className="p-3.5 bg-white dark:bg-slate-900/90 rounded-xl border border-indigo-200 dark:border-indigo-900/70 space-y-3 shadow-2xs">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                      Mysoft İş Ortağı API Erişimi & Opsiyonel Portal Bilgileri
+                      Mysoft İş Ortağı API Erişimi &amp; Opsiyonel Portal Bilgileri
                     </h5>
                   </div>
                   <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
@@ -1223,183 +1686,11 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* 🌟 MYSOFT E-FATURA & E-ARŞİV ÖN EKLERİ VE ARDIŞIK DEVAM EDEN FATURA NUMARALARI */}
-              <div className="p-3.5 bg-white dark:bg-slate-900/90 rounded-xl border border-indigo-200 dark:border-indigo-900/70 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                      Mysoft e-Fatura & e-Arşiv Ön Ekleri ve Ardışık Fatura Numarası
-                    </h5>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => void fetchMysoftSequentialSerials()}
-                      disabled={isFetchingPrefixes || (!vkn && !tckn)}
-                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
-                      title="Mysoft'tan son kesilen e-Fatura ve e-Arşiv seri numaralarını ardışık olarak çek"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${isFetchingPrefixes ? "animate-spin text-indigo-600" : ""}`} />
-                      <span>{isFetchingPrefixes ? "Mysoft'tan Çekiliyor..." : "Mysoft'tan Sıradaki Numaraları Çek"}</span>
-                    </button>
-                    {prefixesFetched && !isFetchingPrefixes && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        Portal Seri Eşleşti
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Mysoft e-Belge portalında firmanız için tanımlı <strong>fatura serisi ön ekleri (Prefix)</strong> ve en son hangi numarada kalmışsa <strong>ardışık devam eden sıradaki fatura numarası</strong> otomatik çekilmiştir. Fatura kesiminde bu seri ardışık olarak devam edecektir.
-                </p>
-
-                {availablePrefixes.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700/60 text-[11px]">
-                    <span className="text-slate-500 font-semibold text-[10px]">Portaldaki Seriler:</span>
-                    {availablePrefixes.map((p, idx) => {
-                      const isEarsiv = Number(p.edocumentType) === 2 || String(p.prefix).toUpperCase().includes("EAR");
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            const pref = String(p.prefix).toUpperCase().slice(0, 3);
-                            if (isEarsiv) {
-                              setEArsivPrefix(pref);
-                              const seq = p.nextNumber || `${pref}${currentYear}000000001`;
-                              setEArsivNextNumber(seq);
-                              if (p.lastNumber) setEArsivLastNumber(p.lastNumber);
-                            } else {
-                              setEFaturaPrefix(pref);
-                              const seq = p.nextNumber || `${pref}${currentYear}000000001`;
-                              setEFaturaNextNumber(seq);
-                              if (p.lastNumber) setEFaturaLastNumber(p.lastNumber);
-                            }
-                          }}
-                          className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 hover:border-indigo-500 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 cursor-pointer transition-all"
-                        >
-                          {p.prefix} ({isEarsiv ? "e-Arşiv" : "e-Fatura"} • Sıradaki: {p.nextNumber || `${p.prefix}${currentYear}000000001`})
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* e-Fatura Ön Eki & Ardışık Fatura Numarası */}
-                  <div className="p-3 bg-gradient-to-br from-blue-50/70 to-indigo-50/50 dark:from-slate-800/90 dark:to-slate-800/60 rounded-xl border border-blue-200 dark:border-blue-900/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1">
-                        <Hash className="w-3.5 h-3.5 text-blue-600" />
-                        e-Fatura Ön Eki & Sıradaki No
-                      </span>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800">
-                        e-Fatura Mükellefi
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-1">
-                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                          Ön Ek (3 Hane)
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={3}
-                          value={eFaturaPrefix}
-                          onChange={(e) => {
-                            const p = e.target.value.toUpperCase().slice(0, 3);
-                            setEFaturaPrefix(p);
-                            if (p.length === 3) {
-                              const seq = eFaturaNextNumber.slice(7) || "000000001";
-                              setEFaturaNextNumber(`${p}${currentYear}${seq.padStart(9, "0")}`);
-                            }
-                          }}
-                          placeholder="GIB"
-                          className="w-full h-8 px-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg text-xs font-mono font-bold text-blue-900 dark:text-blue-200 uppercase text-center outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                          Ardışık Fatura No (16 Hane)
-                        </label>
-                        <input
-                          type="text"
-                          value={eFaturaNextNumber}
-                          onChange={(e) => setEFaturaNextNumber(e.target.value.toUpperCase())}
-                          placeholder={`GIB${currentYear}000000001`}
-                          className="w-full h-8 px-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-lg text-xs font-mono font-bold text-blue-900 dark:text-blue-200 outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <span className="text-[9px] text-blue-700/80 dark:text-blue-400 block">
-                      {eFaturaLastNumber
-                        ? `Son Kesilen: ${eFaturaLastNumber} → Sıradaki: ${eFaturaNextNumber}`
-                        : `GİB formatı: 3 harf seri (${eFaturaPrefix || "GIB"}) + ${currentYear} + 9 hane ardışık sayaç`}
-                    </span>
-                  </div>
-
-                  {/* e-Arşiv Fatura Ön Eki & Ardışık Fatura Numarası */}
-                  <div className="p-3 bg-gradient-to-br from-purple-50/70 to-pink-50/50 dark:from-slate-800/90 dark:to-slate-800/60 rounded-xl border border-purple-200 dark:border-purple-900/60 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1">
-                        <Hash className="w-3.5 h-3.5 text-purple-600" />
-                        e-Arşiv Ön Eki & Sıradaki No
-                      </span>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-bold border border-purple-200 dark:border-purple-800">
-                        Nihai Tüketici / Standart
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-1">
-                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                          Ön Ek (3 Hane)
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={3}
-                          value={eArsivPrefix}
-                          onChange={(e) => {
-                            const p = e.target.value.toUpperCase().slice(0, 3);
-                            setEArsivPrefix(p);
-                            if (p.length === 3) {
-                              const seq = eArsivNextNumber.slice(7) || "000000001";
-                              setEArsivNextNumber(`${p}${currentYear}${seq.padStart(9, "0")}`);
-                            }
-                          }}
-                          placeholder="EAR"
-                          className="w-full h-8 px-2 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 rounded-lg text-xs font-mono font-bold text-purple-900 dark:text-purple-200 uppercase text-center outline-none focus:ring-1 focus:ring-purple-500"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                          Ardışık Fatura No (16 Hane)
-                        </label>
-                        <input
-                          type="text"
-                          value={eArsivNextNumber}
-                          onChange={(e) => setEArsivNextNumber(e.target.value.toUpperCase())}
-                          placeholder={`EAR${currentYear}000000001`}
-                          className="w-full h-8 px-2 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 rounded-lg text-xs font-mono font-bold text-purple-900 dark:text-purple-200 outline-none focus:ring-1 focus:ring-purple-500"
-                        />
-                      </div>
-                    </div>
-                    <span className="text-[9px] text-purple-700/80 dark:text-purple-400 block">
-                      {eArsivLastNumber
-                        ? `Son Kesilen: ${eArsivLastNumber} → Sıradaki: ${eArsivNextNumber}`
-                        : `GİB formatı: 3 harf seri (${eArsivPrefix || "EAR"}) + ${currentYear} + 9 hane ardışık sayaç`}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
+          {mode !== "mysoft_match" && (
+            <>
           {/* Vergi Dairesi & İletişim Bilgileri */}
           <div className="space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 border-b pb-1.5 flex items-center gap-1.5">
@@ -2033,6 +2324,8 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
 
         {/* Modal Footer */}
@@ -2045,7 +2338,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
             >
               Vazgeç
             </button>
-            {initialCompany && onDelete && (
+            {initialCompany && onDelete && mode !== "mysoft_match" && (
               <button
                 type="button"
                 onClick={() => {
@@ -2079,7 +2372,11 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-98 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>{mode === "create" ? "Kaydet" : "Kaydet"}</span>
+              <span>
+                {mode === "mysoft_match"
+                  ? "Eşleştirmeyi & Seri Numaralarını Kaydet"
+                  : "Kaydet"}
+              </span>
             </button>
           </div>
         </div>

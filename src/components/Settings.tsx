@@ -2,16 +2,12 @@ import React, { useState } from "react";
 import {
   CompanySettings,
   CompanyItem,
-  Invoice,
-  InvoiceDesignSettings,
   isAdminOrSysAdmin,
-  isCompanyMysoftMatched,
 } from "../types";
 import { UserProfile } from "./AuthModal";
 import { useTheme } from "../context/ThemeContext";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import {
-  Settings as SettingsIcon,
   Save,
   Download,
   Upload,
@@ -19,13 +15,9 @@ import {
   Check,
   Database,
   DollarSign,
-  FileText,
   Palette,
   Sliders,
-  Sun,
-  Moon,
   Undo2,
-  Layers,
   LayoutTemplate,
   Cloud,
   Cpu,
@@ -35,14 +27,10 @@ import {
   Terminal,
   Activity,
   Copy,
-  ExternalLink,
   RefreshCw,
   UploadCloud,
   Utensils,
   Bus,
-  Users,
-  Info,
-  Gift,
   CheckCircle2,
   Building2,
   Globe,
@@ -53,36 +41,13 @@ import {
   Hash,
 } from "lucide-react";
 import { GitHubSyncPanel } from "./GitHubSyncPanel";
-import { Logo } from "./Logo";
-import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
-import { saveCloudLogo } from "../services/cloudBrandingService";
 import {
   getActiveCompanyId,
   getManualBackupStatus,
   snoozeManualBackupReminder,
   simulateOverdueManualBackup,
   ManualBackupStatus,
-  updateCompanyItem,
 } from "../utils/storage";
-import {
-  getMysoftMappingDefaults,
-  getNextMysoftInvoiceNumber,
-  getLocalNextSequentialInvoiceNumber,
-  validateSequentialInvoiceNumber,
-} from "../services/mysoftEDocumentService";
-import {
-  OfficialGIBInvoicePaper,
-  InvoiceDesignCustomizerBar,
-  downloadOfficialGibXslt,
-  resolveInvoiceDesignSettings,
-  resolveInvoiceLogoDimensions,
-  saveCompanyInvoiceCssToFirestore,
-  getIndependentInvoiceCssConfig,
-} from "./OfficialGIBInvoicePaper";
-import {
-  GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI,
-  GIB_OFFICIAL_UPLOADED_QR_CODE_PATH,
-} from "../utils/gibOfficialAssets";
 
 interface SettingsProps {
   settings: CompanySettings;
@@ -91,7 +56,7 @@ interface SettingsProps {
   onImportBackup?: (jsonStr: string) => boolean;
   onResetDemoData?: () => void;
   embedded?: boolean;
-  initialTab?: "theme" | "system" | "invoice_design" | "backup" | "cloud" | "github";
+  initialTab?: "theme" | "system" | "backup" | "cloud" | "github";
   companiesCount?: number;
   onOpenSubModule?: (sub: "companies" | "mysoft" | "logs") => void;
   currentUser?: UserProfile | null;
@@ -112,15 +77,10 @@ export const Settings: React.FC<SettingsProps> = ({
   activeCompany,
 }) => {
   const isAdmin = isAdminOrSysAdmin(currentUser);
-  const isMysoftMatched = isCompanyMysoftMatched(activeCompany, settings);
-  const [activeTab, setActiveTab] = useState<"theme" | "system" | "invoice_design" | "backup" | "cloud" | "github">(
+  const [activeTab, setActiveTab] = useState<"theme" | "system" | "backup" | "cloud" | "github">(
     initialTab === "github" && !isAdmin ? (embedded ? "system" : "theme") : initialTab || (embedded ? "system" : "theme")
   );
   const [formData, setFormData] = useState<CompanySettings>(settings);
-  const [invoiceDesign, setInvoiceDesign] = useState<InvoiceDesignSettings>(() => ({
-    ...resolveInvoiceDesignSettings(settings),
-  }));
-  const [previewDocType, setPreviewDocType] = useState<"auto" | "e_fatura" | "e_arsiv">("e_fatura");
   const [backupStatus, setBackupStatus] = useState<ManualBackupStatus>(() =>
     getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings)
   );
@@ -138,7 +98,6 @@ export const Settings: React.FC<SettingsProps> = ({
     if (lastSettingsRef.current !== sStr) {
       lastSettingsRef.current = sStr;
       setFormData(settings);
-      setInvoiceDesign(resolveInvoiceDesignSettings(settings));
       setBackupStatus((prev) => {
         const next = getManualBackupStatus(activeCompany?.id || getActiveCompanyId(), settings);
         return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
@@ -161,36 +120,6 @@ export const Settings: React.FC<SettingsProps> = ({
   const [pingLatency, setPingLatency] = useState<number | null>(null);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
-  const settingsLogoInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const handleSettingsLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const optimizedDataUrl = await readAndOptimizeLogoFile(file);
-      const updated = { ...formData, logoUrl: optimizedDataUrl, logoScale: 1 };
-      setFormData(updated);
-      onSaveSettings(updated);
-      saveCloudLogo(
-        optimizedDataUrl,
-        { brandName: updated.companyName, logoScale: 1 },
-        getActiveCompanyId()
-      ).catch(() => {});
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3000);
-    } catch (err: any) {
-      triggerFormErrorNotification(err?.message || "Logo yüklenirken hata oluştu.");
-    } finally {
-      e.target.value = "";
-    }
-  };
-
-  const handleAdjustSettingsLogoScale = (nextScale: number) => {
-    const clamped = clampLogoScale(nextScale);
-    const updated = { ...formData, logoScale: clamped };
-    setFormData(updated);
-    onSaveSettings(updated);
-  };
 
   const loadTelemetry = async () => {
     setIsLoadingCloud(true);
@@ -213,214 +142,9 @@ export const Settings: React.FC<SettingsProps> = ({
   // Theme Context
   const { theme, setTheme, resetTheme } = useTheme();
 
-  // Mysoft Portaldaki Seriler & Ardışık Fatura Numarası state (Eşleştirilen Kullanıcı İçin)
-  const [availablePrefixes, setAvailablePrefixes] = useState<
-    Array<{
-      prefix: string;
-      edocumentType?: string | number;
-      year?: number;
-      currentNumber?: number;
-      lastNumber?: string;
-      nextNumber?: string;
-    }>
-  >([]);
-  const [isLoadingSeries, setIsLoadingSeries] = useState(false);
-  const [eFaturaLastNumber, setEFaturaLastNumber] = useState<string>("");
-  const [eArsivLastNumber, setEArsivLastNumber] = useState<string>("");
-
-  const syncMatchedCompanyPrefixes = React.useCallback(
-    async (overrideVkn?: string) => {
-      const rawVkn =
-        overrideVkn ||
-        formData.tenantIdentifierNumber ||
-        formData.vkn ||
-        formData.tckn ||
-        formData.taxNumber ||
-        formData.vknTckn ||
-        activeCompany?.tenantIdentifierNumber ||
-        activeCompany?.vkn ||
-        activeCompany?.tckn ||
-        activeCompany?.taxNumber ||
-        "";
-      const cleanVkn = String(rawVkn).replace(/\D/g, "");
-      const currentYear = new Date().getFullYear();
-
-      if (cleanVkn.length !== 10 && cleanVkn.length !== 11) {
-        setAvailablePrefixes([]);
-        setEFaturaLastNumber("");
-        setEArsivLastNumber("");
-        return;
-      }
-
-      setIsLoadingSeries(true);
-      try {
-        const defaults = await getMysoftMappingDefaults(cleanVkn);
-        const mysoftPrefixes = (defaults?.prefixes || [])
-          .filter((b) => typeof b.prefix === "string" && b.prefix.trim().length > 0)
-          .map((b) => {
-            const pfx = String(b.prefix || "").trim().toUpperCase().slice(0, 3);
-            const curNum = Number(b.currentNumber ?? 0) || 0;
-            const lastNo =
-              (b as any).lastNumber ||
-              (curNum > 0 ? `${pfx}${currentYear}${String(curNum).padStart(9, "0")}` : undefined);
-            const nextNo =
-              (b as any).nextNumber ||
-              `${pfx}${currentYear}${String(curNum + 1).padStart(9, "0")}`;
-            return {
-              prefix: pfx,
-              edocumentType: b.edocumentType,
-              year: (b as any).year || currentYear,
-              currentNumber: curNum,
-              lastNumber: lastNo,
-              nextNumber: nextNo,
-            };
-          });
-
-        setAvailablePrefixes(mysoftPrefixes);
-
-        const efatRow =
-          mysoftPrefixes.find(
-            (p) =>
-              Number(p.edocumentType) !== 2 &&
-              !String(p.edocumentType || "").toUpperCase().includes("ARSIV"),
-          ) || mysoftPrefixes[0];
-        const earsRow = mysoftPrefixes.find(
-          (p) =>
-            Number(p.edocumentType) === 2 ||
-            String(p.edocumentType || "").toUpperCase().includes("ARSIV"),
-        );
-
-        const resolvedEFatPrefix = efatRow?.prefix || defaults?.eFaturaPrefix || "";
-        const finalEFatNextNo = efatRow?.nextNumber || defaults?.eFaturaNextNumber || "";
-        const finalEFatLastNo = efatRow?.lastNumber || defaults?.eFaturaLastNumber || "";
-
-        const resolvedEArsPrefix = earsRow?.prefix || defaults?.eArsivPrefix || "";
-        const finalEArsNextNo = earsRow?.nextNumber || defaults?.eArsivNextNumber || "";
-        const finalEArsLastNo = earsRow?.lastNumber || defaults?.eArsivLastNumber || "";
-
-        setEFaturaLastNumber(finalEFatLastNo);
-        setEArsivLastNumber(finalEArsLastNo);
-
-        if (resolvedEFatPrefix || resolvedEArsPrefix) {
-          setFormData((prev) => ({
-            ...prev,
-            ...(resolvedEFatPrefix
-              ? {
-                  eFaturaPrefix: resolvedEFatPrefix,
-                  eFaturaNextNumber: finalEFatNextNo,
-                  defaultInvoicePrefix: resolvedEFatPrefix,
-                }
-              : {}),
-            ...(resolvedEArsPrefix
-              ? {
-                  eArsivPrefix: resolvedEArsPrefix,
-                  eArsivNextNumber: finalEArsNextNo,
-                }
-              : {}),
-          }));
-        }
-      } catch {
-        // Fallback silently
-      } finally {
-        setIsLoadingSeries(false);
-      }
-    },
-    [
-      formData.tenantIdentifierNumber,
-      formData.vkn,
-      formData.tckn,
-      formData.taxNumber,
-      formData.vknTckn,
-      activeCompany?.id,
-      activeCompany?.tenantIdentifierNumber,
-      activeCompany?.vkn,
-      activeCompany?.tckn,
-      activeCompany?.taxNumber,
-    ]
-  );
-
-  React.useEffect(() => {
-    void syncMatchedCompanyPrefixes();
-  }, [activeCompany?.id]);
-
-  const samplePreviewInvoice = React.useMemo<Invoice>(() => {
-    const currentYear = new Date().getFullYear();
-    const invNo =
-      previewDocType === "e_arsiv"
-        ? formData.eArsivNextNumber || `${formData.eArsivPrefix || "EAR"}${currentYear}000000001`
-        : formData.eFaturaNextNumber || `${formData.eFaturaPrefix || "GIB"}${currentYear}000000001`;
-    return {
-      id: "sample_preview_inv",
-      invoiceNumber: invNo,
-      type: "sales",
-      eDocumentType: previewDocType,
-      invoiceScenario: previewDocType === "e_arsiv" ? "EARSIVFATURA" : "TICARIFATURA",
-      invoiceProfileType: "SATIS",
-      contactId: "sample_contact",
-      contactName: "ÖRNEK ALICI KURUMSAL TEKNOLOJİ A.Ş.",
-      issueDate: new Date().toISOString().split("T")[0],
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      items: [
-        {
-          id: "sample_item_1",
-          description: "Kurumsal Yazılım Lisans ve Entegrasyon Hizmeti",
-          quantity: 1,
-          unit: "Adet",
-          unitPrice: 15000,
-          vatRate: 20,
-          totalWithoutVat: 15000,
-          vatAmount: 3000,
-          totalWithVat: 18000,
-        },
-      ],
-      subtotal: 15000,
-      totalVat: 3000,
-      grandTotal: 18000,
-      paidAmount: 0,
-      remainingAmount: 18000,
-      status: "sent",
-      currency: "TRY",
-      notes: "",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-  }, [
-    previewDocType,
-    formData.eArsivNextNumber,
-    formData.eArsivPrefix,
-    formData.eFaturaNextNumber,
-    formData.eFaturaPrefix,
-  ]);
-
-  const previewCompanySettings = React.useMemo(
-    () => ({ ...formData, invoiceDesign }),
-    [formData, invoiceDesign]
-  );
-
-  const persistFormatParamsToCompanyAndSettings = (nextForm: CompanySettings) => {
-    setFormData(nextForm);
-    onSaveSettings(nextForm);
-    if (activeCompany?.id) {
-      updateCompanyItem({
-        ...activeCompany,
-        eFaturaPrefix: (nextForm.eFaturaPrefix || "GIB").trim().toUpperCase().slice(0, 3),
-        eFaturaNextNumber: nextForm.eFaturaNextNumber,
-        eArsivPrefix: (nextForm.eArsivPrefix || "EAR").trim().toUpperCase().slice(0, 3),
-        eArsivNextNumber: nextForm.eArsivNextNumber,
-        defaultInvoicePrefix: (
-          nextForm.eFaturaPrefix ||
-          nextForm.defaultInvoicePrefix ||
-          "GIB"
-        )
-          .trim()
-          .toUpperCase()
-          .slice(0, 3),
-      });
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    persistFormatParamsToCompanyAndSettings(formData);
+    onSaveSettings(formData);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -547,20 +271,6 @@ export const Settings: React.FC<SettingsProps> = ({
         >
           <Sliders className="w-4 h-4" />
           <span>Ticari Parametreler (Yol & Yemek Yardımı)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("invoice_design")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-            activeTab === "invoice_design"
-              ? "text-white shadow-2xs"
-              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
-          }`}
-          style={activeTab === "invoice_design" ? { backgroundColor: theme.primaryColor } : {}}
-        >
-          <LayoutTemplate className="w-4 h-4" />
-          <span>e-Fatura & e-Arşiv Tasarım</span>
         </button>
 
         <button
@@ -992,114 +702,36 @@ export const Settings: React.FC<SettingsProps> = ({
             </div>
           </div>
 
-          {/* 1. FATURA & BELGE FORMAT PARAMETRELERİ -> e-Fatura & e-Arşiv Tasarım Ayarları'na Taşındı */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-700 shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900">
-                  Fatura &amp; Belge Format Parametreleri Taşındı
-                </h3>
-                <p className="text-[11px] text-slate-600 mt-0.5">
-                  Varsayılan para birimi, KDV oranı, Mysoft portaldaki e-Fatura / e-Arşiv serileri, ardışık fatura numaraları, varsayılan banka/IBAN ve şirket logosu ayarları artık <strong>e-Fatura &amp; e-Arşiv Tasarım Ayarları</strong> bölümünde yer almaktadır.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab("invoice_design")}
-              className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0 shadow-xs"
-            >
-              <LayoutTemplate className="w-4 h-4" />
-              <span>e-Fatura &amp; e-Arşiv Tasarım Ayarları&apos;na Git</span>
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* ─── TAB 2.5: E-FATURA & E-ARŞİV TASARIM STÜDYOSU ─── */}
-      {activeTab === "invoice_design" && (
-        <div className="space-y-6">
-          <div className="bg-linear-to-r from-red-900 via-slate-900 to-indigo-950 text-white p-5 rounded-2xl border border-red-800/60 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-400/30 flex items-center justify-center text-red-300 shrink-0">
-                <LayoutTemplate className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-red-800/80 text-red-100 border border-red-700">
-                    Sistem Ayarları • Giden e-Fatura &amp; e-Arşiv XSLT &amp; Tasarım Stüdyosu
-                  </span>
-                </div>
-                <h2 className="text-base font-bold mt-1">
-                  Giden e-Fatura &amp; e-Arşiv Tasarım Ayarları
-                </h2>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Şirketinizin <strong>giden e-fatura ve e-arşiv belgelerinde</strong> kullanılacak format parametrelerini, Mysoft serilerini, firma logosunu, kaşe/imza görselini ve tema düzenini buradan özelleştirebilirsiniz. <em>(Gelen e-faturalar tedarikçinin kendi orijinal şablonu/GİB görünümüyle korunur, bu tasarım yalnızca giden faturalarınızda geçerlidir.)</em>
-                </p>
-              </div>
-            </div>
-
-            {isAdmin && (
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => downloadOfficialGibXslt(formData, invoiceDesign, "e_fatura")}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all border border-emerald-400/40"
-                  title="Tasarlanan şablonu GİB UBL-TR 1.2 & Mysoft uyumlu e-Fatura .xslt dosyası olarak indir"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>e-Fatura XSLT İndir (.xslt)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadOfficialGibXslt(formData, invoiceDesign, "e_arsiv")}
-                  className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all border border-sky-400/40"
-                  title="Tasarlanan şablonu GİB UBL-TR 1.2 & Mysoft uyumlu e-Arşiv .xslt dosyası olarak indir"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>e-Arşiv XSLT İndir (.xslt)</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 1. FATURA & BELGE FORMAT PARAMETRELERİ (Taşınan Bölüm) */}
+          {/* Genel Ticari Parametreler ve Personel Ödenek Standartları */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-purple-600" />
-                  <span>Fatura &amp; Belge Format Parametreleri</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                    Sadece Giden Faturalarda Geçerlidir
-                  </span>
+                  <Sliders className="w-4 h-4 text-[#0f6bae]" />
+                  <span>Genel Ticari &amp; Personel Yardım Parametreleri</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Burada belirlediğiniz e-fatura/e-arşiv serileri, para birimi, KDV oranı ve görsel tasarım ayarları sadece müşterilerinize kestiğiniz <strong>giden e-faturalarda</strong> kullanılır. Gelen faturalar tedarikçinin kendi orijinal belgesi olarak açılır.
+                  Varsayılan para birimi, KDV oranı ile aylık/günlük yol ve yemek yardımı standartlarını buradan güncelleyebilirsiniz.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const updated: CompanySettings = {
-                    ...formData,
-                    invoiceDesign,
-                  };
-                  persistFormatParamsToCompanyAndSettings(updated);
-                  setIsSaved(true);
-                  setTimeout(() => setIsSaved(false), 3000);
-                }}
-                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Format Parametrelerini Kaydet</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {isSaved && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Kaydedildi
+                  </span>
+                )}
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#0f6bae] hover:bg-[#0a5287] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Parametreleri Kaydet</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
                   <DollarSign className="w-3.5 h-3.5 text-purple-600" /> Varsayılan Para Birimi
@@ -1117,365 +749,6 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="block font-bold text-slate-700">
-                    E-Fatura Seri Öneki (Varsayılan)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void syncMatchedCompanyPrefixes()}
-                    disabled={isLoadingSeries}
-                    className="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
-                    title="Mysoft'tan Serileri ve Numaraları Yenile"
-                  >
-                    <RefreshCw className={`w-2.5 h-2.5 ${isLoadingSeries ? "animate-spin" : ""}`} />
-                    <span>{isLoadingSeries ? "Çekiliyor..." : "Mysoft'tan Çek"}</span>
-                  </button>
-                </div>
-
-                {availablePrefixes.length > 0 ? (
-                  (() => {
-                    const currentYear = new Date().getFullYear();
-                    const activeDefaultPfx = String(
-                      formData.defaultInvoicePrefix || formData.eFaturaPrefix || "",
-                    )
-                      .trim()
-                      .toUpperCase()
-                      .slice(0, 3);
-                    const selectedPfx = availablePrefixes.some(
-                      (p) =>
-                        String(p.prefix || "").toUpperCase() ===
-                        String(formData.eFaturaPrefix || "").toUpperCase(),
-                    )
-                      ? String(formData.eFaturaPrefix || "").toUpperCase()
-                      : String(availablePrefixes[0]?.prefix || "").toUpperCase();
-
-                    const activeSeriesRow =
-                      availablePrefixes.find(
-                        (p) => String(p.prefix || "").toUpperCase() === selectedPfx,
-                      ) || availablePrefixes[0];
-
-                    const activeIsEArs =
-                      Number(activeSeriesRow?.edocumentType) === 2 ||
-                      String(activeSeriesRow?.edocumentType || "")
-                        .toUpperCase()
-                        .includes("ARSIV");
-                    const activeCurNum =
-                      activeSeriesRow?.currentNumber !== undefined
-                        ? Number(activeSeriesRow.currentNumber)
-                        : 0;
-                    const activeYr = activeSeriesRow?.year || currentYear;
-                    const activeLastNo =
-                      activeSeriesRow?.lastNumber ||
-                      (activeCurNum > 0
-                        ? `${selectedPfx}${activeYr}${String(activeCurNum).padStart(9, "0")}`
-                        : activeIsEArs
-                          ? eArsivLastNumber
-                          : eFaturaLastNumber);
-                    const activeExpectedNextNo =
-                      activeSeriesRow?.nextNumber ||
-                      `${selectedPfx}${activeYr}${String(activeCurNum + 1).padStart(9, "0")}`;
-                    const currentEnteredNextNo = activeIsEArs
-                      ? formData.eArsivNextNumber || activeExpectedNextNo
-                      : formData.eFaturaNextNumber || activeExpectedNextNo;
-
-                    const seqCheck = validateSequentialInvoiceNumber({
-                      enteredNumber: currentEnteredNextNo,
-                      expectedPrefix: selectedPfx,
-                      lastUsedNumber: activeLastNo,
-                      lastUsedSequence: activeCurNum,
-                      year: activeYr,
-                    });
-
-                    const isMarkedDefault =
-                      activeDefaultPfx === selectedPfx &&
-                      String(formData.eFaturaPrefix || "").toUpperCase() === selectedPfx;
-
-                    const applySeriesSelection = (
-                      p: (typeof availablePrefixes)[number],
-                      markAsDefault = true,
-                    ) => {
-                      const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
-                      const yr = p.year || currentYear;
-                      const rowCur = p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
-                      const nextDocNo =
-                        p.nextNumber || `${pfx}${yr}${String(rowCur + 1).padStart(9, "0")}`;
-                      const lastDocNo =
-                        p.lastNumber ||
-                        (rowCur > 0 ? `${pfx}${yr}${String(rowCur).padStart(9, "0")}` : "");
-                      const isEArs =
-                        Number(p.edocumentType) === 2 ||
-                        String(p.edocumentType || "").toUpperCase().includes("ARSIV");
-
-                      if (isEArs) {
-                        setEArsivLastNumber(lastDocNo);
-                        const updated: CompanySettings = {
-                          ...formData,
-                          eArsivPrefix: pfx,
-                          eArsivNextNumber: nextDocNo,
-                          ...(markAsDefault
-                            ? {
-                                eFaturaPrefix: pfx,
-                                defaultInvoicePrefix: pfx,
-                                eFaturaNextNumber: nextDocNo,
-                              }
-                            : {}),
-                        };
-                        persistFormatParamsToCompanyAndSettings(updated);
-                      } else {
-                        setEFaturaLastNumber(lastDocNo);
-                        const updated: CompanySettings = {
-                          ...formData,
-                          eFaturaPrefix: pfx,
-                          ...(markAsDefault ? { defaultInvoicePrefix: pfx } : {}),
-                          eFaturaNextNumber: nextDocNo,
-                        };
-                        persistFormatParamsToCompanyAndSettings(updated);
-                      }
-                    };
-
-                    return (
-                      <div className="space-y-2.5">
-                        {/* Seri Seçim Kutusu + Aktif Seriyi Varsayılan Olarak İşaretle */}
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={selectedPfx}
-                            onChange={(e) => {
-                              const pfx = e.target.value.toUpperCase().slice(0, 3);
-                              const chosen = availablePrefixes.find(
-                                (p) => String(p.prefix || "").toUpperCase() === pfx,
-                              );
-                              if (chosen) applySeriesSelection(chosen, true);
-                            }}
-                            className="flex-1 bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold cursor-pointer"
-                          >
-                            {availablePrefixes.map((p, idx) => {
-                              const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
-                              const yr = p.year || currentYear;
-                              const curNum =
-                                p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
-                              const nextNo =
-                                p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
-                              const lastNo =
-                                p.lastNumber ||
-                                (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
-                              const isEArs =
-                                Number(p.edocumentType) === 2 ||
-                                String(p.edocumentType || "").toUpperCase().includes("ARSIV");
-                              const isDef = activeDefaultPfx === pfx;
-                              return (
-                                <option key={`${pfx}_${idx}`} value={pfx}>
-                                  {pfx} ({isEArs ? "e-Arşiv" : "e-Fatura"})
-                                  {isDef ? " [VARSAYILAN]" : ""} — Sıradaki: {nextNo}
-                                  {lastNo ? ` | Son: ${lastNo}` : ""}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-
-                        {/* Aktif Seriyi 'Varsayılan' Olarak İşaretleme Seçim Alanı */}
-                        <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-purple-50/70 border border-purple-200">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={isMarkedDefault}
-                              onChange={() => {
-                                if (activeSeriesRow) {
-                                  applySeriesSelection(activeSeriesRow, true);
-                                }
-                              }}
-                              className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
-                            />
-                            <span className="text-[11px] font-bold text-purple-950">
-                              Aktif Seriyi ({selectedPfx}) &lsquo;Varsayılan&rsquo; Olarak İşaretle
-                            </span>
-                          </label>
-                          {isMarkedDefault ? (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold flex items-center gap-1 shrink-0">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Varsayılan Seri
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (activeSeriesRow) {
-                                  applySeriesSelection(activeSeriesRow, true);
-                                }
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold cursor-pointer transition-all shrink-0"
-                            >
-                              Varsayılan Yap
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Mevcut Mysoft Serileri ve Numaraları Listesi + Varsayılan Seçimi */}
-                        <div className="space-y-1">
-                          {availablePrefixes.map((p, idx) => {
-                            const pfx = String(p.prefix || "").toUpperCase().slice(0, 3);
-                            const yr = p.year || currentYear;
-                            const curNum =
-                              p.currentNumber !== undefined ? Number(p.currentNumber) : 0;
-                            const nextNo =
-                              p.nextNumber || `${pfx}${yr}${String(curNum + 1).padStart(9, "0")}`;
-                            const lastNo =
-                              p.lastNumber ||
-                              (curNum > 0 ? `${pfx}${yr}${String(curNum).padStart(9, "0")}` : "");
-                            const isEArs =
-                              Number(p.edocumentType) === 2 ||
-                              String(p.edocumentType || "").toUpperCase().includes("ARSIV");
-                            const isDefaultRow = activeDefaultPfx === pfx;
-                            return (
-                              <div
-                                key={`row_${pfx}_${idx}`}
-                                onClick={() => applySeriesSelection(p, true)}
-                                className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-mono flex items-center justify-between gap-2 cursor-pointer transition-all ${
-                                  isDefaultRow
-                                    ? "bg-purple-50 border-purple-400 text-purple-950 font-bold shadow-2xs"
-                                    : "bg-slate-50 hover:bg-purple-50/50 border-slate-200 text-slate-700"
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                  <input
-                                    type="radio"
-                                    name="default_mysoft_invoice_series"
-                                    checked={isDefaultRow}
-                                    onChange={() => applySeriesSelection(p, true)}
-                                    className="w-3.5 h-3.5 text-purple-600 focus:ring-purple-500 cursor-pointer shrink-0"
-                                  />
-                                  <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-extrabold">
-                                    {pfx}
-                                  </span>
-                                  <span className="text-slate-500 font-sans font-semibold">
-                                    ({isEArs ? "e-Arşiv" : "e-Fatura"})
-                                  </span>
-                                  <span className="truncate">
-                                    Son: <strong>{lastNo || "Yok"}</strong> → Sıradaki:{" "}
-                                    <strong className="text-purple-700">{nextNo}</strong>
-                                  </span>
-                                </div>
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold shrink-0 ${
-                                    isDefaultRow
-                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                      : "bg-white text-slate-600 border border-slate-200"
-                                  }`}
-                                >
-                                  {isDefaultRow ? "Varsayılan ✓" : "Varsayılan Seç"}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* E-Fatura Seri Numarası Girişi & Sıralı Numara Kontrolü Uyarısı */}
-                        <div className="pt-1 space-y-1.5">
-                          <div className="flex items-center justify-between gap-1">
-                            <label className="text-[11px] font-bold text-slate-700">
-                              Sıradaki E-Fatura Seri Numarası ({selectedPfx})
-                            </label>
-                            <span className="text-[10px] font-mono text-slate-500">
-                              Mysoft Son No: <strong>{activeLastNo || "Henüz kesilmedi (0)"}</strong>
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              maxLength={16}
-                              value={currentEnteredNextNo}
-                              onChange={(e) => {
-                                const val = e.target.value.toUpperCase().trim();
-                                const updated: CompanySettings = activeIsEArs
-                                  ? {
-                                      ...formData,
-                                      eArsivNextNumber: val,
-                                      ...(isMarkedDefault ? { eFaturaNextNumber: val } : {}),
-                                    }
-                                  : {
-                                      ...formData,
-                                      eFaturaNextNumber: val,
-                                    };
-                                persistFormatParamsToCompanyAndSettings(updated);
-                              }}
-                              placeholder={activeExpectedNextNo}
-                              className={`flex-1 rounded-xl px-2.5 py-2 font-mono text-xs font-bold border transition-all ${
-                                seqCheck.status === "collision" ||
-                                seqCheck.status === "invalid_format" ||
-                                seqCheck.status === "prefix_mismatch"
-                                  ? "bg-red-50/70 border-red-400 text-red-950 focus:ring-red-500"
-                                  : seqCheck.status === "gap"
-                                    ? "bg-amber-50/70 border-amber-400 text-amber-950 focus:ring-amber-500"
-                                    : "bg-slate-50 border-slate-200 text-slate-900"
-                              }`}
-                            />
-                            {seqCheck.hasWarning && seqCheck.expectedNextNumber && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated: CompanySettings = activeIsEArs
-                                    ? {
-                                        ...formData,
-                                        eArsivNextNumber: seqCheck.expectedNextNumber,
-                                        ...(isMarkedDefault
-                                          ? { eFaturaNextNumber: seqCheck.expectedNextNumber }
-                                          : {}),
-                                      }
-                                    : {
-                                        ...formData,
-                                        eFaturaNextNumber: seqCheck.expectedNextNumber,
-                                      };
-                                  persistFormatParamsToCompanyAndSettings(updated);
-                                }}
-                                className="px-2.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold cursor-pointer shrink-0 transition-all"
-                                title="Mysoft en son kullanılan numaraya göre çakışmayan ardışık numarayı ata"
-                              >
-                                Sıradaki No Ata
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Sıralı Numara Kontrolü Uyarısı / Durumu */}
-                          <div
-                            className={`p-2.5 rounded-xl border text-[10px] flex items-start gap-2 ${
-                              seqCheck.status === "collision" ||
-                              seqCheck.status === "invalid_format" ||
-                              seqCheck.status === "prefix_mismatch"
-                                ? "bg-red-50 border-red-200 text-red-900"
-                                : seqCheck.status === "gap"
-                                  ? "bg-amber-50 border-amber-200 text-amber-900"
-                                  : "bg-emerald-50/70 border-emerald-200 text-emerald-900"
-                            }`}
-                          >
-                            {seqCheck.hasWarning ? (
-                              <AlertTriangle
-                                className={`w-4 h-4 shrink-0 mt-0.5 ${
-                                  seqCheck.status === "gap" ? "text-amber-600" : "text-red-600"
-                                }`}
-                              />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                            )}
-                            <div className="space-y-0.5 min-w-0 flex-1">
-                              <div className="font-extrabold">{seqCheck.title}</div>
-                              <p className="leading-relaxed">{seqCheck.message}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()
-                ) : (
-                  <div className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-xl p-2.5 text-[11px] font-medium">
-                    {isLoadingSeries
-                      ? "Mysoft'tan seriler ve numaralar çekiliyor..."
-                      : "Mysoft'tan tanımlı seri bulunamadı."}
-                  </div>
-                )}
-              </div>
-
-              <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Varsayılan KDV Oranı (%)
                 </label>
@@ -1490,409 +763,66 @@ export const Settings: React.FC<SettingsProps> = ({
                   <option value="0">%0 (KDV İstisnası)</option>
                 </select>
               </div>
-            </div>
 
-            {/* Varsayılan Banka & Hesap Adı Bilgileri */}
-            <div className="pt-3 border-t border-slate-100">
-              <div className="text-[11px] font-bold text-slate-700 mb-2">
-                Faturaya Basılacak Varsayılan Banka &amp; Hesap Adı Bilgileri
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Hesap Adı (Alıcı / Hesap Sahibi Ünvanı)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={formData.companyTitle || formData.companyName || "Örn: Şirket Ticari TL Hesabı"}
-                    value={formData.defaultBankAccountName ?? ""}
-                    onChange={(e) => setFormData({ ...formData, defaultBankAccountName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Banka Adı ve Şubesi
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Örn: Garanti BBVA - Merkez Şb."
-                    value={formData.defaultBankName || ""}
-                    onChange={(e) => setFormData({ ...formData, defaultBankName: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    IBAN Numarası
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="TR00 0000 0000 0000 0000 0000 00"
-                    value={formData.defaultBankIban || ""}
-                    onChange={(e) => setFormData({ ...formData, defaultBankIban: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex flex-col items-center justify-center gap-2 shrink-0 min-w-[130px]">
-                    <div
-                      className="border border-slate-300 p-1 bg-white rounded shadow-2xs flex flex-col items-center"
-                      style={{ width: "108px", height: "108px", display: "flex", alignItems: "center", justifyContent: "center" }}
-                    >
-                      <img
-                        src={GIB_OFFICIAL_UPLOADED_QR_CODE_PATH}
-                        onError={(e) => {
-                          if (e.currentTarget.src !== GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI) {
-                            e.currentTarget.src = GIB_OFFICIAL_UPLOADED_QR_CODE_DATA_URI;
-                          }
-                        }}
-                        alt="GİB Karekod Şablonu"
-                        style={{ width: "100px", height: "100px" }}
-                        className="w-[100px] h-[100px] object-contain block shrink-0"
-                      />
-                    </div>
-                    {formData.logoUrl && formData.logoUrl !== "/logo.svg" ? (
-                      <img
-                        src={formData.logoUrl}
-                        alt={formData.companyName || "Firma Logosu"}
-                        style={{
-                          width: `${Math.min(180, resolveInvoiceLogoDimensions(invoiceDesign).widthPx)}px`,
-                          height: `${Math.min(90, resolveInvoiceLogoDimensions(invoiceDesign).heightPx)}px`,
-                          objectFit: resolveInvoiceLogoDimensions(invoiceDesign).objectFit,
-                        }}
-                        className="max-w-full"
-                      />
-                    ) : (
-                      <Logo
-                        size="sm"
-                        src={formData.logoUrl || "/logo.svg"}
-                        scale={formData.logoScale ?? 1}
-                      />
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-bold text-slate-900 block">
-                        Giden e-Belge QR Kod &amp; Şirket Logosu Şablonu ({formData.companyName || "Aktif Şirket"})
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded text-[9.5px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
-                        Sadece Giden e-Belgelerde Kullanılır
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-slate-500 block leading-relaxed">
-                      Müşterilerinize düzenlediğiniz <strong>giden e-Fatura ve e-Arşiv</strong> belgelerinde sağ üst köşede belirlediğiniz QR kod şablonu ve hemen altında şirket logonuz yer alır.
-                    </span>
-                    <span className="text-[10.5px] text-emerald-800 bg-emerald-50/80 border border-emerald-200 rounded-lg px-2.5 py-1 block leading-normal mt-1">
-                      <strong>Mevzuat &amp; Tedarikçi Orijinallik Koruması:</strong> Tedarikçilerinizden <strong>gelen faturalardaki QR kodlar değiştirilmez</strong>. Gelen fatura görüntülerinde faturayı kesen tedarikçinin kendi resmi UBL-TR / GİB karekodu korunur.
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <input
-                    ref={settingsLogoInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                    onChange={handleSettingsLogoFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => settingsLogoInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-xl font-bold text-xs shadow-xs cursor-pointer transition-all"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Bilgisayardan Logo Yükle</span>
-                  </button>
-                  {formData.logoUrl && formData.logoUrl !== "/logo.svg" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const reset = { ...formData, logoUrl: "/logo.svg", logoScale: 1 };
-                        setFormData(reset);
-                        onSaveSettings(reset);
-                      }}
-                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs border border-slate-200 cursor-pointer transition-all"
-                    >
-                      Sıfırla
-                    </button>
-                  )}
-                </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Utensils className="w-3.5 h-3.5 text-emerald-600" /> Aylık Yemek Yardımı (₺)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.defaultFoodAllowance ?? 5500}
+                  onChange={(e) =>
+                    setFormData({ ...formData, defaultFoodAllowance: Number(e.target.value) || 0 })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold"
+                />
               </div>
 
-              {/* Fatura Logosu Özel Boyutlandırma (Genişlik px × Yükseklik px) */}
-              {(() => {
-                const currentDims = resolveInvoiceLogoDimensions(invoiceDesign);
-                const applyInvoiceLogoDims = (patch: Partial<InvoiceDesignSettings>) => {
-                  const nextDesign: InvoiceDesignSettings = {
-                    ...invoiceDesign,
-                    ...patch,
-                    showCompanyLogo: true,
-                  };
-                  setInvoiceDesign(nextDesign);
-                  const nextSettings: CompanySettings = {
-                    ...formData,
-                    invoiceDesign: nextDesign,
-                  };
-                  setFormData(nextSettings);
-                  onSaveSettings(nextSettings);
-                  void saveCompanyInvoiceCssToFirestore(
-                    nextSettings,
-                    getIndependentInvoiceCssConfig(nextDesign.cssConfig, nextSettings.id),
-                    nextDesign
-                  );
-                };
-
-                return (
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-[11px] font-bold text-slate-800">
-                        <Sliders className="w-3.5 h-3.5 text-[#0f6bae]" />
-                        <span>Fatura Logosu Boyutu (Genişlik × Yükseklik):</span>
-                        <span className="px-2 py-0.5 rounded bg-blue-100 text-[#0f6bae] font-mono font-extrabold">
-                          {currentDims.widthPx} px × {currentDims.heightPx} px
-                        </span>
-                      </div>
-
-                      {/* Hazır Boyut Şablonları */}
-                      <div className="flex flex-wrap items-center gap-1">
-                        {(
-                          [
-                            { label: "Küçük (80×60)", w: 80, h: 60, sz: "sm" as const },
-                            { label: "Kare / QR Boyu (100×100)", w: 100, h: 100, sz: "md" as const },
-                            { label: "Kaşe Genişliği (170×80)", w: 170, h: 80, sz: "lg" as const },
-                            { label: "Yatay (200×65)", w: 200, h: 65, sz: "lg" as const },
-                            { label: "Büyük (220×100)", w: 220, h: 100, sz: "lg" as const },
-                          ] as const
-                        ).map((preset) => {
-                          const isActive =
-                            currentDims.widthPx === preset.w && currentDims.heightPx === preset.h;
-                          return (
-                            <button
-                              key={preset.label}
-                              type="button"
-                              onClick={() =>
-                                applyInvoiceLogoDims({
-                                  logoSize: preset.sz,
-                                  logoWidth: preset.w,
-                                  logoHeight: preset.h,
-                                })
-                              }
-                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
-                                isActive
-                                  ? "bg-[#0f6bae] text-white border-[#0f6bae] shadow-2xs"
-                                  : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200"
-                              }`}
-                            >
-                              {preset.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                      {/* 1. Genişlik (Width px) */}
-                      <div className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-700">Logo Genişliği (Width):</span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                applyInvoiceLogoDims({
-                                  logoWidth: Math.max(24, currentDims.widthPx - 5),
-                                })
-                              }
-                              className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min={24}
-                              max={340}
-                              value={currentDims.widthPx}
-                              onChange={(e) =>
-                                applyInvoiceLogoDims({
-                                  logoWidth: Math.min(340, Math.max(24, Number(e.target.value) || 100)),
-                                })
-                              }
-                              className="w-16 bg-slate-50 border border-slate-300 rounded px-1.5 py-0.5 text-right font-mono font-bold text-xs text-slate-900"
-                            />
-                            <span className="text-[10px] font-mono text-slate-500">px</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                applyInvoiceLogoDims({
-                                  logoWidth: Math.min(340, currentDims.widthPx + 5),
-                                })
-                              }
-                              className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        <input
-                          type="range"
-                          min={24}
-                          max={340}
-                          step={2}
-                          value={currentDims.widthPx}
-                          onChange={(e) =>
-                            applyInvoiceLogoDims({ logoWidth: Number(e.target.value) || 100 })
-                          }
-                          className="w-full accent-[#0f6bae] cursor-pointer"
-                        />
-                      </div>
-
-                      {/* 2. Yükseklik (Height px) */}
-                      <div className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-700">Logo Yüksekliği (Height):</span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                applyInvoiceLogoDims({
-                                  logoHeight: Math.max(20, currentDims.heightPx - 5),
-                                })
-                              }
-                              className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min={20}
-                              max={240}
-                              value={currentDims.heightPx}
-                              onChange={(e) =>
-                                applyInvoiceLogoDims({
-                                  logoHeight: Math.min(240, Math.max(20, Number(e.target.value) || 100)),
-                                })
-                              }
-                              className="w-16 bg-slate-50 border border-slate-300 rounded px-1.5 py-0.5 text-right font-mono font-bold text-xs text-slate-900"
-                            />
-                            <span className="text-[10px] font-mono text-slate-500">px</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                applyInvoiceLogoDims({
-                                  logoHeight: Math.min(240, currentDims.heightPx + 5),
-                                })
-                              }
-                              className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        <input
-                          type="range"
-                          min={20}
-                          max={240}
-                          step={2}
-                          value={currentDims.heightPx}
-                          onChange={(e) =>
-                            applyInvoiceLogoDims({ logoHeight: Number(e.target.value) || 100 })
-                          }
-                          className="w-full accent-[#0f6bae] cursor-pointer"
-                        />
-                      </div>
-
-                      {/* 3. Görsel Sığdırma & Sistem Menü Ölçeği */}
-                      <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex flex-col justify-between space-y-2">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="text-[11px] font-bold text-slate-700">Sığdırma:</span>
-                          <div className="inline-flex bg-slate-100 rounded-lg border border-slate-200 p-0.5">
-                            {(
-                              [
-                                { id: "contain", label: "Oranı Koru" },
-                                { id: "fill", label: "Tam Doldur" },
-                                { id: "cover", label: "Kırp" },
-                              ] as const
-                            ).map((fit) => (
-                              <button
-                                key={fit.id}
-                                type="button"
-                                onClick={() => applyInvoiceLogoDims({ logoObjectFit: fit.id })}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                                  currentDims.objectFit === fit.id
-                                    ? "bg-[#0f6bae] text-white"
-                                    : "text-slate-600 hover:text-slate-900"
-                                }`}
-                              >
-                                {fit.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                          <span className="text-[10.5px] font-semibold text-slate-600">
-                            Üst Menü Ölçeği (%{Math.round(clampLogoScale(formData.logoScale ?? 1) * 100)}):
-                          </span>
-                          <input
-                            type="range"
-                            min={0.5}
-                            max={1.8}
-                            step={0.05}
-                            value={clampLogoScale(formData.logoScale ?? 1)}
-                            onChange={(e) => handleAdjustSettingsLogoScale(Number(e.target.value))}
-                            className="w-24 accent-[#0f6bae] cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Bus className="w-3.5 h-3.5 text-blue-600" /> Aylık Yol Yardımı (₺)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.defaultRoadAllowance ?? 2500}
+                  onChange={(e) =>
+                    setFormData({ ...formData, defaultRoadAllowance: Number(e.target.value) || 0 })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl p-2.5 font-mono font-bold"
+                />
+              </div>
             </div>
           </div>
 
-          <InvoiceDesignCustomizerBar
-            companySettings={formData}
-            design={invoiceDesign}
-            previewDocType={previewDocType}
-            onChangePreviewDocType={setPreviewDocType}
-            onChangeDesign={(patch) => {
-              const nextDesign = { ...invoiceDesign, ...patch };
-              if (JSON.stringify(invoiceDesign) === JSON.stringify(nextDesign)) return;
-              setInvoiceDesign(nextDesign);
-              const nextSettings = { ...formData, invoiceDesign: nextDesign };
-              setFormData(nextSettings);
-              onSaveSettings(nextSettings);
-              void saveCompanyInvoiceCssToFirestore(
-                nextSettings,
-                nextDesign.cssConfig || getIndependentInvoiceCssConfig(undefined, nextSettings.id),
-                nextDesign
-              );
-            }}
-            onSaveToCompanySettings={(updatedSettings) => {
-              if (JSON.stringify(formData) === JSON.stringify(updatedSettings)) return;
-              setFormData(updatedSettings);
-              onSaveSettings(updatedSettings);
-            }}
-            isAdmin={isAdmin}
-          />
-
-          <div className="bg-slate-200/60 p-3 sm:p-6 md:p-8 rounded-3xl border border-slate-300/70 shadow-inner flex justify-center">
-            <OfficialGIBInvoicePaper
-              invoice={samplePreviewInvoice}
-              companySettings={previewCompanySettings}
-              designOverride={invoiceDesign}
-              previewDocTypeOverride={previewDocType}
-              paperId="settings-invoice-design-preview-paper"
-            />
+          {/* Mysoft e-Fatura & e-Arşiv Seri Numaraları Bilgilendirme Kartı */}
+          <div className="bg-indigo-50/70 p-5 rounded-2xl border border-indigo-200 shadow-2xs text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 shrink-0">
+                <Hash className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Mysoft e-Fatura &amp; e-Arşiv Seri Numaraları
+                </h3>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  Mysoft tarafında eşleştirmesi yapılan firmanın <strong>e-Fatura</strong> ve <strong>e-Arşiv</strong> seri numaraları, son kesilen ve sıradaki ardışık numaraları <strong>Mysoft Eşleştir</strong> bölümünde yer almaktadır.
+                </p>
+              </div>
+            </div>
+            {isAdmin && onOpenSubModule && (
+              <button
+                type="button"
+                onClick={() => onOpenSubModule("mysoft")}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0 shadow-xs"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Mysoft Eşleştir Bölümüne Git</span>
+              </button>
+            )}
           </div>
-        </div>
+        </form>
       )}
 
       {/* ─── TAB 3: BACKUP & DATA ─── */}

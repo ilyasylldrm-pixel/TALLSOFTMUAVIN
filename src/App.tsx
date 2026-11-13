@@ -384,7 +384,10 @@ export default function App() {
       eFaturaNextNumber: comp.eFaturaNextNumber ?? targetSettingsData.settings.eFaturaNextNumber,
       eArsivPrefix: comp.eArsivPrefix ?? targetSettingsData.settings.eArsivPrefix,
       eArsivNextNumber: comp.eArsivNextNumber ?? targetSettingsData.settings.eArsivNextNumber,
-      defaultInvoicePrefix: comp.eFaturaPrefix || targetSettingsData.settings.defaultInvoicePrefix,
+      defaultInvoicePrefix:
+        comp.defaultInvoicePrefix ||
+        comp.eFaturaPrefix ||
+        targetSettingsData.settings.defaultInvoicePrefix,
       logoUrl: comp.logoUrl || targetSettingsData.settings.logoUrl || "/logo.svg",
       logoScale: comp.logoScale ?? targetSettingsData.settings.logoScale ?? 1,
       mysoftCredentials: {
