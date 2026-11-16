@@ -37,8 +37,9 @@ import {
   getUserProfile,
   findUserProfileByEmail,
   isUserCreatedByAdmin,
+  getLocalUsersBackup,
 } from "../lib/firebase";
-import { AppModuleKey } from "../types";
+import { AppModuleKey, isAdminOrSysAdmin } from "../types";
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { safeSetStorageItem, getCompaniesList, setActiveCompanyId } from "../utils/storage";
 import { pullLatestCompanyDataFromCloud } from "../services/systemSyncService";
@@ -84,6 +85,29 @@ async function syncAndResolveCompanyForUserLogin(profile: UserProfile): Promise<
       profile.taxNumber =
         matchedComp.taxNumber || matchedComp.vkn || matchedComp.tckn || profile.taxNumber;
       setActiveCompanyId(matchedComp.id);
+    }
+
+    if (!isAdminOrSysAdmin(profile)) {
+      const localUsers = getLocalUsersBackup();
+      const normEmail = String(profile.email || "").trim().toLowerCase();
+      const normUser = String(profile.username || "").trim().toLowerCase();
+      const latestLocalMatch = localUsers.find((u) => {
+        if (!u) return false;
+        if (profile.id && u.userId === profile.id) return true;
+        const uEmail = String(u.email || "").trim().toLowerCase();
+        const uUser = String(u.username || "").trim().toLowerCase();
+        if (normEmail && (uEmail === normEmail || uUser === normEmail)) return true;
+        if (normUser && (uUser === normUser || uEmail === normUser)) return true;
+        return false;
+      });
+
+      if (latestLocalMatch && Array.isArray(latestLocalMatch.allowedModules)) {
+        profile.allowedModules = latestLocalMatch.allowedModules;
+      } else if (matchedComp && Array.isArray(matchedComp.allowedModules)) {
+        profile.allowedModules = matchedComp.allowedModules;
+      } else if (!Array.isArray(profile.allowedModules)) {
+        profile.allowedModules = ["dashboard"];
+      }
     }
   } catch (e) {
     console.warn("Cross-device login sync warning:", e);
@@ -152,7 +176,7 @@ export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
     title: "Sakin ve Derin Sularda Güvenli Bulut Muhasebe",
     subtitle: "Yüksek performanslı bulut sunucular, anlık veri yedekleme ve banka entegrasyonu ile finansal rotanızı güvenle belirleyin.",
     features: ["%99.99 Uptime", "256-Bit SSL Şifreleme", "Otomatik Bulut Yedekleme"],
-    imageUrl: "/assets/slides/slide-1-norway.jpg",
+    imageUrl: "./assets/slides/slide-1-norway.jpg",
   },
   {
     id: 2,
@@ -163,7 +187,7 @@ export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
     title: "Maviliklerin Duru Huzurunda Şeffaf Mali Süreçler",
     subtitle: "e-Fatura, e-Arşiv, cari hesap ve stok takibini gereksiz karmaşadan arındırılmış modern arayüzle kolayca yönetin.",
     features: ["e-Dönüşüm Portalı", "Sade & Hızlı Arayüz", "Çoklu Şube & Kullanıcı"],
-    imageUrl: "/assets/slides/slide-2-santorini.jpg",
+    imageUrl: "./assets/slides/slide-2-santorini.jpg",
   },
   {
     id: 3,
@@ -174,7 +198,7 @@ export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
     title: "Kıtaları Birleştiren Güçle Dijital Muhasebe Ağı",
     subtitle: "GİB sistemleri, kasa-banka akışı ve anlık nakit raporlamasıyla işletmenizin tüm ticaretini ışıldatın.",
     features: ["GİB E-Fatura Köprüsü", "Canlı Nakit Akışı", "Tüm Bankalarla Entegre"],
-    imageUrl: "/assets/slides/slide-3-istanbul.jpg",
+    imageUrl: "./assets/slides/slide-3-istanbul.jpg",
   },
   {
     id: 4,
@@ -185,7 +209,7 @@ export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
     title: "Buzul Göllerinin Duru Netliğinde Bilanço & Raporlar",
     subtitle: "Yapay zeka asistanı, dinamik kâr-zarar grafikleri ve anlık bilanço özetleriyle zirveyi hedefleyin.",
     features: ["Yapay Zeka Asistanı", "Anlık Bilanço & Mizan", "Grafiksel Kâr / Zarar"],
-    imageUrl: "/assets/slides/slide-4-banff.jpg",
+    imageUrl: "./assets/slides/slide-4-banff.jpg",
   },
   {
     id: 5,
@@ -196,7 +220,7 @@ export const LOGIN_BACKGROUND_SLIDES: BackgroundSlide[] = [
     title: "Uçsuz Bucaksız Ufuklar ve Verimli Ticari Büyüme",
     subtitle: "Otomasyona dayalı teklif, sipariş, irsaliye ve fatura zinciri ile işletmenize taze bir verimlilik kazandırın.",
     features: ["Teklif & Sipariş Takibi", "Barkodlu Stok & Depo", "Akıllı Masraf Yönetimi"],
-    imageUrl: "/assets/slides/slide-5-provence.jpg",
+    imageUrl: "./assets/slides/slide-5-provence.jpg",
   },
 ];
 
@@ -211,7 +235,7 @@ export const BRAND_LOGOS: LogoOption[] = [
     borderClass: "border-[#0f6bae]/40",
     bgGradient: "from-[#0A192F] via-[#13233E] to-[#1E3A8A]",
     icon: Hexagon,
-    imageUrl: "/logo.svg",
+    imageUrl: "./logo.svg",
   },
   {
     id: 2,
@@ -526,7 +550,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         selectedLogoName: preCreated?.selectedLogoName || selectedLogo.title,
         selectedLogoUrl: preCreated?.selectedLogoUrl || selectedLogo.imageUrl,
         role: preCreated?.role || (isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Personel"),
-        allowedModules: preCreated?.allowedModules,
+        allowedModules: isSystemAdmin
+          ? preCreated?.allowedModules
+          : Array.isArray(preCreated?.allowedModules)
+          ? preCreated.allowedModules
+          : ["dashboard"],
         createdByAdmin: true,
       };
 
@@ -583,7 +611,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         selectedLogoName: preCreated?.selectedLogoName || selectedLogo.title,
         selectedLogoUrl: preCreated?.selectedLogoUrl || selectedLogo.imageUrl,
         role: preCreated?.role || (isSystemAdmin ? "Sistem Yöneticisi (Admin)" : "Firma Yöneticisi"),
-        allowedModules: preCreated?.allowedModules,
+        allowedModules: isSystemAdmin
+          ? preCreated?.allowedModules
+          : Array.isArray(preCreated?.allowedModules)
+          ? preCreated.allowedModules
+          : ["dashboard"],
         createdByAdmin: true,
       };
 
@@ -810,7 +842,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {/* BRAND LOGO EMBLEM (OFFICIAL E-MUAVİN LOGO) */}
             <div className="flex flex-col items-center justify-center text-center space-y-3 pt-2">
-              <Logo size="xl" showText={true} src="/logo.svg" />
+              <Logo size="xl" showText={true} src="./logo.svg" />
               <div className="text-[11px] font-bold tracking-[0.25em] text-[#005289] uppercase flex items-center justify-center gap-2 w-full">
                 <span className="w-8 h-[1px] bg-[#dae2fd]" />
                 <span>ÖN MUHASEBE & FİNANS PORTALI</span>

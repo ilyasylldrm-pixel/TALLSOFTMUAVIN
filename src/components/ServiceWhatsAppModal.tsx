@@ -25,6 +25,7 @@ import {
   ItServiceRecord,
   ApplianceServiceRecord,
   CompanySettings,
+  isCompanyDefaultBankEnabled,
 } from "../types";
 import {
   fetchWhatsAppStatus,
@@ -142,8 +143,9 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
 
     const companyName = companySettings?.companyName || "Teknik Servis Merkezi";
     const companyPhone = companySettings?.phone || "";
-    const iban = companySettings?.defaultBankIban || "";
-    const bankName = companySettings?.defaultBankName || "";
+    const bankEnabled = isCompanyDefaultBankEnabled(companySettings);
+    const iban = bankEnabled ? companySettings?.defaultBankIban || "" : "";
+    const bankName = bankEnabled ? companySettings?.defaultBankName || "" : "";
     const grandTotalStr = `₺${(serviceRecord.grandTotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`;
     const effectiveInvoiceNo = invoiceNumber || serviceRecord.invoiceNumber || serviceRecord.invoiceId || "E-Fatura";
 
@@ -439,7 +441,7 @@ export const ServiceWhatsAppModal: React.FC<ServiceWhatsAppModalProps> = ({
                 >
                   +Tutar
                 </button>
-                {companySettings?.defaultBankIban && (
+                {isCompanyDefaultBankEnabled(companySettings) && companySettings?.defaultBankIban && (
                   <button
                     type="button"
                     onClick={() => handleInsertVariable(`IBAN: ${companySettings.defaultBankIban}`)}

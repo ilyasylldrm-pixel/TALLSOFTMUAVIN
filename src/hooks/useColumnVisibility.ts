@@ -12,7 +12,7 @@ export interface ColumnDef {
 export function useColumnVisibility(tableKey: string, initialColumns: ColumnDef[]) {
   const storageKey = `muavin_table_cols_${tableKey}`;
 
-  // Initialize visibility state from localStorage/sessionStorage or defaultVisible
+  // Initialize visibility state from central storage or defaultVisible
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
     try {
       const saved = safeGetStorageItem(storageKey);

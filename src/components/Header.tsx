@@ -55,6 +55,9 @@ interface HeaderProps {
   onTriggerManualBackup?: () => void;
   onSnoozeBackupReminder?: () => void;
   onOpenBackupSettings?: () => void;
+  canUseGlobalSearch?: boolean;
+  searchPlaceholder?: string;
+  canManageBackups?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -81,6 +84,9 @@ export const Header: React.FC<HeaderProps> = ({
   onTriggerManualBackup,
   onSnoozeBackupReminder,
   onOpenBackupSettings,
+  canUseGlobalSearch = true,
+  searchPlaceholder = "Cari, Fatura, Ürün ara...",
+  canManageBackups = true,
 }) => {
   const { theme } = useTheme();
   const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
@@ -237,30 +243,32 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Global Search & Action Bar */}
       <div className="flex items-center gap-2 sm:gap-2.5 relative z-10 flex-wrap md:flex-nowrap shrink-0 max-w-full">
         {/* Search Bar */}
-        <div className="relative w-full sm:w-44 md:w-52 lg:w-60 xl:w-64">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Cari, Fatura, Ürün ara..."
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full text-slate-900 placeholder-slate-400 text-xs rounded pl-9 pr-7 py-2 border transition-all shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#0f6bae]/20"
-            style={{
-              backgroundColor: theme.pageBg,
-              borderColor: theme.cardBorder,
-            }}
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => onSearchChange("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5 rounded transition-all"
-              title="Aramayı Temizle"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        {canUseGlobalSearch && (
+          <div className="relative w-full sm:w-44 md:w-52 lg:w-60 xl:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder={searchPlaceholder}
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="w-full text-slate-900 placeholder-slate-400 text-xs rounded pl-9 pr-7 py-2 border transition-all shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#0f6bae]/20"
+              style={{
+                backgroundColor: theme.pageBg,
+                borderColor: theme.cardBorder,
+              }}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5 rounded transition-all"
+                title="Aramayı Temizle"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
 
 
@@ -393,8 +401,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Automated 7-Day Manual Backup Notification Center */}
-        {backupStatus && (
+        {/* Automated 7-Day Manual Backup Notification Center - Yalnızca Admin ve Sistem Yöneticisi görebilir */}
+        {backupStatus && canManageBackups && isAdminOrSysAdmin(currentUser) && (
           <div className="relative" ref={backupPopoverRef}>
             <button
               type="button"

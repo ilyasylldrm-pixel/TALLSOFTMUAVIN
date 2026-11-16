@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { ConstructionProject } from "../../types";
 import { formatCurrency, exportToExcel, exportToPDF, ExportData } from "../../utils/exportUtils";
-import { safeSetStorageItem } from "../../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem } from "../../utils/storage";
 
 export interface ConstructionSummaryRow {
   id: string;
@@ -90,13 +90,11 @@ export const ConstructionSiteSummaryTable: React.FC<
 
   const [rows, setRows] = useState<ConstructionSummaryRow[]>(() => {
     try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = window.localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
+      const saved = safeGetStorageItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
       }
     } catch (e) {

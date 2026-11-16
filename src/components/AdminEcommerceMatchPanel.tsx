@@ -8,6 +8,19 @@ import {
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { syncCompanyEcommerceToCloud } from "../services/systemSyncService";
+import {
+  getCompanyEcommerceStores,
+  saveCompanyEcommerceStores,
+  getDeletedEcommerceStoresMap,
+  saveDeletedEcommerceStoresMap,
+  markEcommerceStoreDeleted,
+  clearEcommerceStoreDeletedMark,
+  mergeEcommerceStoresPreservingUserSaves,
+  getActiveEcommerceActorInfo,
+  DeletedEcommerceStoreMeta,
+  safeGetStorageItem,
+} from "../utils/storage";
+import { resolveCentralUrl } from "../config/env";
 import { formatCurrency } from "../utils/exportUtils";
 import {
   Globe,
@@ -27,6 +40,7 @@ import {
   Sliders,
   X,
   Save,
+  AlertTriangle,
 } from "lucide-react";
 
 interface AdminEcommerceMatchPanelProps {
@@ -163,36 +177,34 @@ const MARKETPLACE_TEMPLATES: Record<
 };
 
 export function getCompanyMatchedEcommerceStores(companyId: string): MarketplaceStoreConfig[] {
-  try {
-    const raw = localStorage.getItem(`muavin_ecommerce_v2_${companyId}_stores`);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return getCompanyEcommerceStores<MarketplaceStoreConfig>(companyId);
 }
 
 export function saveCompanyMatchedEcommerceStores(
   companyId: string,
   stores: MarketplaceStoreConfig[],
-  syncCloud: boolean = true
-): void {
+  syncCloud: boolean = true,
+  explicitDeletedMap?: Record<string, DeletedEcommerceStoreMeta>
+): MarketplaceStoreConfig[] {
   try {
-    localStorage.setItem(
-      `muavin_ecommerce_v2_${companyId}_stores`,
-      JSON.stringify(stores)
-    );
+    const cleanStores = saveCompanyEcommerceStores<MarketplaceStoreConfig>(companyId, stores);
     window.dispatchEvent(
       new CustomEvent("muavin:ecommerce-stores-updated", {
-        detail: { companyId, stores },
+        detail: { companyId, stores: cleanStores },
       })
     );
     if (syncCloud) {
-      void syncCompanyEcommerceToCloud(companyId, stores);
+      void syncCompanyEcommerceToCloud(
+        companyId,
+        cleanStores,
+        undefined,
+        undefined,
+        explicitDeletedMap || getDeletedEcommerceStoresMap(companyId)
+      );
     }
+    return cleanStores;
   } catch {
-    // ignore storage errors
+    return stores;
   }
 }
 
@@ -235,42 +247,79 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     setCompanyStoresMap(map);
   }, [companies]);
 
-  // Diğer cihazlarda yapılan mağaza güncellemelerini hem sunucudan hem Firestore'dan anında çek
+  // Diğer cihazlarda yapılan mağaza güncellemelerini hem sunucudan hem Firestore'dan anında çek (mevcut kayıtları asla ezmeden birleştir)
   useEffect(() => {
     let isMounted = true;
     const loadRemoteStores = async () => {
       if (!selectedCompanyId) return;
-      let remoteStores: MarketplaceStoreConfig[] | null = null;
+      let serverStores: MarketplaceStoreConfig[] = [];
+      let serverDeleted: Record<string, DeletedEcommerceStoreMeta> = {};
+      let firestoreStores: MarketplaceStoreConfig[] = [];
+      let firestoreDeleted: Record<string, DeletedEcommerceStoreMeta> = {};
+
       try {
         const resp = await fetch(`/api/ecommerce/stores?companyId=${encodeURIComponent(selectedCompanyId)}`);
         if (resp.ok) {
           const json = await resp.json();
-          if (Array.isArray(json.stores) && json.stores.length > 0) {
-            remoteStores = json.stores;
+          if (Array.isArray(json.stores)) {
+            serverStores = json.stores;
+          }
+          if (json.deletedEcommerceStores && typeof json.deletedEcommerceStores === "object") {
+            serverDeleted = json.deletedEcommerceStores;
           }
         }
       } catch {}
 
-      if (!remoteStores) {
-        try {
-          const snap = await getDoc(doc(db, "system_settings", `company_data_${selectedCompanyId}`));
-          if (snap.exists()) {
-            const data = snap.data();
-            if (Array.isArray(data.ecommerceStores) && data.ecommerceStores.length > 0) {
-              remoteStores = data.ecommerceStores;
-            }
+      try {
+        const snap = await getDoc(doc(db, "system_settings", `company_data_${selectedCompanyId}`));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.ecommerceStores)) {
+            firestoreStores = data.ecommerceStores;
           }
-        } catch {}
-      }
+          if (data.deletedEcommerceStores && typeof data.deletedEcommerceStores === "object") {
+            firestoreDeleted = data.deletedEcommerceStores;
+          }
+        }
+      } catch {}
 
-      if (isMounted && remoteStores && Array.isArray(remoteStores)) {
-        saveCompanyMatchedEcommerceStores(selectedCompanyId, remoteStores, false);
-        setCompanyStoresMap((prev) => ({
-          ...prev,
-          [selectedCompanyId]: remoteStores!,
-        }));
-      }
+      if (!isMounted) return;
+
+      const localCurrent = getCompanyMatchedEcommerceStores(selectedCompanyId);
+      const localDeleted = getDeletedEcommerceStoresMap(selectedCompanyId);
+      const step1 = mergeEcommerceStoresPreservingUserSaves<MarketplaceStoreConfig>(
+        localCurrent,
+        serverStores,
+        localDeleted,
+        serverDeleted
+      );
+      const finalMerged = mergeEcommerceStoresPreservingUserSaves<MarketplaceStoreConfig>(
+        step1.stores,
+        firestoreStores,
+        step1.deletedMap,
+        firestoreDeleted
+      );
+
+      saveDeletedEcommerceStoresMap(selectedCompanyId, finalMerged.deletedMap);
+      const savedClean = saveCompanyMatchedEcommerceStores(
+        selectedCompanyId,
+        finalMerged.stores,
+        savedNeedsCloudPush(finalMerged.stores, serverStores, firestoreStores),
+        finalMerged.deletedMap
+      );
+      setCompanyStoresMap((prev) => ({
+        ...prev,
+        [selectedCompanyId]: savedClean,
+      }));
     };
+
+    function savedNeedsCloudPush(
+      merged: MarketplaceStoreConfig[],
+      srv: MarketplaceStoreConfig[],
+      fs: MarketplaceStoreConfig[]
+    ): boolean {
+      return merged.length !== srv.length || merged.length !== fs.length;
+    }
 
     void loadRemoteStores();
 
@@ -303,6 +352,10 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
   // Add / Edit Store Match Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
+  const [pendingRemoveStore, setPendingRemoveStore] = useState<{
+    companyId: string;
+    store: MarketplaceStoreConfig;
+  } | null>(null);
   const [formState, setFormState] = useState<{
     id: MarketplaceId;
     storeId?: string;
@@ -417,16 +470,14 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       if (auth.currentUser) {
         headers.Authorization = `Bearer ${await auth.currentUser.getIdToken()}`;
       } else {
-        const raw =
-          window.localStorage.getItem("muavin_active_user") ||
-          window.sessionStorage.getItem("muavin_active_user");
+        const raw = safeGetStorageItem("muavin_active_user");
         const parsed = raw ? JSON.parse(raw) : null;
         const uid = String(parsed?.id || parsed?.userId || company.id).trim();
         headers.Authorization = `Bearer ${uid}`;
         headers["x-user-id"] = uid;
       }
       await fetch(
-        `/api/marketplace/trendyol/connection?companyId=${encodeURIComponent(company.id)}`,
+        resolveCentralUrl(`/api/marketplace/trendyol/connection?companyId=${encodeURIComponent(company.id)}`),
         {
           method: "PUT",
           headers,
@@ -452,7 +503,9 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
     if (!selectedCompany) return;
 
     const tpl = MARKETPLACE_TEMPLATES[formState.id];
-    const nowStr = new Date().toISOString().slice(0, 16).replace("T", " ");
+    const nowIso = new Date().toISOString();
+    const nowStr = nowIso.slice(0, 16).replace("T", " ");
+    const actor = getActiveEcommerceActorInfo();
 
     const currentList = companyStoresMap[selectedCompany.id] || [];
     const isEditing = Boolean(editingStoreId);
@@ -461,6 +514,9 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       : currentList.some((s) => s.id === formState.id)
       ? `${formState.id}_${Date.now()}`
       : formState.id;
+
+    const existingStore = currentList.find((s) => s.id === storeId);
+    clearEcommerceStoreDeletedMark(selectedCompany.id, storeId);
 
     const newConfig: MarketplaceStoreConfig = {
       id: storeId,
@@ -487,6 +543,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
       isConnected: Boolean(formState.supplierId.trim() && formState.apiKey.trim()),
       lastSyncAt: nowStr,
       storeUrl: formState.storeUrl.trim() || tpl.storeUrl,
+      createdAt: existingStore?.createdAt || nowIso,
+      updatedAt: nowIso,
+      createdBy: existingStore?.createdBy || actor.actorLabel,
+      updatedBy: actor.actorLabel,
+      createdByRole: existingStore?.createdByRole || actor.actorRole,
     };
 
     const existsIdx = currentList.findIndex((s) => s.id === storeId);
@@ -495,11 +556,11 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
         ? currentList.map((s, idx) => (idx === existsIdx ? newConfig : s))
         : [...currentList, newConfig];
 
-    saveCompanyMatchedEcommerceStores(selectedCompany.id, updatedList);
+    const savedClean = saveCompanyMatchedEcommerceStores(selectedCompany.id, updatedList);
     void syncTrendyolBackend(selectedCompany, newConfig);
     setCompanyStoresMap((prev) => ({
       ...prev,
-      [selectedCompany.id]: updatedList,
+      [selectedCompany.id]: savedClean,
     }));
     setIsModalOpen(false);
     setEditingStoreId(null);
@@ -512,17 +573,28 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
 
   const handleRemoveMatch = (companyId: string, storeId: string) => {
     const currentList = companyStoresMap[companyId] || [];
-    const removedStore = currentList.find((s) => s.id === storeId);
-    const updatedList = currentList.filter((s) => s.id !== storeId);
-    saveCompanyMatchedEcommerceStores(companyId, updatedList);
+    const targetStore = currentList.find((s) => s.id === storeId);
+    if (!targetStore) return;
+    setPendingRemoveStore({ companyId, store: targetStore });
+  };
+
+  const confirmRemoveMatch = () => {
+    if (!pendingRemoveStore) return;
+    const { companyId, store } = pendingRemoveStore;
+    const actor = getActiveEcommerceActorInfo();
+    const deletedMap = markEcommerceStoreDeleted(companyId, store.id, actor.actorLabel);
+    const currentList = companyStoresMap[companyId] || [];
+    const updatedList = currentList.filter((s) => s.id !== store.id);
+    const savedClean = saveCompanyMatchedEcommerceStores(companyId, updatedList, true, deletedMap);
     setCompanyStoresMap((prev) => ({
       ...prev,
-      [companyId]: updatedList,
+      [companyId]: savedClean,
     }));
+    setPendingRemoveStore(null);
     const comp = companies.find((c) => c.id === companyId);
     if (onNotifySuccess) {
       onNotifySuccess(
-        `"${comp?.companyName || "Şirket"}" bünyesindeki ${removedStore?.name || "mağaza"} eşleştirmesi kaldırıldı.`
+        `"${comp?.companyName || "Şirket"}" bünyesindeki ${store.name} eşleştirmesi kaldırıldı.`
       );
     }
   };
@@ -1287,6 +1359,44 @@ export const AdminEcommerceMatchPanel: React.FC<AdminEcommerceMatchPanelProps> =
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Mağaza Eşleştirmesi Silme Onay Penceresi */}
+      {pendingRemoveStore && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Mağaza Eşleştirmesini Kaldır
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  <strong>{pendingRemoveStore.store.name}</strong> mağaza entegrasyonunu bu şirketten kalıcı olarak silmek istediğinize emin misiniz?
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPendingRemoveStore(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveMatch}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Evet, Eşleştirmeyi Sil</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

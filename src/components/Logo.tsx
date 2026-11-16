@@ -65,13 +65,25 @@ export const Logo: React.FC<LogoProps> = ({
   const isDefaultMuavinVector =
     !providedSrc ||
     providedSrc === "/logo.svg" ||
+    providedSrc === "./logo.svg" ||
     providedSrc === "/logo-light.svg" ||
-    providedSrc === "/favicon.svg";
+    providedSrc === "./logo-light.svg" ||
+    providedSrc === "/favicon.svg" ||
+    providedSrc === "./favicon.svg";
+
+  const normalizedProvidedSrc =
+    providedSrc === "/logo.svg"
+      ? "./logo.svg"
+      : providedSrc === "/logo-light.svg"
+        ? "./logo-light.svg"
+        : providedSrc === "/favicon.svg"
+          ? "./favicon.svg"
+          : providedSrc;
 
   const effectiveImgSrc =
-    isLight && (providedSrc === "/logo.svg" || !providedSrc)
-      ? "/logo-light.svg"
-      : providedSrc || (asImage ? (isLight ? "/logo-light.svg" : "/logo.svg") : "/logo.svg");
+    isLight && (normalizedProvidedSrc === "./logo.svg" || !normalizedProvidedSrc)
+      ? "./logo-light.svg"
+      : normalizedProvidedSrc || (asImage ? (isLight ? "./logo-light.svg" : "./logo.svg") : "./logo.svg");
 
   useEffect(() => {
     setImageError(false);

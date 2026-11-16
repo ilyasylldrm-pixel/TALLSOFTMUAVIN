@@ -32,6 +32,7 @@ import {
   IncomeExpenseItemPDF,
 } from "../utils/pdfService";
 import { saveUserFile, uploadFileToStorage } from "../lib/firebase";
+import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
 
 export interface FinancialAdvisorProfile {
   advisorType: "SMMM" | "YMM";
@@ -177,7 +178,7 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
   const [persisted, setPersisted] = useState<FinancialAdvisorPersistedState>(() => {
     if (typeof window !== "undefined") {
       try {
-        const raw = window.localStorage.getItem(storageKey);
+        const raw = safeGetStorageItem(storageKey);
         if (raw) {
           const parsed = JSON.parse(raw);
           return {
@@ -203,7 +204,7 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = window.localStorage.getItem(storageKey);
+      const raw = safeGetStorageItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         setPersisted({
@@ -228,11 +229,7 @@ export const FinancialAdvisorModule: React.FC<FinancialAdvisorModuleProps> = ({
   // Persist changes
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(persisted));
-    } catch {
-      // ignore quota errors
-    }
+    safeSetStorageItem(storageKey, JSON.stringify(persisted));
   }, [persisted, storageKey]);
 
   const periodKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;

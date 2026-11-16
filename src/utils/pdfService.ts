@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, getCurrencySymbol, sanitizeOklchForHtml2Can
 import { triggerFormErrorNotification } from "../context/FormErrorContext";
 import { GIB_OFFICIAL_UPLOADED_LOGO_DATA_URI } from "./gibOfficialAssets";
 import { numberToTurkishWords } from "./numberToTurkishWords";
+import { centralStorageService } from "../services/centralStorageService";
 
 export interface LedgerEntryData {
   id?: string;
@@ -91,17 +92,13 @@ export function preloadTurkishFont(): Promise<void> {
 
   fontPreloadPromise = (async () => {
     try {
-      // 1. Purge massive fonts from browser storage to prevent QuotaExceededError
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage?.removeItem("muavin_font_roboto_reg_v2");
-          window.localStorage?.removeItem("muavin_font_roboto_bold_v2");
-          window.localStorage?.removeItem("muavin_font_roboto_reg");
-          window.localStorage?.removeItem("muavin_font_roboto_bold");
-          window.sessionStorage?.removeItem("muavin_font_roboto_reg_v2");
-          window.sessionStorage?.removeItem("muavin_font_roboto_bold_v2");
-        } catch (_) {}
-      }
+      // 1. Ensure transient font keys are never held in central store
+      try {
+        centralStorageService.removeItem("muavin_font_roboto_reg_v2");
+        centralStorageService.removeItem("muavin_font_roboto_bold_v2");
+        centralStorageService.removeItem("muavin_font_roboto_reg");
+        centralStorageService.removeItem("muavin_font_roboto_bold");
+      } catch (_) {}
 
       // 2. Fetch regular font if not in memory
       if (!cachedRobotoRegularBase64 && typeof fetch !== "undefined") {

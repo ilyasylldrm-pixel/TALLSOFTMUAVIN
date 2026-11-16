@@ -210,7 +210,7 @@ export const ColumnManagementDropdown: React.FC<ColumnManagementDropdownProps> =
             className="px-3 py-2 border-t bg-slate-50/50 dark:bg-slate-800/30 text-[10px] text-slate-400 text-center"
             style={{ borderColor: theme.cardBorder }}
           >
-            Seçimleriniz tarayıcınızda (localStorage) otomatik saklanır.
+            Seçimleriniz merkezi sistemde tüm cihazlar için senkronize saklanır.
           </div>
         </div>
       )}

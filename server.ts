@@ -86,8 +86,14 @@ app.use((req, res, next) => {
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Keep-Alive", "timeout=65");
 
-  // Prevent browser caching on API requests and HTML documents
-  if (req.path.startsWith("/api/") || req.path.endsWith(".html") || req.path === "/") {
+  // Prevent browser caching on API requests, HTML documents, and version manifest
+  if (
+    req.path.startsWith("/api/") ||
+    req.path.endsWith(".html") ||
+    req.path === "/" ||
+    req.path.endsWith("/version.json") ||
+    req.path === "/version.json"
+  ) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
@@ -1846,6 +1852,7 @@ interface ServerCloudSyncStore {
   deletedCompanyIds: string[];
   deletedUserKeys: string[];
   companiesData: Record<string, { data: any; updatedAt: string }>;
+  centralKeyValueStore?: Record<string, string>;
   updatedAt: string;
   version?: number;
   lastActionSummary?: string;
@@ -1853,7 +1860,17 @@ interface ServerCloudSyncStore {
   auditLogs?: any[];
 }
 
-const CLOUD_SYNC_FILE_PATH = path.join(process.cwd(), "data", "cloud_sync_store.json");
+const CLOUD_SYNC_FILE_PATH = process.env.CENTRAL_STORE_PATH
+  ? path.resolve(process.cwd(), process.env.CENTRAL_STORE_PATH)
+  : path.join(process.cwd(), "data", "cloud_sync_store.json");
+
+const CENTRAL_SESSIONS_FILE_PATH = process.env.CENTRAL_SESSIONS_PATH
+  ? path.resolve(process.cwd(), process.env.CENTRAL_SESSIONS_PATH)
+  : path.join(process.cwd(), "data", "central_sessions.json");
+
+const CENTRAL_SECRETS_FILE_PATH = process.env.CENTRAL_SECRETS_PATH
+  ? path.resolve(process.cwd(), process.env.CENTRAL_SECRETS_PATH)
+  : path.join(process.cwd(), "data", "central_secrets.json");
 
 function sanitizeLegacyDemoIdentity(obj: any): any {
   if (!obj || typeof obj !== "object") return obj;
@@ -1890,6 +1907,14 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
             };
           }
         });
+        const cleanKv: Record<string, string> = {};
+        if (parsed.centralKeyValueStore && typeof parsed.centralKeyValueStore === "object") {
+          for (const [k, v] of Object.entries(parsed.centralKeyValueStore)) {
+            if (typeof k === "string" && typeof v === "string") {
+              cleanKv[k] = v;
+            }
+          }
+        }
         return {
           companiesRegistry: Array.isArray(parsed.companiesRegistry)
             ? parsed.companiesRegistry.map(sanitizeLegacyDemoIdentity)
@@ -1898,6 +1923,7 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
           deletedCompanyIds: Array.isArray(parsed.deletedCompanyIds) ? parsed.deletedCompanyIds : [],
           deletedUserKeys: Array.isArray(parsed.deletedUserKeys) ? parsed.deletedUserKeys : [],
           companiesData: cleanedCompaniesData,
+          centralKeyValueStore: cleanKv,
           updatedAt: parsed.updatedAt || new Date().toISOString(),
           version: Number(parsed.version) || Date.now(),
           lastActionSummary:
@@ -1916,6 +1942,7 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
     deletedCompanyIds: [],
     deletedUserKeys: [],
     companiesData: {},
+    centralKeyValueStore: {},
     updatedAt: new Date().toISOString(),
     version: Date.now(),
     lastActionSummary: "Tüm Şirketler ve Kullanıcılar Güncel Sürümle Senkronize Edildi",
@@ -1923,6 +1950,132 @@ let memoryCloudSyncStore: ServerCloudSyncStore = (() => {
     auditLogs: [],
   };
 })();
+
+interface BrowserSessionRecord {
+  activeUser?: string | null;
+  activeCompanyId?: string | null;
+  updatedAt: string;
+}
+
+const SESSION_SCOPED_KEYS = new Set<string>([
+  "muavin_active_user",
+  "muavin_active_company_id",
+  "chunk_reload_lock",
+  "hook_mismatch_reload_lock",
+]);
+
+const SECRET_SCOPED_KEYS = new Set<string>([
+  "muavin_github_pat",
+]);
+
+let centralSessionsStore: Record<string, BrowserSessionRecord> = (() => {
+  try {
+    if (fs.existsSync(CENTRAL_SESSIONS_FILE_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(CENTRAL_SESSIONS_FILE_PATH, "utf-8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+})();
+
+let centralSecretsStore: Record<string, string> = (() => {
+  try {
+    if (fs.existsSync(CENTRAL_SECRETS_FILE_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(CENTRAL_SECRETS_FILE_PATH, "utf-8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+})();
+
+function persistCentralSessionsStore() {
+  try {
+    const dir = path.dirname(CENTRAL_SESSIONS_FILE_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(CENTRAL_SESSIONS_FILE_PATH, JSON.stringify(centralSessionsStore), "utf-8");
+  } catch {
+    // ignore
+  }
+}
+
+function persistCentralSecretsStore() {
+  try {
+    const dir = path.dirname(CENTRAL_SECRETS_FILE_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(CENTRAL_SECRETS_FILE_PATH, JSON.stringify(centralSecretsStore), "utf-8");
+  } catch {
+    // ignore
+  }
+}
+
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!cookieHeader) return out;
+  cookieHeader.split(";").forEach((part) => {
+    const idx = part.indexOf("=");
+    if (idx > 0) {
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      if (k) out[k] = decodeURIComponent(v);
+    }
+  });
+  return out;
+}
+
+function resolveBrowserSessionId(req: express.Request, res: express.Response): string {
+  const cookies = parseCookies(req.headers.cookie);
+  const headerSid = typeof req.headers["x-client-session-id"] === "string"
+    ? req.headers["x-client-session-id"].trim()
+    : "";
+  let sid = cookies.muavin_sid || headerSid;
+  if (!sid || !/^[a-zA-Z0-9_-]{8,128}$/.test(sid)) {
+    sid = `sid_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+  }
+  const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
+  const cookieAttrs = isHttps
+    ? "Path=/; Max-Age=31536000; HttpOnly; SameSite=None; Secure"
+    : "Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax";
+  res.setHeader("Set-Cookie", `muavin_sid=${encodeURIComponent(sid)}; ${cookieAttrs}`);
+  return sid;
+}
+
+const SERVER_BOOT_VERSION = `1.0.0-${Date.now().toString(36)}`;
+
+function readServerBuildVersionManifest(): { version: string; packageVersion: string; buildTime: string } {
+  const candidates = [
+    path.join(process.cwd(), "dist", "version.json"),
+    path.join(process.cwd(), "public", "version.json"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const parsed = JSON.parse(fs.readFileSync(candidate, "utf-8"));
+        if (parsed && typeof parsed.version === "string" && parsed.version.trim()) {
+          return {
+            version: parsed.version.trim(),
+            packageVersion: String(parsed.packageVersion || "1.0.0"),
+            buildTime: String(parsed.buildTime || new Date().toISOString()),
+          };
+        }
+      }
+    } catch {
+      // try next
+    }
+  }
+  return {
+    version: SERVER_BOOT_VERSION,
+    packageVersion: "1.0.0",
+    buildTime: new Date().toISOString(),
+  };
+}
 
 function persistServerCloudSyncStore() {
   try {
@@ -1936,6 +2089,157 @@ function persistServerCloudSyncStore() {
   }
 }
 
+app.get(["/api/version", "/version.json"], (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.json(readServerBuildVersionManifest());
+});
+
+app.get("/api/central-store/bootstrap", (req, res) => {
+  const sid = resolveBrowserSessionId(req, res);
+  const sessionEntry = centralSessionsStore[sid] || null;
+  const manifest = readServerBuildVersionManifest();
+  const mergedKv: Record<string, string> = {
+    ...(memoryCloudSyncStore.centralKeyValueStore || {}),
+    ...centralSecretsStore,
+  };
+  res.json({
+    success: true,
+    sessionId: sid,
+    buildVersion: manifest.version,
+    version: memoryCloudSyncStore.version || Date.now(),
+    updatedAt: memoryCloudSyncStore.updatedAt,
+    companiesRegistry: memoryCloudSyncStore.companiesRegistry,
+    usersRegistry: memoryCloudSyncStore.usersRegistry,
+    deletedCompanyIds: memoryCloudSyncStore.deletedCompanyIds,
+    deletedUserKeys: memoryCloudSyncStore.deletedUserKeys,
+    companiesData: memoryCloudSyncStore.companiesData,
+    centralKeyValueStore: mergedKv,
+    sessionData: {
+      activeUser: sessionEntry?.activeUser ?? null,
+      activeCompanyId: sessionEntry?.activeCompanyId ?? null,
+    },
+  });
+});
+
+app.put("/api/central-store/kv", (req, res) => {
+  try {
+    const sid = resolveBrowserSessionId(req, res);
+    const entries = req.body?.entries;
+    if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+      return res.status(400).json({ success: false, error: "Geçersiz veri yapısı" });
+    }
+    if (!memoryCloudSyncStore.centralKeyValueStore) {
+      memoryCloudSyncStore.centralKeyValueStore = {};
+    }
+    const nowIso = new Date().toISOString();
+    let sharedMutated = false;
+    let sessionMutated = false;
+    let secretsMutated = false;
+
+    for (const [rawKey, rawVal] of Object.entries(entries)) {
+      const key = String(rawKey || "").trim();
+      if (!key) continue;
+
+      if (SESSION_SCOPED_KEYS.has(key)) {
+        const curSession: BrowserSessionRecord = centralSessionsStore[sid] || { updatedAt: nowIso };
+        if (key === "muavin_active_user") {
+          curSession.activeUser = typeof rawVal === "string" ? rawVal : null;
+          curSession.updatedAt = nowIso;
+          centralSessionsStore[sid] = curSession;
+          sessionMutated = true;
+        } else if (key === "muavin_active_company_id") {
+          curSession.activeCompanyId = typeof rawVal === "string" ? rawVal : null;
+          curSession.updatedAt = nowIso;
+          centralSessionsStore[sid] = curSession;
+          sessionMutated = true;
+        }
+        continue;
+      }
+
+      if (SECRET_SCOPED_KEYS.has(key)) {
+        if (rawVal === null || rawVal === undefined || rawVal === "") {
+          delete centralSecretsStore[key];
+        } else if (typeof rawVal === "string") {
+          centralSecretsStore[key] = rawVal;
+        }
+        secretsMutated = true;
+        continue;
+      }
+
+      // Skip bulky transient font/address caches
+      if (
+        key.startsWith("muavin_font_") ||
+        key.startsWith("muavinn_tradres_") ||
+        key.startsWith("muavin_tradres_")
+      ) {
+        continue;
+      }
+
+      if (rawVal === null || rawVal === undefined) {
+        if (key in memoryCloudSyncStore.centralKeyValueStore) {
+          delete memoryCloudSyncStore.centralKeyValueStore[key];
+          sharedMutated = true;
+        }
+      } else if (typeof rawVal === "string") {
+        if (memoryCloudSyncStore.centralKeyValueStore[key] !== rawVal) {
+          memoryCloudSyncStore.centralKeyValueStore[key] = rawVal;
+          sharedMutated = true;
+        }
+      }
+    }
+
+    if (sessionMutated) {
+      persistCentralSessionsStore();
+    }
+    if (secretsMutated) {
+      persistCentralSecretsStore();
+    }
+    if (sharedMutated) {
+      memoryCloudSyncStore.updatedAt = nowIso;
+      memoryCloudSyncStore.version = Date.now();
+      persistServerCloudSyncStore();
+    }
+
+    res.json({
+      success: true,
+      sessionId: sid,
+      version: memoryCloudSyncStore.version || Date.now(),
+      updatedAt: memoryCloudSyncStore.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || "Merkezi kayıt hatası" });
+  }
+});
+
+app.post("/api/auth/session", (req, res) => {
+  const sid = resolveBrowserSessionId(req, res);
+  const nowIso = new Date().toISOString();
+  const cur: BrowserSessionRecord = centralSessionsStore[sid] || { updatedAt: nowIso };
+  if ("activeUser" in (req.body || {})) {
+    const val = req.body.activeUser;
+    cur.activeUser = val === null ? null : typeof val === "string" ? val : JSON.stringify(val);
+  }
+  if ("activeCompanyId" in (req.body || {})) {
+    cur.activeCompanyId = req.body.activeCompanyId ? String(req.body.activeCompanyId) : null;
+  }
+  cur.updatedAt = nowIso;
+  centralSessionsStore[sid] = cur;
+  persistCentralSessionsStore();
+  res.json({ success: true, sessionId: sid });
+});
+
+app.delete("/api/auth/session", (req, res) => {
+  const sid = resolveBrowserSessionId(req, res);
+  if (centralSessionsStore[sid]) {
+    centralSessionsStore[sid].activeUser = null;
+    centralSessionsStore[sid].updatedAt = new Date().toISOString();
+    persistCentralSessionsStore();
+  }
+  res.json({ success: true, sessionId: sid });
+});
+
 app.get("/api/cloud-sync/state", (req, res) => {
   const companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
   const companySlice = companyId ? memoryCloudSyncStore.companiesData[companyId] || null : null;
@@ -1948,6 +2252,7 @@ app.get("/api/cloud-sync/state", (req, res) => {
     companyData: companySlice?.data || null,
     companyUpdatedAt: companySlice?.updatedAt || null,
     allCompaniesData: companyId ? undefined : memoryCloudSyncStore.companiesData,
+    centralKeyValueStore: companyId ? undefined : (memoryCloudSyncStore.centralKeyValueStore || {}),
     updatedAt: memoryCloudSyncStore.updatedAt,
     version: memoryCloudSyncStore.version || Date.now(),
     lastActionSummary: memoryCloudSyncStore.lastActionSummary,
@@ -2069,6 +2374,83 @@ app.post("/api/cloud-sync/system", (req, res) => {
   }
 });
 
+function isSyntheticMockEcommerceStoreServer(store: any): boolean {
+  if (!store || typeof store !== "object" || !store.id) return true;
+  if (store.id === "trendyol_second_branch" || store.supplierId === "30918099999") return true;
+  const key = String(store.apiKey || "").trim();
+  if (/^(TGO-KEY-20818054|TY-KEY-20818054|TY-KEY-30918099)$/i.test(key)) return true;
+  if (
+    store.apiSecret === "••••••••" &&
+    (store.name === "Trendyol Go (TGO Yemek - Kadıköy)" ||
+      store.name === "Trendyol Pazaryeri - 1. Mağaza (Ana)" ||
+      store.name === "Trendyol Pazaryeri - 2. Mağaza (Butik Şube)")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function mergeServerEcommerceStores(
+  existingStores?: any[] | null,
+  incomingStores?: any[] | null,
+  existingDeletedMap?: Record<string, any> | null,
+  incomingDeletedMap?: Record<string, any> | null
+): { stores: any[]; deletedEcommerceStores: Record<string, any> } {
+  const deletedEcommerceStores: Record<string, any> = {};
+  const applyDel = (src?: Record<string, any> | null) => {
+    if (!src || typeof src !== "object" || Array.isArray(src)) return;
+    for (const [id, meta] of Object.entries(src)) {
+      if (!id || !meta || typeof meta !== "object" || !meta.deletedAt) continue;
+      const prev = deletedEcommerceStores[id];
+      const nextTs = new Date(meta.deletedAt).getTime() || 0;
+      const prevTs = prev ? new Date(prev.deletedAt).getTime() || 0 : 0;
+      if (!prev || nextTs >= prevTs) {
+        deletedEcommerceStores[id] = {
+          deletedAt: meta.deletedAt,
+          deletedBy: meta.deletedBy || prev?.deletedBy,
+        };
+      }
+    }
+  };
+  applyDel(existingDeletedMap);
+  applyDel(incomingDeletedMap);
+
+  const byId = new Map<string, any>();
+  const parseTs = (st: any) => {
+    const raw = st?.updatedAt || st?.createdAt;
+    if (!raw || typeof raw !== "string") return 0;
+    const t = new Date(raw).getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
+  const consider = (list?: any[] | null, preferOnTie = false) => {
+    if (!Array.isArray(list)) return;
+    for (const st of list) {
+      if (isSyntheticMockEcommerceStoreServer(st)) continue;
+      const id = String(st.id || "").trim();
+      if (!id) continue;
+      const del = deletedEcommerceStores[id];
+      if (del?.deletedAt) {
+        const delTs = new Date(del.deletedAt).getTime() || 0;
+        const stTs = parseTs(st);
+        if (delTs > 0 && delTs >= stTs) continue;
+      }
+      const prev = byId.get(id);
+      if (!prev) {
+        byId.set(id, st);
+      } else {
+        const prevTs = parseTs(prev);
+        const nextTs = parseTs(st);
+        if (nextTs > prevTs || (preferOnTie && nextTs === prevTs)) {
+          byId.set(id, { ...prev, ...st });
+        }
+      }
+    }
+  };
+  consider(existingStores, false);
+  consider(incomingStores, true);
+  return { stores: Array.from(byId.values()), deletedEcommerceStores };
+}
+
 app.post("/api/cloud-sync/company", (req, res) => {
   try {
     const { companyId, companyMeta, data, updatedAt } = req.body || {};
@@ -2085,11 +2467,20 @@ app.post("/api/cloud-sync/company", (req, res) => {
       ...(data.settings || {}),
     });
 
+    const { stores: mergedEcommerceStores, deletedEcommerceStores } = mergeServerEcommerceStores(
+      existingData.ecommerceStores,
+      data.ecommerceStores,
+      existingData.deletedEcommerceStores,
+      data.deletedEcommerceStores
+    );
+
     memoryCloudSyncStore.companiesData[cleanId] = {
       data: {
         ...existingData,
         ...data,
         settings: mergedSettings,
+        ecommerceStores: mergedEcommerceStores,
+        deletedEcommerceStores,
       },
       updatedAt: nowIso,
     };
@@ -2177,26 +2568,44 @@ app.get("/api/ecommerce/stores", (req, res) => {
   const companyId = typeof req.query.companyId === "string" ? req.query.companyId.trim() : "";
   if (!companyId) return res.status(400).json({ success: false, error: "companyId zorunlu" });
   const entry = memoryCloudSyncStore.companiesData[companyId]?.data || {};
-  const stores = Array.isArray(entry.ecommerceStores) ? entry.ecommerceStores : [];
-  res.json({ success: true, stores, companyId, updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || null });
+  const { stores, deletedEcommerceStores } = mergeServerEcommerceStores(
+    entry.ecommerceStores,
+    [],
+    entry.deletedEcommerceStores,
+    {}
+  );
+  res.json({
+    success: true,
+    stores,
+    deletedEcommerceStores,
+    companyId,
+    updatedAt: memoryCloudSyncStore.companiesData[companyId]?.updatedAt || null,
+  });
 });
 
 app.post("/api/ecommerce/stores", (req, res) => {
   try {
-    const { companyId, stores } = req.body || {};
+    const { companyId, stores, deletedEcommerceStores: incomingDeleted } = req.body || {};
     const cleanId = String(companyId || "").trim();
     if (!cleanId || !Array.isArray(stores)) {
       return res.status(400).json({ success: false, error: "Geçersiz mağaza listesi" });
     }
     const nowIso = new Date().toISOString();
     const entry = memoryCloudSyncStore.companiesData[cleanId] || { data: {}, updatedAt: nowIso };
-    entry.data = { ...(entry.data || {}), ecommerceStores: stores };
+    const currentData = entry.data || {};
+    const { stores: mergedStores, deletedEcommerceStores } = mergeServerEcommerceStores(
+      currentData.ecommerceStores,
+      stores,
+      currentData.deletedEcommerceStores,
+      incomingDeleted
+    );
+    entry.data = { ...currentData, ecommerceStores: mergedStores, deletedEcommerceStores };
     entry.updatedAt = nowIso;
     memoryCloudSyncStore.companiesData[cleanId] = entry;
     memoryCloudSyncStore.updatedAt = nowIso;
     memoryCloudSyncStore.version = Date.now();
     persistServerCloudSyncStore();
-    res.json({ success: true, count: stores.length, updatedAt: nowIso });
+    res.json({ success: true, count: mergedStores.length, updatedAt: nowIso });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "E-ticaret mağaza kayıt hatası" });
   }
@@ -2233,15 +2642,22 @@ app.post("/api/ecommerce/orders", (req, res) => {
 
 app.post("/api/cloud-sync/ecommerce", (req, res) => {
   try {
-    const { companyId, stores, orders, markups } = req.body || {};
+    const { companyId, stores, deletedEcommerceStores: incomingDeleted, orders, markups } = req.body || {};
     const cleanId = String(companyId || "").trim();
     if (!cleanId) return res.status(400).json({ success: false, error: "companyId zorunlu" });
     const nowIso = new Date().toISOString();
     const entry = memoryCloudSyncStore.companiesData[cleanId] || { data: {}, updatedAt: nowIso };
     const currentData = entry.data || {};
+    const { stores: mergedStores, deletedEcommerceStores } = mergeServerEcommerceStores(
+      currentData.ecommerceStores,
+      Array.isArray(stores) ? stores : [],
+      currentData.deletedEcommerceStores,
+      incomingDeleted
+    );
     entry.data = {
       ...currentData,
-      ...(Array.isArray(stores) ? { ecommerceStores: stores } : {}),
+      ecommerceStores: mergedStores,
+      deletedEcommerceStores,
       ...(Array.isArray(orders) ? { ecommerceOrders: orders } : {}),
       ...(markups && typeof markups === "object" ? { ecommerceMarkups: markups } : {}),
     };
@@ -2250,7 +2666,7 @@ app.post("/api/cloud-sync/ecommerce", (req, res) => {
     memoryCloudSyncStore.updatedAt = nowIso;
     memoryCloudSyncStore.version = Date.now();
     persistServerCloudSyncStore();
-    res.json({ success: true, updatedAt: nowIso });
+    res.json({ success: true, storesCount: mergedStores.length, updatedAt: nowIso });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || "E-ticaret senkronizasyon hatası" });
   }
@@ -2748,8 +3164,10 @@ async function startServer() {
         etag: true,
         lastModified: true,
         setHeaders: (res, filePath) => {
-          if (filePath.endsWith(".html")) {
-            res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          if (filePath.endsWith(".html") || filePath.endsWith("version.json")) {
+            res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
           } else {
             res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           }
@@ -2761,7 +3179,9 @@ async function startServer() {
       if (req.originalUrl.startsWith("/api") || path.extname(req.path)) {
         return next();
       }
-      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

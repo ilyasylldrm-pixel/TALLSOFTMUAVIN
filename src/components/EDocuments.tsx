@@ -71,6 +71,7 @@ import {
   resolveInvoiceDesignSettings,
 } from "./OfficialGIBInvoicePaper";
 import { IncomingEDocumentsLegacy } from "./IncomingEDocumentsLegacy";
+import { safeGetStorageItem } from "../utils/storage";
 
 export interface EDocumentsProps {
   /** The navigation item controls the API direction without exposing credentials to the browser. */
@@ -388,9 +389,7 @@ const OutgoingEDocuments: React.FC<EDocumentsProps> = ({
   const effectiveUser = useMemo(() => {
     if (currentUser !== undefined) return currentUser;
     try {
-      const raw =
-        localStorage.getItem("muavin_active_user") ||
-        sessionStorage.getItem("muavin_active_user");
+      const raw = safeGetStorageItem("muavin_active_user");
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;

@@ -553,7 +553,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newUserTaxNumber, setNewUserTaxNumber] = useState("");
   const [newUserRole, setNewUserRole] = useState("Ön Muhasebe Görevlisi");
   const [newUserAllowedModules, setNewUserAllowedModules] = useState<AppModuleKey[]>(
-    () => getAllAppModulesWithCustom().map((m) => m.key)
+    () => ["dashboard"]
   );
   const [creatingUser, setCreatingUser] = useState(false);
   const [createUserError, setCreateUserError] = useState("");
@@ -679,20 +679,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Helper to get effective modules
   const getUserEffectiveModules = (user: UserProfileData): AppModuleKey[] => {
+    if (isAdminOrSysAdmin(user)) {
+      return allAppModules.map((m) => m.key);
+    }
     if (draftPermissions[user.userId] !== undefined) {
       return draftPermissions[user.userId];
     }
     if (user.allowedModules && Array.isArray(user.allowedModules)) {
       return user.allowedModules;
     }
-    return allAppModules.map((m) => m.key);
+    return ["dashboard"];
   };
 
   const getUserOriginalModules = (user: UserProfileData): AppModuleKey[] => {
+    if (isAdminOrSysAdmin(user)) {
+      return allAppModules.map((m) => m.key);
+    }
     if (user.allowedModules && Array.isArray(user.allowedModules)) {
       return user.allowedModules;
     }
-    return allAppModules.map((m) => m.key);
+    return ["dashboard"];
   };
 
   const hasUserPendingChanges = (userId: string): boolean => {
@@ -739,16 +745,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (cu.userId === targetUser.userId) return;
         const cuMods = Array.isArray(cu.allowedModules)
           ? cu.allowedModules
-          : allAppModules.map((m) => m.key);
+          : ["dashboard"];
         cuMods.forEach((k) => unionSet.add(k));
       });
       nextCompModules = Array.from(unionSet);
     }
 
-    const isRestricted = nextCompModules.length < allAppModules.length;
     const updatedComp: CompanyItem & { _allowModulePermissionChange?: boolean } = {
       ...matchedComp,
-      moduleRestrictionEnabled: isRestricted,
+      moduleRestrictionEnabled: true,
       allowedModules: nextCompModules,
       _allowModulePermissionChange: true,
     };
@@ -1229,8 +1234,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         updatedAt: new Date().toISOString(),
       };
 
+      const normalizedNewUserModules: AppModuleKey[] = newUserAllowedModules.includes("dashboard")
+        ? newUserAllowedModules
+        : ["dashboard", ...newUserAllowedModules];
+      newUserProfile.allowedModules = normalizedNewUserModules;
+
       await saveUserProfile(newUserProfile);
-      setUsers((prev) => [newUserProfile, ...prev.filter((u) => u.userId !== newUserProfile.userId)]);
+      const nextUsersList = [newUserProfile, ...users.filter((u) => u.userId !== newUserProfile.userId)];
+      setUsers(nextUsersList);
+      syncCompanyModulesFromUserUpdate(newUserProfile, normalizedNewUserModules, nextUsersList);
 
       await logSystemAction({
         action: `Yeni Kullanıcı Tanımlandı ve Kaydedildi: ${newUserProfile.name}`,

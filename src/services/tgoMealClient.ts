@@ -1,4 +1,5 @@
 import type { ECommerceOrder, MarketplaceStoreConfig } from "../components/ECommerceModule.tsx";
+import { resolveCentralUrl } from "../config/env";
 
 export interface TgoPackage {
   id: string;
@@ -30,7 +31,7 @@ export async function requestTgoPackages(
   credentials: Pick<MarketplaceStoreConfig, "supplierId" | "apiKey" | "apiSecret" | "executorEmail">,
   mode: "test" | "sync",
 ): Promise<TgoPackage[]> {
-  const response = await fetch("/api/marketplace/tgo-meal/packages", {
+  const response = await fetch(resolveCentralUrl("/api/marketplace/tgo-meal/packages"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...credentials, mode }),
@@ -68,7 +69,7 @@ export async function notifyTgoInvoice(
   credentials: Pick<MarketplaceStoreConfig, "supplierId" | "apiKey" | "apiSecret" | "executorEmail">,
   input: TgoInvoiceNotifyInput,
 ): Promise<TgoInvoiceNotifyResult> {
-  const response = await fetch("/api/marketplace/tgo-meal/notify-invoiced", {
+  const response = await fetch(resolveCentralUrl("/api/marketplace/tgo-meal/notify-invoiced"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...credentials, ...input }),

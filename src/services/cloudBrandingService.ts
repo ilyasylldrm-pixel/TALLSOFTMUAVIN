@@ -14,7 +14,7 @@ import {
   isFirestoreWriteQuotaExhausted,
   checkAndMarkFirestoreQuotaError,
 } from "../lib/firebase";
-import { safeSetStorageItem } from "../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 export interface CompanyCloudLogoEntry {
@@ -84,15 +84,11 @@ function safeSaveBrandingToStorage(config: CloudBrandingConfig) {
  */
 export async function fetchCloudLogo(): Promise<CloudBrandingConfig> {
   if (isFirestoreWriteQuotaExhausted()) {
-    if (typeof window !== "undefined") {
-      const cached =
-        window.localStorage?.getItem("muavin_cloud_branding") ||
-        window.sessionStorage?.getItem("muavin_cloud_branding");
-      if (cached) {
-        try {
-          return JSON.parse(cached);
-        } catch {}
-      }
+    const cached = safeGetStorageItem("muavin_cloud_branding");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {}
     }
     return DEFAULT_CLOUD_BRANDING;
   }
@@ -120,13 +116,11 @@ export async function fetchCloudLogo(): Promise<CloudBrandingConfig> {
     }
   } catch (error) {
     checkAndMarkFirestoreQuotaError(error);
-    if (typeof window !== "undefined") {
-      const cached = window.localStorage?.getItem("muavin_cloud_branding") || window.sessionStorage?.getItem("muavin_cloud_branding");
-      if (cached) {
-        try {
-          return JSON.parse(cached);
-        } catch (e) {}
-      }
+    const cached = safeGetStorageItem("muavin_cloud_branding");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {}
     }
     return DEFAULT_CLOUD_BRANDING;
   }
@@ -192,17 +186,15 @@ export async function saveCloudLogo(
     typeof extraConfig === "string" ? { brandName: extraConfig } : extraConfig || {};
 
   let existingCompanyLogos: Record<string, CompanyCloudLogoEntry> = {};
-  if (typeof window !== "undefined") {
-    try {
-      const cached = window.localStorage?.getItem("muavin_cloud_branding");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && typeof parsed.companyLogos === "object") {
-          existingCompanyLogos = { ...parsed.companyLogos };
-        }
+  try {
+    const cached = safeGetStorageItem("muavin_cloud_branding");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && typeof parsed.companyLogos === "object") {
+        existingCompanyLogos = { ...parsed.companyLogos };
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   const targetCompanyId = companyId || "comp_default";
   const updatedCompanyLogos: Record<string, CompanyCloudLogoEntry> = {

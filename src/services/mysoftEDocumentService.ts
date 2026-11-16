@@ -15,6 +15,7 @@ import {
   getCompaniesList,
   getStoredData,
   saveStoredData,
+  safeGetStorageItem,
   findLocalTaxpayerByVknTckn,
   parseSeparateAddressFields,
 } from "../utils/storage";
@@ -1462,8 +1463,7 @@ function documentStorageKey(document: Pick<MysoftEDocument, "direction" | "ettn"
  * render a first-run UI but is unsafe as a sync baseline. */
 export function readPersistedEDocuments(): MysoftEDocument[] {
   try {
-    if (typeof localStorage === "undefined") return [];
-    const stored = localStorage.getItem("muavin_e_documents");
+    const stored = safeGetStorageItem("muavin_e_documents");
     if (stored === null) return [];
     const parsed: unknown = JSON.parse(stored);
     return Array.isArray(parsed) ? (parsed as MysoftEDocument[]) : [];

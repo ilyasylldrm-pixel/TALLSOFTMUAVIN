@@ -101,6 +101,8 @@ import {
   savePayrollCustomizationsStorage,
   compileStructuredAddress,
   parseCommaAddressParts,
+  safeGetStorageItem,
+  safeSetStorageItem,
 } from "../utils/storage";
 import { getHrCompanyTitle } from "../utils/puantajUtils";
 
@@ -148,6 +150,7 @@ interface HRManagementProps {
   onSaveSettings?: (settings: CompanySettings) => void;
   activeSubTab?: HRSubModule;
   onSelectSubTab?: (subTab: HRSubModule) => void;
+  allowedSubTabs?: HRSubModule[];
 }
 
 export const HRManagement: React.FC<HRManagementProps> = ({
@@ -179,17 +182,33 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   onSaveSettings,
   activeSubTab: externalSubTab,
   onSelectSubTab,
+  allowedSubTabs,
 }) => {
   const { theme } = useTheme();
-  const [activeSubTab, setActiveSubTab] = useState<HRSubModule>(externalSubTab || "employees");
+  const isSubTabAllowed = (tab: HRSubModule) =>
+    !allowedSubTabs || allowedSubTabs.includes(tab);
+  const firstAllowedHrTab: HRSubModule =
+    allowedSubTabs && allowedSubTabs.length > 0 ? allowedSubTabs[0] : "employees";
+
+  const [activeSubTab, setActiveSubTab] = useState<HRSubModule>(() => {
+    const initial = externalSubTab || "employees";
+    return isSubTabAllowed(initial) ? initial : firstAllowedHrTab;
+  });
 
   useEffect(() => {
-    if (externalSubTab && externalSubTab !== activeSubTab) {
+    const candidate = externalSubTab || activeSubTab;
+    if (!isSubTabAllowed(candidate)) {
+      setActiveSubTab(firstAllowedHrTab);
+      if (onSelectSubTab && firstAllowedHrTab !== externalSubTab) {
+        onSelectSubTab(firstAllowedHrTab);
+      }
+    } else if (externalSubTab && externalSubTab !== activeSubTab) {
       setActiveSubTab(externalSubTab);
     }
-  }, [externalSubTab]);
+  }, [externalSubTab, allowedSubTabs]);
 
   const handleSubTabChange = (tab: HRSubModule) => {
+    if (!isSubTabAllowed(tab)) return;
     setActiveSubTab(tab);
     if (onSelectSubTab) {
       onSelectSubTab(tab);
@@ -267,7 +286,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
   const [selectedSgkEmployeeId, setSelectedSgkEmployeeId] = useState<string>("all");
   const [employeeDocsStatus, setEmployeeDocsStatus] = useState<Record<string, Record<string, boolean>>>(() => {
     try {
-      const raw = localStorage.getItem("muavin_hr_employee_docs");
+      const raw = safeGetStorageItem("muavin_hr_employee_docs");
       return raw ? JSON.parse(raw) : {};
     } catch {
       return {};
@@ -284,9 +303,7 @@ export const HRManagement: React.FC<HRManagementProps> = ({
           [docKey]: !empDocs[docKey],
         },
       };
-      try {
-        localStorage.setItem("muavin_hr_employee_docs", JSON.stringify(updated));
-      } catch {}
+      safeSetStorageItem("muavin_hr_employee_docs", JSON.stringify(updated));
       return updated;
     });
   };
@@ -6118,16 +6135,18 @@ export const HRManagement: React.FC<HRManagementProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSubTabChange("allowances")}
-                  className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 active:scale-95 font-bold px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
-                  title="Personel Yan Hakları & Ticari Ödenek Parametrelerini Düzenle"
-                >
-                  <Gift className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                  <span className="hidden sm:inline">Yan Hak Parametreleri</span>
-                  <span className="sm:hidden">Yan Haklar</span>
-                </button>
+                {isSubTabAllowed("allowances") && (
+                  <button
+                    type="button"
+                    onClick={() => handleSubTabChange("allowances")}
+                    className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200/80 active:scale-95 font-bold px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
+                    title="Personel Yan Hakları & Ticari Ödenek Parametrelerini Düzenle"
+                  >
+                    <Gift className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                    <span className="hidden sm:inline">Yan Hak Parametreleri</span>
+                    <span className="sm:hidden">Yan Haklar</span>
+                  </button>
+                )}
 
                 <button
                   type="button"

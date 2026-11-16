@@ -13,7 +13,7 @@ import {
   DetailedCostItem,
 } from "../../data/feasibilityDashboardData";
 import { formatCurrency } from "../../utils/exportUtils";
-import { safeSetStorageItem } from "../../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem, safeRemoveStorageItem } from "../../utils/storage";
 import {
   Layers,
   Building2,
@@ -226,18 +226,18 @@ export const FeasibilityCostDashboard: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isMultiplierPanelOpen, setIsMultiplierPanelOpen] = useState<boolean>(true);
 
-  // Düzenlenebilir Kalemler State (LocalStorage persist ile)
+  const [confirmResetCostGroups, setConfirmResetCostGroups] = useState<boolean>(false);
+
+  // Düzenlenebilir Kalemler State (Merkezi depolama ile)
   const [customCostGroups, setCustomCostGroups] = useState<
     Record<string, { title: string; subtitle: string; items: DetailedCostItem[] }>
   >(() => {
     try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = window.localStorage.getItem("construction_custom_cost_groups_v1");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed === "object" && parsed["02"]?.items) {
-            return parsed;
-          }
+      const saved = safeGetStorageItem("construction_custom_cost_groups_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && parsed["02"]?.items) {
+          return parsed;
         }
       }
     } catch (e) {
@@ -249,13 +249,11 @@ export const FeasibilityCostDashboard: React.FC = () => {
   // Maliyet Çarpanları State (Kullanıcı tarafından dinamik olarak değiştirilebilir ve kaydedilir)
   const [multipliers, setMultipliers] = useState<ProjectCostMultipliers>(() => {
     try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = window.localStorage.getItem("construction_cost_multipliers_v2");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (typeof parsed.contractorProfitPct === "number") {
-            return parsed;
-          }
+      const saved = safeGetStorageItem("construction_cost_multipliers_v2");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.contractorProfitPct === "number") {
+          return parsed;
         }
       }
     } catch (e) {
@@ -275,11 +273,7 @@ export const FeasibilityCostDashboard: React.FC = () => {
 
   const handleResetMultipliers = () => {
     setMultipliers(DEFAULT_COST_MULTIPLIERS);
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        window.localStorage.removeItem("construction_cost_multipliers_v2");
-      }
-    } catch {}
+    safeRemoveStorageItem("construction_cost_multipliers_v2");
   };
 
   // Kalem hücrelerini güncelleme fonksiyonu (birim, miktar, birim fiyat)
@@ -324,16 +318,16 @@ export const FeasibilityCostDashboard: React.FC = () => {
     });
   };
 
-  // Tüm maliyet gruplarını varsayılana sıfırlama
+  // Tüm maliyet gruplarını varsayılana sıfırlama (iframe uyumlu çift adımlı onay)
   const handleResetCostGroups = () => {
-    if (window.confirm("16 Paketlik maliyet tablosundaki tüm birim, miktar ve fiyat değişiklikleri varsayılan değerlere sıfırlansın mı?")) {
-      setCustomCostGroups(detailedCostGroupsData);
-      try {
-        if (typeof window !== "undefined" && window.localStorage) {
-          window.localStorage.removeItem("construction_custom_cost_groups_v1");
-        }
-      } catch {}
+    if (!confirmResetCostGroups) {
+      setConfirmResetCostGroups(true);
+      setTimeout(() => setConfirmResetCostGroups(false), 4500);
+      return;
     }
+    setCustomCostGroups(detailedCostGroupsData);
+    safeRemoveStorageItem("construction_custom_cost_groups_v1");
+    setConfirmResetCostGroups(false);
   };
 
   // Dinamik Grup Toplamları Hesabı (02 - 12 arası)
@@ -509,11 +503,15 @@ export const FeasibilityCostDashboard: React.FC = () => {
             <button
               type="button"
               onClick={handleResetCostGroups}
-              className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors border border-rose-200 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors border flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                confirmResetCostGroups
+                  ? "bg-rose-600 text-white border-rose-700 hover:bg-rose-700"
+                  : "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200"
+              }`}
               title="Girilen birim, miktar ve fiyatları varsayılana sıfırlar"
             >
-              <RotateCcw className="w-4 h-4 text-rose-600" />
-              <span>Tabloyu Sıfırla</span>
+              <RotateCcw className={`w-4 h-4 ${confirmResetCostGroups ? "text-white" : "text-rose-600"}`} />
+              <span>{confirmResetCostGroups ? "Sıfırlamayı Onayla" : "Tabloyu Sıfırla"}</span>
             </button>
             <button
               type="button"

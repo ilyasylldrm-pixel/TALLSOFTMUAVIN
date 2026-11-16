@@ -33,9 +33,11 @@ import {
   saveActivePayrollParameters,
   getActivePayrollParameters
 } from "../data/payrollParametersData";
+import { resolveCentralUrl } from "../config/env";
 import {
   safeGetStorageItem,
   safeSetStorageItem,
+  safeRemoveStorageItem,
   syncAllCompaniesAndUsersData,
   getCompaniesList,
   saveCompaniesList,
@@ -48,6 +50,12 @@ import {
   saveStoredData,
   sanitizeNonDefaultCompanySlices,
   syncAccountBalancesFromTransactions,
+  getCompanyEcommerceStores,
+  saveCompanyEcommerceStores,
+  getDeletedEcommerceStoresMap,
+  saveDeletedEcommerceStoresMap,
+  mergeEcommerceStoresPreservingUserSaves,
+  DeletedEcommerceStoreMeta,
 } from "../utils/storage";
 import { isAdminOrSysAdmin } from "../types";
 
@@ -133,9 +141,12 @@ function mergeRecordsById<T extends { id?: string }>(remoteList?: T[], localList
 const CLEARABLE_COMPANY_FIELDS = new Set<string>([
   "mersisNo",
   "tradeRegisterNo",
+  "useDefaultBankInfo",
   "defaultBankName",
   "defaultBankIban",
   "defaultBankAccountName",
+  "useCorporateLogo",
+  "logoUrl",
   "phone",
   "email",
   "website",
@@ -156,6 +167,15 @@ function sanitizeLegacyDemoFields(obj: any): any {
   }
   if (copy.mersisNo === "0847029103800001") {
     copy.mersisNo = "";
+  }
+  if (
+    copy.defaultBankName === "Garanti BBVA - Levent Ticari Şubesi" &&
+    copy.defaultBankIban === "TR33 0006 2000 0000 0012 3456 78" &&
+    copy.useDefaultBankInfo !== true
+  ) {
+    copy.defaultBankName = "";
+    copy.defaultBankIban = "";
+    copy.defaultBankAccountName = "";
   }
   return copy;
 }
@@ -212,9 +232,6 @@ const COMPANY_SLICE_MAPPING: Array<{ dataKey: string; storageKey: any; maxItems?
   { dataKey: "fixedAssets", storageKey: "FIXED_ASSETS", maxItems: 200 },
   { dataKey: "assetMaintenances", storageKey: "ASSET_MAINTENANCES", maxItems: 200 },
   { dataKey: "assetDisposals", storageKey: "ASSET_DISPOSALS", maxItems: 200 },
-  { dataKey: "ecommerceStores", storageKey: "ECOMMERCE_STORES", maxItems: 100 },
-  { dataKey: "ecommerceOrders", storageKey: "ECOMMERCE_ORDERS", maxItems: 500 },
-  { dataKey: "ecommerceMarkups", storageKey: "ECOMMERCE_MARKUPS", maxItems: 200 },
 ];
 
 let memoryFirebaseIdToken: string | null = null;
@@ -228,9 +245,7 @@ async function getDatabaseAuthHeaders(companyId?: string): Promise<Record<string
 
   if (typeof window !== "undefined") {
     try {
-      const rawUser =
-        window.localStorage.getItem("muavin_active_user") ||
-        window.sessionStorage.getItem("muavin_active_user");
+      const rawUser = safeGetStorageItem("muavin_active_user");
       if (rawUser) {
         const parsed = JSON.parse(rawUser);
         if (!resolvedUid) {
@@ -270,7 +285,7 @@ export async function saveProductToDatabase(product: any, companyId?: string): P
   if (typeof window === "undefined" || !product) return;
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
-    await fetch("/api/db/products", {
+    await fetch(resolveCentralUrl("/api/db/products"), {
       method: "POST",
       headers,
       body: JSON.stringify({ product, companyId }),
@@ -285,7 +300,7 @@ export async function deleteProductFromDatabase(productId: string, companyId?: s
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
     const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
-    await fetch(`/api/db/products/${encodeURIComponent(productId)}${qs}`, {
+    await fetch(resolveCentralUrl(`/api/db/products/${encodeURIComponent(productId)}${qs}`), {
       method: "DELETE",
       headers,
     });
@@ -298,7 +313,7 @@ export async function saveInvoiceToDatabase(invoice: any, companyId?: string): P
   if (typeof window === "undefined" || !invoice) return;
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
-    await fetch("/api/db/invoices", {
+    await fetch(resolveCentralUrl("/api/db/invoices"), {
       method: "POST",
       headers,
       body: JSON.stringify({ invoice, companyId }),
@@ -313,7 +328,7 @@ export async function deleteInvoiceFromDatabase(invoiceId: string, companyId?: s
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
     const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
-    await fetch(`/api/db/invoices/${encodeURIComponent(invoiceId)}${qs}`, {
+    await fetch(resolveCentralUrl(`/api/db/invoices/${encodeURIComponent(invoiceId)}${qs}`), {
       method: "DELETE",
       headers,
     });
@@ -326,7 +341,7 @@ export async function saveTransactionToDatabase(transaction: any, companyId?: st
   if (typeof window === "undefined" || !transaction) return;
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
-    await fetch("/api/db/transactions", {
+    await fetch(resolveCentralUrl("/api/db/transactions"), {
       method: "POST",
       headers,
       body: JSON.stringify({ transaction, companyId }),
@@ -341,7 +356,7 @@ export async function deleteTransactionFromDatabase(transactionId: string, compa
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
     const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
-    await fetch(`/api/db/transactions/${encodeURIComponent(transactionId)}${qs}`, {
+    await fetch(resolveCentralUrl(`/api/db/transactions/${encodeURIComponent(transactionId)}${qs}`), {
       method: "DELETE",
       headers,
     });
@@ -354,7 +369,7 @@ export async function saveAccountToDatabase(account: any, companyId?: string): P
   if (typeof window === "undefined" || !account) return;
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
-    await fetch("/api/db/accounts", {
+    await fetch(resolveCentralUrl("/api/db/accounts"), {
       method: "POST",
       headers,
       body: JSON.stringify({ account, companyId }),
@@ -369,7 +384,7 @@ export async function deleteAccountFromDatabase(accountId: string, companyId?: s
   try {
     const headers = await getDatabaseAuthHeaders(companyId);
     const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
-    await fetch(`/api/db/accounts/${encodeURIComponent(accountId)}${qs}`, {
+    await fetch(resolveCentralUrl(`/api/db/accounts/${encodeURIComponent(accountId)}${qs}`), {
       method: "DELETE",
       headers,
     });
@@ -419,22 +434,32 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
     }
   });
 
-  if (!payloadSlices.ecommerceStores && typeof window !== "undefined") {
+  if (typeof window !== "undefined") {
+    const localStores = getCompanyEcommerceStores(cleanId);
+    const localDeletedMap = getDeletedEcommerceStoresMap(cleanId);
+    if (localStores.length > 0) {
+      payloadSlices.ecommerceStores = localStores;
+    }
+    if (Object.keys(localDeletedMap).length > 0) {
+      payloadSlices.deletedEcommerceStores = localDeletedMap;
+    }
     try {
-      const rawStores = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_stores`);
-      if (rawStores) payloadSlices.ecommerceStores = JSON.parse(rawStores);
+      const rawOrders = safeGetStorageItem(`muavin_ecommerce_v2_${cleanId}_orders`);
+      if (rawOrders) {
+        const parsedOrders = JSON.parse(rawOrders);
+        if (Array.isArray(parsedOrders) && parsedOrders.length > 0) {
+          payloadSlices.ecommerceOrders = parsedOrders.slice(0, 500);
+        }
+      }
     } catch {}
-  }
-  if (!payloadSlices.ecommerceOrders && typeof window !== "undefined") {
     try {
-      const rawOrders = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_orders`);
-      if (rawOrders) payloadSlices.ecommerceOrders = JSON.parse(rawOrders);
-    } catch {}
-  }
-  if (!payloadSlices.ecommerceMarkups && typeof window !== "undefined") {
-    try {
-      const rawMarkups = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_markups`);
-      if (rawMarkups) payloadSlices.ecommerceMarkups = JSON.parse(rawMarkups);
+      const rawMarkups = safeGetStorageItem(`muavin_ecommerce_v2_${cleanId}_markups`);
+      if (rawMarkups) {
+        const parsedMarkups = JSON.parse(rawMarkups);
+        if (parsedMarkups && typeof parsedMarkups === "object" && Object.keys(parsedMarkups).length > 0) {
+          payloadSlices.ecommerceMarkups = parsedMarkups;
+        }
+      }
     } catch {}
   }
 
@@ -445,7 +470,7 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
     try {
       const headers = await getDatabaseAuthHeaders(cleanId);
       await Promise.all([
-        fetch("/api/cloud-sync/company", {
+        fetch(resolveCentralUrl("/api/cloud-sync/company"), {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -457,7 +482,7 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
             updatedAt: nowIso,
           }),
         }),
-        fetch("/api/db/sync", {
+        fetch(resolveCentralUrl("/api/db/sync"), {
           method: "POST",
           headers,
           body: JSON.stringify({
@@ -476,7 +501,7 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
     }
   }
 
-  // 2. Firestore kotası müsaitse Firestore'a da yaz (merge: false ile silinen kayıtların geri gelmesini önle)
+  // 2. Firestore kotası müsaitse Firestore'a da yaz ({ merge: true } ile ecommerceStores vb. alanların silinmesini kesinlikle önle)
   if (!isFirestoreWriteQuotaExhausted()) {
     try {
       const sliceDocRef = doc(db, "system_settings", `company_data_${cleanId}`);
@@ -487,7 +512,8 @@ export async function pushCompanyDataToCloud(companyId: string, overrideData?: a
           companyName: compMeta?.companyName || normalizedFullData.settings?.companyName || "Şirket",
           ...payloadSlices,
           updatedAt: nowIso,
-        })
+        }),
+        { merge: true }
       );
     } catch (writeErr) {
       checkAndMarkFirestoreQuotaError(writeErr);
@@ -506,12 +532,14 @@ export async function pullLatestCompanyDataFromCloud(
   let anyUpdated = false;
   const targetId = String(targetCompanyId || "").trim();
 
+  let firestoreCentralVersion = 0;
   // 0. Firestore'daki merkezi kayıtları (central_sync_state) doğrudan oku; böylece başka cihazda açılan veya güncellenen şirket ve kullanıcılar anında yerel sisteme alınır
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && !isFirestoreWriteQuotaExhausted()) {
     try {
       const syncSnap = await getDoc(doc(db, "system_settings", "central_sync_state"));
       if (syncSnap.exists()) {
         const syncData = syncSnap.data();
+        firestoreCentralVersion = Number(syncData?.version) || 0;
         if (Array.isArray(syncData?.companiesRegistry) && syncData.companiesRegistry.length > 0) {
           const localCompanies = getCompaniesList();
           const mergedMap = new Map<string, any>();
@@ -541,8 +569,8 @@ export async function pullLatestCompanyDataFromCloud(
   if (typeof window !== "undefined") {
     try {
       const url = targetId
-        ? `/api/cloud-sync/state?companyId=${encodeURIComponent(targetId)}`
-        : `/api/cloud-sync/state`;
+        ? resolveCentralUrl(`/api/cloud-sync/state?companyId=${encodeURIComponent(targetId)}`)
+        : resolveCentralUrl(`/api/cloud-sync/state`);
       const resp = await fetch(url);
       if (resp.ok) {
         serverState = await resp.json();
@@ -553,6 +581,8 @@ export async function pullLatestCompanyDataFromCloud(
   }
 
   if (serverState) {
+    const serverVersion = Number(serverState.version) || 0;
+    const preferServerRegistry = serverVersion >= firestoreCentralVersion;
     if (Array.isArray(serverState.deletedCompanyIds) && serverState.deletedCompanyIds.length > 0) {
       saveDeletedCompanyIds([...getDeletedCompanyIds(), ...serverState.deletedCompanyIds]);
     }
@@ -571,14 +601,24 @@ export async function pullLatestCompanyDataFromCloud(
       serverState.companiesRegistry.forEach((remoteComp: any) => {
         if (remoteComp && remoteComp.id && (isProtectedCompanyId(remoteComp.id) || !deletedCompSet.has(remoteComp.id))) {
           const existing = mergedMap.get(remoteComp.id);
-          mergedMap.set(remoteComp.id, mergeCompanyMetadataNonDestructive(existing, remoteComp));
+          const mergedComp = mergeCompanyMetadataNonDestructive(existing, remoteComp);
+          if (preferServerRegistry && Array.isArray(remoteComp.allowedModules)) {
+            mergedComp.allowedModules = remoteComp.allowedModules;
+            mergedComp.moduleRestrictionEnabled = true;
+          }
+          mergedMap.set(remoteComp.id, mergedComp);
         }
       });
       saveCompaniesList(Array.from(mergedMap.values()), false);
       anyUpdated = true;
     }
-    if (Array.isArray(serverState.usersRegistry) && serverState.usersRegistry.length > 0) {
-      saveLocalUsersBackup(serverState.usersRegistry, false);
+    if (preferServerRegistry && Array.isArray(serverState.usersRegistry) && serverState.usersRegistry.length > 0) {
+      const localUsersMap = new Map<string, any>();
+      serverState.usersRegistry.forEach((srvU: any) => {
+        const key = String(srvU?.email || srvU?.userId || srvU?.username || "").trim().toLowerCase();
+        if (key) localUsersMap.set(key, srvU);
+      });
+      saveLocalUsersBackup(Array.from(localUsersMap.values()), false);
     }
   }
 
@@ -617,7 +657,10 @@ export async function pullLatestCompanyDataFromCloud(
     if (typeof window !== "undefined") {
       try {
         const headers = await getDatabaseAuthHeaders(cid);
-        const pgResp = await fetch(`/api/db/state?companyId=${encodeURIComponent(cid)}`, { headers });
+        const pgResp = await fetch(
+          resolveCentralUrl(`/api/db/state?companyId=${encodeURIComponent(cid)}`),
+          { headers }
+        );
         if (pgResp.ok) {
           pgSlice = await pgResp.json();
         }
@@ -702,34 +745,66 @@ export async function pullLatestCompanyDataFromCloud(
         }
       });
 
-      // E-Ticaret ve Pazaryeri (Trendyol, Trendyol Go / TGO vb.) mağaza ve siparişlerini de buluttan aktar
-      if (Array.isArray(chosenRemote.ecommerceStores) && chosenRemote.ecommerceStores.length > 0) {
+      // E-Ticaret ve Pazaryeri mağazalarını silinme kayıtlarını (tombstone) dikkate alarak güvenli birleştir (kullanıcı/admin silmediği sürece asla silinmez)
+      if (
+        Array.isArray(chosenRemote.ecommerceStores) ||
+        (chosenRemote.deletedEcommerceStores && typeof chosenRemote.deletedEcommerceStores === "object")
+      ) {
         try {
-          const currentLocalRaw = localStorage.getItem(`muavin_ecommerce_v2_${cid}_stores`);
-          const currentLocal = currentLocalRaw ? JSON.parse(currentLocalRaw) : [];
-          const storeMap = new Map();
-          currentLocal.forEach((s: any) => { if (s?.id) storeMap.set(s.id, s); });
-          chosenRemote.ecommerceStores.forEach((s: any) => { if (s?.id) storeMap.set(s.id, s); });
-          const mergedStores = Array.from(storeMap.values());
-          localStorage.setItem(`muavin_ecommerce_v2_${cid}_stores`, JSON.stringify(mergedStores));
-          window.dispatchEvent(new CustomEvent("muavin:ecommerce-stores-updated", { detail: { companyId: cid, stores: mergedStores } }));
+          const currentLocal = getCompanyEcommerceStores(cid);
+          const localDeletedMap = getDeletedEcommerceStoresMap(cid);
+          const remoteStoresRaw = Array.isArray(chosenRemote.ecommerceStores)
+            ? chosenRemote.ecommerceStores
+            : [];
+          const remoteDeletedMap =
+            chosenRemote.deletedEcommerceStores && typeof chosenRemote.deletedEcommerceStores === "object"
+              ? (chosenRemote.deletedEcommerceStores as Record<string, DeletedEcommerceStoreMeta>)
+              : {};
+          const { stores: mergedStores, deletedMap: mergedDeletedMap } =
+            mergeEcommerceStoresPreservingUserSaves(
+              currentLocal,
+              remoteStoresRaw,
+              localDeletedMap,
+              remoteDeletedMap
+            );
+          saveDeletedEcommerceStoresMap(cid, mergedDeletedMap);
+          saveCompanyEcommerceStores(cid, mergedStores);
+          window.dispatchEvent(
+            new CustomEvent("muavin:ecommerce-stores-updated", {
+              detail: { companyId: cid, stores: mergedStores },
+            })
+          );
+          if (
+            Array.isArray(chosenRemote.ecommerceStores) &&
+            chosenRemote.ecommerceStores.length !== mergedStores.length &&
+            !isFirestoreWriteQuotaExhausted()
+          ) {
+            void setDoc(
+              doc(db, "system_settings", `company_data_${cid}`),
+              sanitizeForFirestore({
+                ecommerceStores: mergedStores,
+                deletedEcommerceStores: mergedDeletedMap,
+              }),
+              { merge: true }
+            ).catch(() => {});
+          }
         } catch {}
       }
       if (Array.isArray(chosenRemote.ecommerceOrders) && chosenRemote.ecommerceOrders.length > 0) {
         try {
-          const currentOrdersRaw = localStorage.getItem(`muavin_ecommerce_v2_${cid}_orders`);
+          const currentOrdersRaw = safeGetStorageItem(`muavin_ecommerce_v2_${cid}_orders`);
           const currentOrders = currentOrdersRaw ? JSON.parse(currentOrdersRaw) : [];
           const orderMap = new Map();
           currentOrders.forEach((o: any) => { if (o?.id) orderMap.set(o.id, o); });
           chosenRemote.ecommerceOrders.forEach((o: any) => { if (o?.id) orderMap.set(o.id, o); });
           const mergedOrders = Array.from(orderMap.values());
-          localStorage.setItem(`muavin_ecommerce_v2_${cid}_orders`, JSON.stringify(mergedOrders));
+          safeSetStorageItem(`muavin_ecommerce_v2_${cid}_orders`, JSON.stringify(mergedOrders));
           window.dispatchEvent(new CustomEvent("muavin:ecommerce-orders-updated", { detail: { companyId: cid, orders: mergedOrders } }));
         } catch {}
       }
       if (chosenRemote.ecommerceMarkups && typeof chosenRemote.ecommerceMarkups === "object") {
         try {
-          localStorage.setItem(`muavin_ecommerce_v2_${cid}_markups`, JSON.stringify(chosenRemote.ecommerceMarkups));
+          safeSetStorageItem(`muavin_ecommerce_v2_${cid}_markups`, JSON.stringify(chosenRemote.ecommerceMarkups));
         } catch {}
       }
 
@@ -748,9 +823,7 @@ export async function pullLatestCompanyDataFromCloud(
   // Aktif oturumdaki kullanıcının (muavin_active_user) şirket ve yetki bilgilerini de güncel kayıtlarla eşitle
   if (typeof window !== "undefined") {
     try {
-      const rawUser =
-        window.localStorage.getItem("muavin_active_user") ||
-        window.sessionStorage.getItem("muavin_active_user");
+      const rawUser = safeGetStorageItem("muavin_active_user");
       if (rawUser) {
         const parsedUser = JSON.parse(rawUser);
         const allUsers = getLocalUsersBackup();
@@ -777,9 +850,11 @@ export async function pullLatestCompanyDataFromCloud(
 
         const resolvedAllowedModules = Array.isArray(matchedProfile?.allowedModules)
           ? matchedProfile.allowedModules
-          : matchedComp?.moduleRestrictionEnabled && Array.isArray(matchedComp?.allowedModules)
+          : Array.isArray(matchedComp?.allowedModules)
           ? matchedComp.allowedModules
-          : parsedUser.allowedModules;
+          : Array.isArray(parsedUser.allowedModules)
+          ? parsedUser.allowedModules
+          : ["dashboard"];
 
         const nextUser = {
           ...parsedUser,
@@ -794,12 +869,7 @@ export async function pullLatestCompanyDataFromCloud(
           allowedModules: resolvedAllowedModules,
           role: matchedProfile?.role || parsedUser.role,
         };
-        if (window.localStorage.getItem("muavin_active_user")) {
-          window.localStorage.setItem("muavin_active_user", JSON.stringify(nextUser));
-        }
-        if (window.sessionStorage.getItem("muavin_active_user")) {
-          window.sessionStorage.setItem("muavin_active_user", JSON.stringify(nextUser));
-        }
+        safeSetStorageItem("muavin_active_user", JSON.stringify(nextUser));
       }
     } catch {
       // ignore session sync error
@@ -842,9 +912,8 @@ export async function preserveAndSyncAllCompaniesHistoricalData(writeToCloud: bo
 const LOCAL_AUDIT_LOGS_KEY = "muavin_system_audit_logs";
 
 export function getLocalAuditLogs(): SystemAuditLogItem[] {
-  if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(LOCAL_AUDIT_LOGS_KEY);
+    const raw = safeGetStorageItem(LOCAL_AUDIT_LOGS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -854,22 +923,17 @@ export function getLocalAuditLogs(): SystemAuditLogItem[] {
 }
 
 export function saveLocalAuditLog(item: SystemAuditLogItem): void {
-  if (typeof window === "undefined") return;
   try {
     const current = getLocalAuditLogs();
     const updated = [item, ...current.filter((x) => x.id !== item.id)].slice(0, 300);
-    localStorage.setItem(LOCAL_AUDIT_LOGS_KEY, JSON.stringify(updated));
+    safeSetStorageItem(LOCAL_AUDIT_LOGS_KEY, JSON.stringify(updated));
   } catch (e) {
-    console.warn("Local audit log save error:", e);
+    console.warn("Audit log save error:", e);
   }
 }
 
 export function clearSystemAuditLogs(): void {
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.removeItem(LOCAL_AUDIT_LOGS_KEY);
-    } catch {}
-  }
+  safeRemoveStorageItem(LOCAL_AUDIT_LOGS_KEY);
 }
 
 // 1. Audit Log Ekleme (Yerel depolama + Sunucu + Firestore hibrit)
@@ -900,7 +964,7 @@ export async function logSystemAction(log: Omit<SystemAuditLogItem, "id"> & { id
 
   // 3. Sunucu disk deposuna gönder (arka planda, engellemeden)
   if (typeof window !== "undefined") {
-    fetch("/api/cloud-sync/audit-logs", {
+    fetch(resolveCentralUrl("/api/cloud-sync/audit-logs"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fullItem),
@@ -931,7 +995,7 @@ export async function getSystemAuditLogs(maxCount: number = 60): Promise<SystemA
   // Sunucu deposundan çek
   if (typeof window !== "undefined") {
     try {
-      const res = await fetch(`/api/cloud-sync/audit-logs?limit=${maxCount}`);
+      const res = await fetch(resolveCentralUrl(`/api/cloud-sync/audit-logs?limit=${maxCount}`));
       if (res.ok) {
         const body = await res.json();
         if (body && Array.isArray(body.logs)) {
@@ -1330,16 +1394,12 @@ export async function verifyAndSyncAllUsersLocalDb(
         }
         if (Array.isArray(existingData?.companiesRegistry) && existingData.companiesRegistry.length > 0) {
           let isCurrentSessionAdmin = false;
-          if (typeof window !== "undefined") {
-            try {
-              const rawActive =
-                window.localStorage.getItem("muavin_active_user") ||
-                window.sessionStorage.getItem("muavin_active_user");
-              if (rawActive) {
-                isCurrentSessionAdmin = isAdminOrSysAdmin(JSON.parse(rawActive));
-              }
-            } catch {}
-          }
+          try {
+            const rawActive = safeGetStorageItem("muavin_active_user");
+            if (rawActive) {
+              isCurrentSessionAdmin = isAdminOrSysAdmin(JSON.parse(rawActive));
+            }
+          } catch {}
 
           const localCompanies = getCompaniesList();
           const deletedCompSet = new Set(getDeletedCompanyIds());
@@ -1362,8 +1422,10 @@ export async function verifyAndSyncAllUsersLocalDb(
               const remoteExisting = mergedMap.get(localComp.id);
               const mergedComp = mergeCompanyMetadataNonDestructive(remoteExisting, localComp);
               if (!isCurrentSessionAdmin && remoteExisting) {
-                mergedComp.moduleRestrictionEnabled = remoteExisting.moduleRestrictionEnabled;
+                mergedComp.moduleRestrictionEnabled = true;
                 mergedComp.allowedModules = remoteExisting.allowedModules;
+              } else {
+                mergedComp.moduleRestrictionEnabled = true;
               }
               mergedMap.set(localComp.id, mergedComp);
             }
@@ -1409,7 +1471,7 @@ export async function verifyAndSyncAllUsersLocalDb(
   // 5a. Sunucu tarafı kalıcı bulut deposuna her zaman yaz (kota sınırı yoktur)
   if (typeof window !== "undefined") {
     try {
-      await fetch("/api/cloud-sync/system", {
+      await fetch(resolveCentralUrl("/api/cloud-sync/system"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1604,29 +1666,28 @@ export async function syncCompanyEcommerceToCloud(
   companyId: string,
   stores?: any[],
   orders?: any[],
-  markups?: any
+  markups?: any,
+  deletedStoresMap?: Record<string, DeletedEcommerceStoreMeta>
 ): Promise<void> {
   const cleanId = String(companyId || "").trim();
   if (!cleanId) return;
   const nowIso = new Date().toISOString();
 
-  const effectiveStores = stores || (() => {
-    try {
-      const raw = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_stores`);
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
-  })();
+  const effectiveDeletedMap = deletedStoresMap || getDeletedEcommerceStoresMap(cleanId);
+  const rawStores = stores !== undefined ? stores : getCompanyEcommerceStores(cleanId);
+  const { stores: effectiveStores, deletedMap: mergedDeletedMap } =
+    mergeEcommerceStoresPreservingUserSaves(rawStores, [], effectiveDeletedMap, {});
 
   const effectiveOrders = orders || (() => {
     try {
-      const raw = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_orders`);
+      const raw = safeGetStorageItem(`muavin_ecommerce_v2_${cleanId}_orders`);
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   })();
 
   const effectiveMarkups = markups || (() => {
     try {
-      const raw = localStorage.getItem(`muavin_ecommerce_v2_${cleanId}_markups`);
+      const raw = safeGetStorageItem(`muavin_ecommerce_v2_${cleanId}_markups`);
       return raw ? JSON.parse(raw) : {};
     } catch { return {}; }
   })();
@@ -1634,12 +1695,13 @@ export async function syncCompanyEcommerceToCloud(
   // 1. Merkezi sunucuya gönder
   if (typeof window !== "undefined") {
     try {
-      await fetch("/api/cloud-sync/ecommerce", {
+      await fetch(resolveCentralUrl("/api/cloud-sync/ecommerce"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyId: cleanId,
           stores: effectiveStores,
+          deletedEcommerceStores: mergedDeletedMap,
           orders: effectiveOrders,
           markups: effectiveMarkups,
           updatedAt: nowIso,
@@ -1658,6 +1720,7 @@ export async function syncCompanyEcommerceToCloud(
         docRef,
         sanitizeForFirestore({
           ecommerceStores: effectiveStores,
+          deletedEcommerceStores: mergedDeletedMap,
           ecommerceOrders: effectiveOrders,
           ecommerceMarkups: effectiveMarkups,
           updatedAt: nowIso,

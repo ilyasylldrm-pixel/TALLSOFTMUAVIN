@@ -1,5 +1,53 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+
+/**
+ * Generates a deterministic/fresh version.json in both public/ and dist/
+ * so connected clients detect new GitHub/Cloud deployments and auto-reload.
+ */
+function writeBuildVersionManifest() {
+  try {
+    const cwd = process.cwd();
+    const pkgPath = path.join(cwd, "package.json");
+    const pkg = fs.existsSync(pkgPath)
+      ? JSON.parse(fs.readFileSync(pkgPath, "utf-8"))
+      : { version: "1.0.0" };
+    const packageVersion = String(pkg.version || "1.0.0");
+    const buildTime = new Date().toISOString();
+
+    // Hash built index.html if present so version changes whenever bundle hashes change
+    const distIndexPath = path.join(cwd, "dist", "index.html");
+    const hashSeed = fs.existsSync(distIndexPath)
+      ? fs.readFileSync(distIndexPath, "utf-8")
+      : buildTime;
+    const buildHash = crypto.createHash("sha256").update(hashSeed).digest("hex").slice(0, 10);
+
+    const payload = JSON.stringify(
+      {
+        version: `${packageVersion}-${buildHash}`,
+        packageVersion,
+        buildHash,
+        buildTime,
+      },
+      null,
+      2
+    );
+
+    const publicDir = path.join(cwd, "public");
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(publicDir, "version.json"), `${payload}\n`, "utf-8");
+
+    const distDir = path.join(cwd, "dist");
+    if (fs.existsSync(distDir)) {
+      fs.writeFileSync(path.join(distDir, "version.json"), `${payload}\n`, "utf-8");
+    }
+  } catch (err) {
+    console.warn("version.json oluşturma uyarısı:", err);
+  }
+}
 
 /**
  * Ensures the workspace and control-plane archiver produce a clean, compact
@@ -65,5 +113,6 @@ function patchControlPlaneArchiver() {
   }
 }
 
+writeBuildVersionManifest();
 cleanBloatDirs();
 patchControlPlaneArchiver();

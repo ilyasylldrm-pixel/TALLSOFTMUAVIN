@@ -171,6 +171,10 @@ export const Settings: React.FC<SettingsProps> = ({
     reader.readAsText(file);
   };
 
+  if (!isAdmin) {
+    return null;
+  }
+
   return (
     <div className={embedded ? "space-y-6" : "p-3 sm:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-6"}>
       {/* Header Banner */}
@@ -209,16 +213,16 @@ export const Settings: React.FC<SettingsProps> = ({
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-        {onOpenSubModule && (
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 dark:border-slate-800 pb-3">
+        {!embedded && onOpenSubModule && (
           <>
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => onOpenSubModule("companies")}
-                className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
               >
-                <Building2 className="w-4 h-4 text-[#0f6bae]" />
+                <Building2 className="w-4 h-4 text-[#0f6bae] dark:text-sky-400" />
                 <span>Şirketler & Çoklu Şirket{companiesCount !== undefined ? ` (${companiesCount})` : ""}</span>
               </button>
             )}
@@ -227,31 +231,22 @@ export const Settings: React.FC<SettingsProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenSubModule("mysoft")}
-                className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
               >
-                <Globe className="w-4 h-4 text-indigo-600" />
+                <Globe className="w-4 h-4 text-[#0f6bae] dark:text-sky-400" />
                 <span>Mysoft VKN/TCKN Eşleştirme</span>
               </button>
             )}
-
-              <button
-                type="button"
-                onClick={() => onOpenSubModule("logs")}
-                className="flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200"
-              >
-                <Terminal className="w-4 h-4 text-amber-600" />
-                <span>Log İzleme Ekranı</span>
-              </button>
           </>
         )}
 
         <button
           type="button"
           onClick={() => setActiveTab("theme")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
             activeTab === "theme"
               ? "text-white shadow-2xs"
-              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
           }`}
           style={activeTab === "theme" ? { backgroundColor: theme.primaryColor } : {}}
         >
@@ -262,10 +257,10 @@ export const Settings: React.FC<SettingsProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab("system")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
             activeTab === "system"
               ? "text-white shadow-2xs"
-              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
           }`}
           style={activeTab === "system" ? { backgroundColor: theme.primaryColor } : {}}
         >
@@ -276,10 +271,10 @@ export const Settings: React.FC<SettingsProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab("backup")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
             activeTab === "backup"
               ? "text-white shadow-2xs"
-              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
           }`}
           style={activeTab === "backup" ? { backgroundColor: theme.primaryColor } : {}}
         >
@@ -293,10 +288,10 @@ export const Settings: React.FC<SettingsProps> = ({
             setActiveTab("cloud");
             loadTelemetry();
           }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
             activeTab === "cloud"
               ? "text-white shadow-2xs"
-              : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
           }`}
           style={activeTab === "cloud" ? { backgroundColor: theme.primaryColor } : {}}
         >
@@ -308,10 +303,10 @@ export const Settings: React.FC<SettingsProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab("github")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === "github"
                 ? "text-white shadow-2xs"
-                : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+                : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
             }`}
             style={activeTab === "github" ? { backgroundColor: theme.primaryColor } : {}}
           >

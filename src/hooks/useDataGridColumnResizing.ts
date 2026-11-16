@@ -1,11 +1,11 @@
-import { useEffect, useCallback } from "react";
-import { safeGetStorageItem, safeSetStorageItem, safeRemoveStorageItem } from "../utils/storage";
+import { useEffect } from "react";
+import { safeGetStorageItem, safeSetStorageItem, safeRemoveStorageItem, getStoredStorageKeys } from "../utils/storage";
 
 /**
  * useDataGridColumnResizing
  * 
  * Provides an interactive column-resizing feature across ALL listed data tables in the application.
- * Persists customized column widths permanently to localStorage so that user customizations
+ * Persists customized column widths permanently to central storage so that user customizations
  * are remembered across browser reloads, tab navigation, and pagination.
  * 
  * Features:
@@ -14,7 +14,7 @@ import { safeGetStorageItem, safeSetStorageItem, safeRemoveStorageItem } from ".
  * - Floating HUD Badge: Displays active column label, exact pixel width (e.g. "↔ 185 px"), and helpful hints.
  * - Double-Click Reset: Double-clicking the resize handle restores that column's default width.
  * - Shift + Double-Click: Resets ALL column widths in that table to default.
- * - LocalStorage Persistence: Saved per-table and per-column under `muavin_col_widths_{tableKey}`.
+ * - Central Persistence: Saved per-table and per-column under `muavin_col_widths_{tableKey}`.
  * - Zero Conflict: Disables sorting/navigation clicks during active resize drag.
  * - MutationObserver: Automatically applies stored column widths to dynamically mounted/filtered tables.
  */
@@ -97,7 +97,7 @@ function getColumnLabel(th: HTMLElement, index: number): string {
 }
 
 /**
- * Loads stored column widths for a table from localStorage/sessionStorage
+ * Loads stored column widths for a table from central storage
  */
 export function getTableColumnWidths(tableKey: string): ColumnWidthsMap {
   try {
@@ -115,7 +115,7 @@ export function getTableColumnWidths(tableKey: string): ColumnWidthsMap {
 }
 
 /**
- * Saves column widths for a table to localStorage/sessionStorage
+ * Saves column widths for a table to central storage
  */
 export function saveTableColumnWidths(tableKey: string, widths: ColumnWidthsMap) {
   try {
@@ -150,15 +150,9 @@ export function resetTableColumnWidths(tableKey?: string) {
     }
   } else {
     // Clear all tables matching muavin_col_widths_
-    const keysToRemove: string[] = [];
-    if (typeof window !== "undefined" && window.localStorage) {
-      for (let i = 0; i < window.localStorage.length; i++) {
-        const key = window.localStorage.key(i);
-        if (key && key.startsWith("muavin_col_widths_")) {
-          keysToRemove.push(key);
-        }
-      }
-    }
+    const keysToRemove = getStoredStorageKeys().filter((key) =>
+      key.startsWith("muavin_col_widths_")
+    );
     keysToRemove.forEach((k) => safeRemoveStorageItem(k));
     document.querySelectorAll<HTMLElement>("table").forEach((t) => clearTableCustomWidths(t));
   }
@@ -221,7 +215,7 @@ export function applyColumnWidth(table: HTMLElement, colIndex: number, widthPx: 
 }
 
 /**
- * Scans DOM tables and restores their saved column widths from localStorage
+ * Scans DOM tables and restores their saved column widths from central storage
  */
 export function applySavedColumnWidths(targetTable?: HTMLElement) {
   const tables = targetTable ? [targetTable] : Array.from(document.querySelectorAll<HTMLElement>("table"));
@@ -460,7 +454,7 @@ export function useDataGridColumnResizing(options?: UseDataGridColumnResizingOpt
         if (hudBadge) hudBadge.style.display = "none";
         if (activeTh) activeTh.classList.remove("col-resize-hover");
 
-        // Save customized width to localStorage
+        // Save customized width to central storage
         if (activeTable && activeTh && activeTableKey && activeColKey) {
           const finalWidth = parseInt(activeTh.dataset.customWidth || "", 10);
           if (!isNaN(finalWidth) && finalWidth >= minColWidth && finalWidth <= maxColWidth) {

@@ -31,6 +31,8 @@ import {
   Upload,
   Save,
   AlertTriangle,
+  Cloud,
+  Landmark,
 } from "lucide-react";
 import {
   CompanyItem,
@@ -39,6 +41,8 @@ import {
   isAdminOrSysAdmin,
   isKeyAllowedInList,
   toggleModuleSelectionWithSubModules,
+  isCompanyLogoEnabled,
+  isCompanyDefaultBankEnabled,
 } from "../types";
 import { getLocalUsersBackup, saveUserProfile, UserProfileData } from "../lib/firebase";
 import {
@@ -54,6 +58,7 @@ import {
   appendCityDistrictToAddress,
   compileStructuredAddress,
   getCompaniesList,
+  safeGetStorageItem,
 } from "../utils/storage";
 import { Logo } from "./Logo";
 import { readAndOptimizeLogoFile, clampLogoScale } from "../utils/logoUpload";
@@ -90,9 +95,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
   const effectiveUser = React.useMemo(() => {
     if (currentUser) return currentUser;
     try {
-      const stored =
-        localStorage.getItem("muavin_active_user") ||
-        sessionStorage.getItem("muavin_active_user");
+      const stored = safeGetStorageItem("muavin_active_user");
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
@@ -126,12 +129,33 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
   );
   const [isFetchingTaxpayerInfo, setIsFetchingTaxpayerInfo] = useState(false);
   const [taxpayerFetchFeedback, setTaxpayerFetchFeedback] = useState<string | null>(null);
-  const [defaultBankAccountName, setDefaultBankAccountName] = useState(
-    initialCompany?.defaultBankAccountName || initialCompany?.companyTitle || initialCompany?.companyName || ""
+  const [useDefaultBankInfo, setUseDefaultBankInfo] = useState<boolean>(() =>
+    isCompanyDefaultBankEnabled(initialCompany)
   );
-  const [defaultBankName, setDefaultBankName] = useState(initialCompany?.defaultBankName || "");
-  const [defaultBankIban, setDefaultBankIban] = useState(initialCompany?.defaultBankIban || "");
-  const [logoUrl, setLogoUrl] = useState(initialCompany?.logoUrl || "/logo.svg");
+  const [defaultBankAccountName, setDefaultBankAccountName] = useState(() =>
+    isCompanyDefaultBankEnabled(initialCompany)
+      ? initialCompany?.defaultBankAccountName ||
+        initialCompany?.companyTitle ||
+        initialCompany?.companyName ||
+        ""
+      : ""
+  );
+  const [defaultBankName, setDefaultBankName] = useState(() =>
+    isCompanyDefaultBankEnabled(initialCompany) ? initialCompany?.defaultBankName || "" : ""
+  );
+  const [defaultBankIban, setDefaultBankIban] = useState(() =>
+    isCompanyDefaultBankEnabled(initialCompany) ? initialCompany?.defaultBankIban || "" : ""
+  );
+  const [useCorporateLogo, setUseCorporateLogo] = useState<boolean>(() =>
+    isCompanyLogoEnabled(initialCompany)
+  );
+  const [logoUrl, setLogoUrl] = useState(() =>
+    isCompanyLogoEnabled(initialCompany) &&
+    initialCompany?.logoUrl &&
+    initialCompany.logoUrl !== "/logo.svg"
+      ? initialCompany.logoUrl
+      : ""
+  );
   const [logoScale, setLogoScale] = useState<number>(clampLogoScale(initialCompany?.logoScale ?? 1));
   const modalLogoInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -140,6 +164,7 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
     if (!file) return;
     try {
       const optimized = await readAndOptimizeLogoFile(file);
+      setUseCorporateLogo(true);
       setLogoUrl(optimized);
       setLogoScale(1);
     } catch (err: any) {
@@ -170,37 +195,28 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
           (cleanInitEmail && u.email?.toLowerCase() === cleanInitEmail))
     );
 
-    if (storedComp.moduleRestrictionEnabled && Array.isArray(storedComp.allowedModules) && storedComp.allowedModules.length > 0) {
+    if (Array.isArray(storedComp.allowedModules) && storedComp.allowedModules.length > 0) {
       return {
         restrictionEnabled: true,
         modules: storedComp.allowedModules,
       };
     }
     if (Array.isArray(linkedUser?.allowedModules) && linkedUser.allowedModules.length > 0) {
-      const isRestricted = linkedUser.allowedModules.length < SYSTEM_COMPANY_MODULES.length;
       return {
-        restrictionEnabled: isRestricted,
+        restrictionEnabled: true,
         modules: linkedUser.allowedModules as string[],
       };
     }
-    if (Array.isArray(storedComp.allowedModules) && storedComp.allowedModules.length > 0) {
-      return {
-        restrictionEnabled: Boolean(storedComp.moduleRestrictionEnabled),
-        modules: storedComp.allowedModules,
-      };
-    }
     return {
-      restrictionEnabled: false,
-      modules: SYSTEM_COMPANY_MODULES.map((m) => m.id),
+      restrictionEnabled: true,
+      modules: ["dashboard"],
     };
   }, [initialCompany]);
 
-  // Modül Kısıtlaması State
-  const [moduleRestrictionEnabled, setModuleRestrictionEnabled] = useState<boolean>(
-    initialPermissionSnapshot.restrictionEnabled
-  );
+  // Modül Kısıtlaması State (Her zaman aktif - sadece seçilen modüller görünür)
+  const [moduleRestrictionEnabled] = useState<boolean>(true);
   const [allowedModules, setAllowedModules] = useState<string[]>(
-    initialPermissionSnapshot.modules
+    () => (mode === "create" ? ["dashboard"] : initialPermissionSnapshot.modules)
   );
   const [modulesModifiedByAdmin, setModulesModifiedByAdmin] = useState<boolean>(false);
 
@@ -722,9 +738,9 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       mode !== "create"
         ? getCompaniesList().find((c) => c.id === companyId) || initialCompany
         : null;
-    const targetModules = moduleRestrictionEnabled
+    const targetModules = allowedModules.includes("dashboard")
       ? allowedModules
-      : SYSTEM_COMPANY_MODULES.map((m) => m.id);
+      : ["dashboard", ...allowedModules];
 
     const finalLoginUser = effectiveUsername ? effectiveUsername.toLowerCase() : undefined;
     const finalLoginPass = effectivePassword;
@@ -775,13 +791,14 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
           address.trim() ||
           "",
       },
-      defaultBankAccountName: defaultBankAccountName.trim() || (companyTitle.trim() || cleanName),
-      defaultBankName: defaultBankName.trim() || undefined,
-      defaultBankIban: defaultBankIban.trim() || undefined,
+      useDefaultBankInfo,
+      defaultBankAccountName: useDefaultBankInfo
+        ? defaultBankAccountName.trim() || companyTitle.trim() || cleanName
+        : undefined,
+      defaultBankName: useDefaultBankInfo ? defaultBankName.trim() || undefined : undefined,
+      defaultBankIban: useDefaultBankInfo ? defaultBankIban.trim() || undefined : undefined,
       isDefault: initialCompany?.isDefault || false,
-      moduleRestrictionEnabled: shouldUpdateModules
-        ? moduleRestrictionEnabled
-        : latestStoredComp?.moduleRestrictionEnabled,
+      moduleRestrictionEnabled: true,
       allowedModules: shouldUpdateModules
         ? targetModules
         : latestStoredComp?.allowedModules,
@@ -809,7 +826,8 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
       eArsivPrefix: (eArsivPrefix || "EAR").trim().toUpperCase(),
       eArsivNextNumber: (eArsivNextNumber || "").trim() || undefined,
       defaultInvoicePrefix: (defaultInvoicePrefix || eFaturaPrefix || "GIB").trim().toUpperCase(),
-      logoUrl: logoUrl || "/logo.svg",
+      useCorporateLogo,
+      logoUrl: useCorporateLogo && logoUrl && logoUrl !== "/logo.svg" ? logoUrl : "",
       logoScale: clampLogoScale(logoScale),
       createdAt: initialCompany?.createdAt || new Date().toISOString(),
     };
@@ -832,9 +850,13 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
         );
 
         const resolvedUserId = existingUser?.userId || `usr_${finalLoginUser}`;
-        const resolvedUserModules: AppModuleKey[] | undefined = shouldUpdateModules
+        const resolvedUserModules: AppModuleKey[] = shouldUpdateModules
           ? (targetModules as AppModuleKey[])
-          : existingUser?.allowedModules;
+          : Array.isArray(existingUser?.allowedModules)
+          ? existingUser.allowedModules
+          : Array.isArray(latestStoredComp?.allowedModules)
+          ? (latestStoredComp.allowedModules as AppModuleKey[])
+          : ["dashboard"];
 
         const newUserProfile: UserProfileData = {
           userId: resolvedUserId,
@@ -847,7 +869,8 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
           taxNumber: selectedTenantNumber || "1234567890",
           selectedLogoId: existingUser?.selectedLogoId || 1,
           selectedLogoName: existingUser?.selectedLogoName || "E-MUAVİN Kurumsal Logo",
-          selectedLogoUrl: logoUrl || "/logo.svg",
+          selectedLogoUrl:
+            useCorporateLogo && logoUrl && logoUrl !== "/logo.svg" ? logoUrl : "/logo.svg",
           role: loginRole || existingUser?.role || "Firma Yöneticisi",
           allowedModules: resolvedUserModules,
           passwordPlain: finalLoginPass,
@@ -1010,97 +1033,147 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                 />
               </div>
 
-              <div className="sm:col-span-2 p-3.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 flex items-center justify-center shrink-0 min-w-[156px] min-h-[52px]">
-                      <Logo size="sm" src={logoUrl || "/logo.svg"} scale={logoScale} />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                        Şirkete Özel Kurumsal Logo (Muavin Logosuna Büyült / Küçült)
-                      </span>
-                      <span className="text-[11px] text-slate-500 block">
-                        Yüklenen logo görseli otomatik olarak Muavin logosu standart ölçüsüne (200x50 px) uyarlanır; dilerseniz aşağıdan büyültebilir veya küçültebilirsiniz.
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
+              <div
+                className={`sm:col-span-2 p-3.5 rounded-xl border transition-colors ${
+                  useCorporateLogo
+                    ? "bg-white dark:bg-slate-900 border-[#0f6bae] dark:border-sky-500"
+                    : "bg-slate-50/70 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                <label className="flex items-start justify-between gap-3 cursor-pointer select-none">
+                  <div className="flex items-start gap-2.5 min-w-0">
                     <input
-                      ref={modalLogoInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                      onChange={handleModalLogoUpload}
-                      className="hidden"
+                      type="checkbox"
+                      checked={useCorporateLogo}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setUseCorporateLogo(checked);
+                        if (!checked) {
+                          setLogoUrl("");
+                        }
+                      }}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 dark:border-slate-600 accent-[#0f6bae] cursor-pointer shrink-0"
                     />
-                    <button
-                      type="button"
-                      onClick={() => modalLogoInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Logo Yükle</span>
-                    </button>
-                    {logoUrl && logoUrl !== "/logo.svg" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLogoUrl("/logo.svg");
-                          setLogoScale(1);
-                        }}
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-semibold cursor-pointer"
-                      >
-                        Sıfırla
-                      </button>
-                    )}
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Cloud className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                        <span>Kurumsal Logo & Google Cloud Console Entegrasyonu</span>
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Menüde ve faturalarda şirkete özel logo kullanılacaksa kutucuğu işaretleyin; kullanılmayacaksa boş geçin.
+                      </span>
+                    </div>
                   </div>
-                </div>
+                  <span
+                    className={`text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+                      useCorporateLogo
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-slate-400 dark:text-slate-500"
+                    }`}
+                  >
+                    {useCorporateLogo ? "Seçili" : "Boş Geçildi"}
+                  </span>
+                </label>
 
-                {/* Muavin Logosuna Büyült / Küçült Kontrolleri */}
-                <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-[#0f6bae]" />
-                    <span>Muavin Logosu Ölçeği:</span>
-                    <span className="px-1.5 py-0.5 rounded bg-blue-100 text-[#0f6bae] font-mono font-bold">
-                      %{Math.round(clampLogoScale(logoScale) * 100)}
-                    </span>
+                {useCorporateLogo && (
+                  <div className="mt-3 pt-3 border-t border-slate-200/80 dark:border-slate-700 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 flex items-center justify-center shrink-0 min-w-[156px] min-h-[52px]">
+                          {logoUrl && logoUrl !== "/logo.svg" ? (
+                            <Logo size="sm" src={logoUrl} scale={logoScale} />
+                          ) : (
+                            <span className="text-[11px] font-medium text-slate-400">
+                              Logo seçilmedi
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 block">
+                            Şirket Kurumsal Logosu (Google Cloud Senkronlu)
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                            Yüklenen logo 200x50 px fatura ve menü standardına otomatik uyarlanır.
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <input
+                          ref={modalLogoInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                          onChange={handleModalLogoUpload}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => modalLogoInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all whitespace-nowrap"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Logo Yükle</span>
+                        </button>
+                        {logoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLogoUrl("");
+                              setLogoScale(1);
+                            }}
+                            className="px-2.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap"
+                          >
+                            Temizle
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-[#0f6bae]" />
+                        <span>Logo Ölçeği:</span>
+                        <span className="font-mono tabular-nums font-bold text-[#0f6bae] dark:text-sky-400">
+                          %{Math.round(clampLogoScale(logoScale) * 100)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setLogoScale((s) => clampLogoScale(s - 0.1))}
+                          className="px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                          title="Logoyu Küçült"
+                        >
+                          - Küçült
+                        </button>
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={1.5}
+                          step={0.05}
+                          value={clampLogoScale(logoScale)}
+                          onChange={(e) => setLogoScale(clampLogoScale(Number(e.target.value)))}
+                          className="w-24 accent-[#0f6bae] cursor-pointer"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setLogoScale(1)}
+                          className="px-2 py-1 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg font-mono tabular-nums text-[10px] font-bold text-[#0f6bae] dark:text-sky-400 cursor-pointer whitespace-nowrap"
+                          title="Standart Boyuta Eşitle (%100)"
+                        >
+                          %100
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogoScale((s) => clampLogoScale(s + 0.1))}
+                          className="px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer whitespace-nowrap"
+                          title="Logoyu Büyült"
+                        >
+                          + Büyült
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setLogoScale((s) => clampLogoScale(s - 0.1))}
-                      className="px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
-                      title="Logoyu Küçült"
-                    >
-                      - Küçült
-                    </button>
-                    <input
-                      type="range"
-                      min={0.5}
-                      max={1.5}
-                      step={0.05}
-                      value={clampLogoScale(logoScale)}
-                      onChange={(e) => setLogoScale(clampLogoScale(Number(e.target.value)))}
-                      className="w-24 accent-[#0f6bae] cursor-pointer"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setLogoScale(1)}
-                      className="px-2 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-[10px] font-bold text-[#0f6bae] cursor-pointer"
-                      title="Tam Muavin Logosu Boyutuna Eşitle (%100)"
-                    >
-                      Muavin Boyutu (%100)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLogoScale((s) => clampLogoScale(s + 0.1))}
-                      className="px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
-                      title="Logoyu Büyült"
-                    >
-                      + Büyült
-                    </button>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -1843,50 +1916,94 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
               </div>
             </div>
 
-            {/* Banka Bilgileri (Hesap Adı, Banka Adı, IBAN) */}
-            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
-              <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <Building className="w-3.5 h-3.5 text-[#0f6bae]" />
-                Banka Bilgileri (Hesap Adı, Banka Adı ve IBAN)
-              </h5>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Hesap Adı (Alıcı / Hesap Sahibi)
-                  </label>
+            {/* Faturaya Basılacak Varsayılan Banka Bilgileri (Opsiyonel Seçilebilir Kutucuk) */}
+            <div
+              className={`p-3.5 rounded-xl border transition-colors ${
+                useDefaultBankInfo
+                  ? "bg-white dark:bg-slate-900 border-[#0f6bae] dark:border-sky-500"
+                  : "bg-slate-50/70 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+              }`}
+            >
+              <label className="flex items-start justify-between gap-3 cursor-pointer select-none">
+                <div className="flex items-start gap-2.5 min-w-0">
                   <input
-                    type="text"
-                    placeholder={companyTitle || companyName || "Örn: Şirket Ticari TL Hesabı"}
-                    value={defaultBankAccountName}
-                    onChange={(e) => setDefaultBankAccountName(e.target.value)}
-                    className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:border-[#0f6bae] outline-none"
+                    type="checkbox"
+                    checked={useDefaultBankInfo}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setUseDefaultBankInfo(checked);
+                      if (checked && !defaultBankAccountName.trim()) {
+                        setDefaultBankAccountName(companyTitle || companyName || "");
+                      }
+                      if (!checked) {
+                        setDefaultBankAccountName("");
+                        setDefaultBankName("");
+                        setDefaultBankIban("");
+                      }
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 dark:border-slate-600 accent-[#0f6bae] cursor-pointer shrink-0"
                   />
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Landmark className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                      <span>Faturaya Basılacak Varsayılan Banka Bilgileri</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Düzenlenen faturalara varsayılan banka ve IBAN basılacaksa kutucuğu işaretleyin; kullanılmayacaksa boş geçin.
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Banka Adı ve Şubesi
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Örn: Garanti BBVA - Merkez Şb."
-                    value={defaultBankName}
-                    onChange={(e) => setDefaultBankName(e.target.value)}
-                    className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
-                  />
+                <span
+                  className={`text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+                    useDefaultBankInfo
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-slate-400 dark:text-slate-500"
+                  }`}
+                >
+                  {useDefaultBankInfo ? "Seçili" : "Boş Geçildi"}
+                </span>
+              </label>
+
+              {useDefaultBankInfo && (
+                <div className="mt-3 pt-3 border-t border-slate-200/80 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Hesap Adı (Alıcı / Hesap Sahibi)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={companyTitle || companyName || "Örn: Şirket Ticari TL Hesabı"}
+                      value={defaultBankAccountName}
+                      onChange={(e) => setDefaultBankAccountName(e.target.value)}
+                      className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:border-[#0f6bae] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Banka Adı ve Şubesi
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Örn: İş Bankası - Merkez Şb."
+                      value={defaultBankName}
+                      onChange={(e) => setDefaultBankName(e.target.value)}
+                      className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:border-[#0f6bae] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      IBAN Numarası
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="TR00 0000 0000 0000 0000 0000 00"
+                      value={defaultBankIban}
+                      onChange={(e) => setDefaultBankIban(e.target.value)}
+                      className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono tabular-nums focus:border-[#0f6bae] outline-none"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    IBAN Numarası
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="TR00 0000 0000 0000 0000 0000 00"
-                    value={defaultBankIban}
-                    onChange={(e) => setDefaultBankIban(e.target.value)}
-                    className="w-full h-9 px-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono focus:border-[#0f6bae] outline-none"
-                  />
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -1901,15 +2018,9 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
                 </span>
               </h4>
               <div className="flex items-center gap-2">
-                {moduleRestrictionEnabled ? (
-                  <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
-                    🔒 {allowedModules.length} / {SYSTEM_COMPANY_MODULES.length} Modül & Alt Modül Açık
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
-                    ✨ Tüm Modüller & Alt Modüller Serbest ({SYSTEM_COMPANY_MODULES.length})
-                  </span>
-                )}
+                <span className="text-[11px] font-bold font-mono tabular-nums text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-700">
+                  {allowedModules.length} / {SYSTEM_COMPANY_MODULES.length} Modül Seçili
+                </span>
               </div>
             </div>
 
@@ -1928,47 +2039,22 @@ const CompanyModalInner: React.FC<CompanyModalProps> = ({
               </div>
             ) : (
               <>
-                {/* Toggle Switch Kutusu */}
                 <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="space-y-0.5">
                     <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                       <Shield className="w-4 h-4 text-[#0f6bae]" />
-                      <span>Bu Şirkete Özel Ana Modül ve Alt Modül Kısıtlaması Uygula</span>
+                      <span>Zorunlu Modül Kısıtlaması Her Zaman Aktif</span>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      {moduleRestrictionEnabled
-                        ? "Kısıtlama aktif: Yalnızca aşağıda seçili ana modüller ve alt modüller menüde ve sistemde aktif olacaktır."
-                        : "Kısıtlama kapalı: Şirket tüm muhasebe, sektörel, operasyonel modüllere ve alt modüllere tam erişebilir."}
+                      Bu şirket ve bağlı kullanıcıları yalnızca aşağıda işaretlediğiniz ana modülleri ve alt modülleri görebilir; seçilmeyen tüm ekranlar ve kısayollar gizlenir.
                     </p>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModulesModifiedByAdmin(true);
-                      setModuleRestrictionEnabled(!moduleRestrictionEnabled);
-                    }}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto ${
-                      moduleRestrictionEnabled
-                        ? "bg-amber-500 hover:bg-amber-600 text-white shadow-xs"
-                        : "bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
-                    }`}
-                  >
-                    {moduleRestrictionEnabled ? (
-                      <>
-                        <Lock className="w-3.5 h-3.5" />
-                        <span>Kısıtlama Aktif</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span>Tüm Modüller Açık</span>
-                      </>
-                    )}
-                  </button>
+                  <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-white shadow-xs flex items-center gap-1.5 shrink-0 self-start sm:self-auto whitespace-nowrap">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Kısıtlama Aktif</span>
+                  </span>
                 </div>
 
-                {/* Kısıtlama Aktif ise Seçim Matrisi (Ana Modüller + Alt Modüller) */}
                 {moduleRestrictionEnabled && (
                   <div className="space-y-3 bg-slate-50/70 dark:bg-slate-900/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
                     {/* Hızlı Şablon Butonları */}

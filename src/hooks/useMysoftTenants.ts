@@ -11,6 +11,7 @@ import {
   writeStoredMysoftTenantVkn,
 } from "../utils/mysoftTenantStorage";
 import { isAdminOrSysAdmin } from "../types";
+import { safeGetStorageItem } from "../utils/storage";
 
 export interface UseMysoftTenantsOptions {
   /** Pre-select when it matches a linked tenant (company profile VKN, etc.). */
@@ -27,9 +28,7 @@ export interface UseMysoftTenantsOptions {
 
 function getEffectiveUserFromStorage(): { id?: string; email?: string; role?: string; username?: string } | null {
   try {
-    const raw =
-      localStorage.getItem("muavin_active_user") ||
-      sessionStorage.getItem("muavin_active_user");
+    const raw = safeGetStorageItem("muavin_active_user");
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;

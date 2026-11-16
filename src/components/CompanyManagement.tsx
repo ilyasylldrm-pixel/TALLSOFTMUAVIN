@@ -10,6 +10,8 @@ import {
   isModuleOrSubModuleAllowed,
   isCompanyMysoftMatched,
   resolveCompanyMysoftTenantIdentifier,
+  isCompanyLogoEnabled,
+  isCompanyDefaultBankEnabled,
 } from "../types";
 import { UserProfile } from "./AuthModal";
 import { ExportButtons } from "./ExportButtons";
@@ -19,7 +21,9 @@ import { GibPortalModal } from "./GibPortalModal";
 import { MysoftTenantPicker } from "./MysoftTenantPicker";
 import { CompanyModal } from "./CompanyModal";
 import { DetailPageLayout } from "./common/DetailPageLayout";
+import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { useDetailNavigation } from "../hooks/useDetailNavigation";
+import { useTheme } from "../context/ThemeContext";
 import { Settings } from "./Settings";
 import { Logo } from "./Logo";
 import { AdminMysoftLogMonitorPanel } from "./AdminMysoftLogMonitorPanel";
@@ -109,6 +113,7 @@ import {
   Upload,
   Terminal,
   AlertTriangle,
+  Landmark,
 } from "lucide-react";
 
 export type CompanySubTab = "profile" | "companies" | "mysoft" | "branches" | "warehouses" | "settings" | "logs";
@@ -164,16 +169,31 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   currentUser,
   settingsInitialTab,
 }) => {
+  const { theme } = useTheme();
   const [currentSubTab, setCurrentSubTab] = useState<CompanySubTab>(activeSubTab);
+  const [branchStatusFilter, setBranchStatusFilter] = useState<"all" | "active" | "passive">("all");
+  const [warehouseStatusFilter, setWarehouseStatusFilter] = useState<"all" | "active" | "passive">("all");
+  const [pendingEntityDelete, setPendingEntityDelete] = useState<{
+    type: "branch" | "warehouse";
+    id: string;
+    name: string;
+  } | null>(null);
 
   React.useEffect(() => {
     if (activeSubTab) {
-      setCurrentSubTab(activeSubTab);
+      if (!isAdminOrSysAdmin(currentUser) && ["settings", "companies", "mysoft", "logs"].includes(activeSubTab)) {
+        setCurrentSubTab("profile");
+      } else {
+        setCurrentSubTab(activeSubTab);
+      }
     }
-  }, [activeSubTab]);
+  }, [activeSubTab, currentUser]);
 
   // Sync internal subtab if controlled externally
   const handleTabChange = (tab: CompanySubTab) => {
+    if (!isAdminOrSysAdmin(currentUser) && ["settings", "companies", "mysoft", "logs"].includes(tab)) {
+      return;
+    }
     setCurrentSubTab(tab);
     if (onSelectSubTab) onSelectSubTab(tab);
   };
@@ -190,6 +210,35 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     [rawCompanies]
   );
   const currentActiveCompanyId = activeCompanyId || getActiveCompanyId();
+  const activeCompanyRecord = React.useMemo(
+    () => effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null,
+    [effectiveCompanies, currentActiveCompanyId]
+  );
+
+  React.useEffect(() => {
+    const subKeyMap: Record<CompanySubTab, string> = {
+      profile: "company_profile",
+      branches: "company_branches",
+      warehouses: "company_warehouses",
+      settings: "company_settings",
+      companies: "company_companies",
+      mysoft: "company_mysoft",
+      logs: "company_logs",
+    };
+    const key = subKeyMap[currentSubTab] || "company_profile";
+    if (!isModuleOrSubModuleAllowed(key, "company", currentUser, activeCompanyRecord)) {
+      const candidates: CompanySubTab[] = isAdminOrSysAdmin(currentUser)
+        ? ["profile", "branches", "warehouses", "settings"]
+        : ["profile", "branches", "warehouses"];
+      const firstAllowed = candidates.find((c) =>
+        isModuleOrSubModuleAllowed(subKeyMap[c], "company", currentUser, activeCompanyRecord)
+      );
+      if (firstAllowed && firstAllowed !== currentSubTab) {
+        setCurrentSubTab(firstAllowed);
+        if (onSelectSubTab) onSelectSubTab(firstAllowed);
+      }
+    }
+  }, [currentSubTab, currentUser, activeCompanyRecord]);
 
   const lastCompaniesJsonRef = React.useRef<string>("");
   React.useEffect(() => {
@@ -264,6 +313,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           savedComp.id === currentActiveCompanyId
             ? profileForm || settings
             : compStored.settings || settings;
+        const modalLogoEnabled = isCompanyLogoEnabled(savedComp);
+        const modalBankEnabled = isCompanyDefaultBankEnabled(savedComp);
         const nextCompSettings: CompanySettings = {
           ...baseSettings,
           companyName: savedComp.companyName || baseSettings.companyName,
@@ -281,9 +332,15 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           address: savedComp.address ?? baseSettings.address,
           city: savedComp.city ?? baseSettings.city,
           district: savedComp.district ?? baseSettings.district,
-          defaultBankAccountName: savedComp.defaultBankAccountName ?? baseSettings.defaultBankAccountName,
-          defaultBankName: savedComp.defaultBankName ?? baseSettings.defaultBankName,
-          defaultBankIban: savedComp.defaultBankIban ?? baseSettings.defaultBankIban,
+          useCorporateLogo: modalLogoEnabled,
+          logoUrl: modalLogoEnabled
+            ? (savedComp.logoUrl && savedComp.logoUrl !== "/logo.svg" ? savedComp.logoUrl : "")
+            : "",
+          logoScale: savedComp.logoScale ?? baseSettings.logoScale ?? 1,
+          useDefaultBankInfo: modalBankEnabled,
+          defaultBankAccountName: modalBankEnabled ? (savedComp.defaultBankAccountName ?? "") : "",
+          defaultBankName: modalBankEnabled ? (savedComp.defaultBankName ?? "") : "",
+          defaultBankIban: modalBankEnabled ? (savedComp.defaultBankIban ?? "") : "",
           tenantIdentifierNumber: savedComp.tenantIdentifierNumber || baseSettings.tenantIdentifierNumber,
           mysoftMatchedType: savedComp.mysoftMatchedType ?? baseSettings.mysoftMatchedType,
           mysoftStatus: savedComp.mysoftStatus ?? baseSettings.mysoftStatus,
@@ -947,13 +1004,17 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         compEntry?.logoUrl ||
         (currentCompId === "comp_default" ? branding.logoUrl : undefined);
       const targetScale = compEntry?.logoScale ?? branding.logoScale;
-      if (targetLogo) {
+      if (targetLogo && targetLogo !== "/logo.svg") {
         setProfileForm((prev) => {
+          if (!isCompanyLogoEnabled(prev)) {
+            return prev;
+          }
           if (prev.logoUrl && prev.logoUrl !== "/logo.svg") {
             return prev;
           }
           return {
             ...prev,
+            useCorporateLogo: true,
             logoUrl: targetLogo,
             logoScale: prev.logoScale ?? targetScale ?? 1,
           };
@@ -982,13 +1043,19 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       const compEntry = res?.companyLogos?.[currentCompId];
       const fetchedUrl = compEntry?.logoUrl || res?.logoUrl;
       const fetchedScale = clampLogoScale(compEntry?.logoScale ?? res?.logoScale ?? 1);
-      if (fetchedUrl) {
+      if (fetchedUrl && fetchedUrl !== "/logo.svg") {
         setCloudBranding(res);
-        setProfileForm((prev) => ({ ...prev, logoUrl: fetchedUrl, logoScale: fetchedScale }));
-        onSaveSettings({ ...settings, ...profileForm, logoUrl: fetchedUrl, logoScale: fetchedScale });
+        const nextForm: CompanySettings = {
+          ...profileForm,
+          useCorporateLogo: true,
+          logoUrl: fetchedUrl,
+          logoScale: fetchedScale,
+        };
+        setProfileForm(nextForm);
+        onSaveSettings({ ...settings, ...nextForm });
         setCloudSyncStatus("Şirket logosu Google Cloud Console Firestore veritabanından başarıyla çekildi!");
       } else {
-        setCloudSyncStatus("Cloud Console bağlantısı sağlandı.");
+        setCloudSyncStatus("Cloud Console bağlantısı sağlandı (kayıtlı özel şirket logosu bulunamadı).");
       }
     } catch (err: any) {
       setCloudSyncStatus("Cloud Console bağlantı uyarısı: " + (err?.message || "Bilinmiyor"));
@@ -1003,7 +1070,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     setCloudLogoLoading(true);
     setCloudSyncStatus(null);
     try {
-      const targetUrl = profileForm.logoUrl || "/logo.svg";
+      const targetUrl = profileForm.logoUrl && profileForm.logoUrl !== "/logo.svg" ? profileForm.logoUrl : "";
+      if (!targetUrl) {
+        setCloudSyncStatus("Cloud'a kaydetmek için önce bir şirket logosu yükleyin veya URL girin.");
+        return;
+      }
       const targetScale = clampLogoScale(profileForm.logoScale ?? 1);
       const currentCompId = activeCompanyId || getActiveCompanyId();
       const saved = await saveCloudLogo(
@@ -1016,7 +1087,14 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         currentCompId
       );
       setCloudBranding(saved);
-      onSaveSettings({ ...settings, ...profileForm, logoUrl: targetUrl, logoScale: targetScale });
+      const nextForm: CompanySettings = {
+        ...profileForm,
+        useCorporateLogo: true,
+        logoUrl: targetUrl,
+        logoScale: targetScale,
+      };
+      setProfileForm(nextForm);
+      onSaveSettings({ ...settings, ...nextForm });
       setCloudSyncStatus("Şirket logosu ve ölçeği Google Cloud Console Firestore veritabanına kaydedildi!");
     } catch (err: any) {
       setCloudSyncStatus("Kaydetme hatası: " + (err?.message || "Bilinmiyor"));
@@ -1036,7 +1114,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
     try {
       const optimizedDataUrl = await readAndOptimizeLogoFile(file);
       const currentCompId = activeCompanyId || getActiveCompanyId();
-      const nextProfile = { ...profileForm, logoUrl: optimizedDataUrl, logoScale: 1 };
+      const nextProfile: CompanySettings = {
+        ...profileForm,
+        useCorporateLogo: true,
+        logoUrl: optimizedDataUrl,
+        logoScale: 1,
+      };
       setProfileForm(nextProfile);
       onSaveSettings({ ...settings, ...nextProfile });
       const saved = await saveCloudLogo(
@@ -1061,7 +1144,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
   const handleAdjustLogoScale = (nextScaleValue: number) => {
     const clamped = clampLogoScale(nextScaleValue);
-    const nextProfile = { ...profileForm, logoScale: clamped };
+    const nextProfile: CompanySettings = {
+      ...profileForm,
+      useCorporateLogo: true,
+      logoScale: clamped,
+    };
     setProfileForm(nextProfile);
     onSaveSettings({ ...settings, ...nextProfile });
   };
@@ -1073,10 +1160,13 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       const resolvedName = (sourceForm.companyName || sourceForm.companyTitle || "Aktif Şirket").trim();
       const resolvedTitle = (sourceForm.companyTitle || sourceForm.companyName || resolvedName).trim();
       const cleanTax = String(sourceForm.taxNumber || "").replace(/\D/g, "").trim();
-      const resolvedBankHolder =
-        sourceForm.defaultBankAccountName && sourceForm.defaultBankAccountName.trim()
+      const logoEnabled = isCompanyLogoEnabled(sourceForm);
+      const bankEnabled = isCompanyDefaultBankEnabled(sourceForm);
+      const resolvedBankHolder = bankEnabled
+        ? sourceForm.defaultBankAccountName && sourceForm.defaultBankAccountName.trim()
           ? sourceForm.defaultBankAccountName
-          : resolvedTitle;
+          : resolvedTitle
+        : "";
 
       const cleanedProfile: CompanySettings = {
         ...sourceForm,
@@ -1092,9 +1182,16 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         phone: (sourceForm.phone ?? "").trim(),
         email: (sourceForm.email ?? "").trim(),
         website: (sourceForm.website ?? "").trim(),
+        useCorporateLogo: logoEnabled,
+        logoUrl: logoEnabled
+          ? sourceForm.logoUrl && sourceForm.logoUrl !== "/logo.svg"
+            ? sourceForm.logoUrl
+            : ""
+          : "",
+        useDefaultBankInfo: bankEnabled,
         defaultBankAccountName: resolvedBankHolder,
-        defaultBankName: sourceForm.defaultBankName ?? "",
-        defaultBankIban: sourceForm.defaultBankIban ?? "",
+        defaultBankName: bankEnabled ? (sourceForm.defaultBankName ?? "") : "",
+        defaultBankIban: bankEnabled ? (sourceForm.defaultBankIban ?? "") : "",
       };
 
       onSaveSettings(cleanedProfile);
@@ -1129,6 +1226,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           doorNo: cleanedProfile.doorNo,
           postalCode: cleanedProfile.postalCode,
           addressDetails: cleanedProfile.addressDetails,
+          useDefaultBankInfo: bankEnabled,
           defaultBankAccountName: cleanedProfile.defaultBankAccountName,
           defaultBankName: cleanedProfile.defaultBankName,
           defaultBankIban: cleanedProfile.defaultBankIban,
@@ -1139,7 +1237,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
           eArsivNextNumber: cleanedProfile.eArsivNextNumber || activeComp.eArsivNextNumber,
           defaultInvoicePrefix: cleanedProfile.defaultInvoicePrefix || activeComp.defaultInvoicePrefix,
           invoiceDesign: cleanedProfile.invoiceDesign || activeComp.invoiceDesign,
-          logoUrl: cleanedProfile.logoUrl || activeComp.logoUrl,
+          useCorporateLogo: logoEnabled,
+          logoUrl: cleanedProfile.logoUrl || "",
           logoScale: cleanedProfile.logoScale ?? activeComp.logoScale,
           moduleRestrictionEnabled: activeComp.moduleRestrictionEnabled,
           allowedModules: activeComp.allowedModules,
@@ -1573,1856 +1672,1227 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
   };
 
   // Filtered Lists
-  const filteredBranches = effectiveBranches.filter(
-    (b) =>
-      b.name.toLowerCase().includes(branchSearch.toLowerCase()) ||
-      b.code.toLowerCase().includes(branchSearch.toLowerCase()) ||
-      (b.address.city || "").toLowerCase().includes(branchSearch.toLowerCase()) ||
-      (b.address.district || "").toLowerCase().includes(branchSearch.toLowerCase())
-  );
+  const filteredBranches = effectiveBranches.filter((b) => {
+    if (branchStatusFilter !== "all" && b.status !== branchStatusFilter) return false;
+    const q = branchSearch.toLowerCase();
+    return (
+      b.name.toLowerCase().includes(q) ||
+      b.code.toLowerCase().includes(q) ||
+      (b.address.city || "").toLowerCase().includes(q) ||
+      (b.address.district || "").toLowerCase().includes(q)
+    );
+  });
 
-  const filteredWarehouses = warehouses.filter(
-    (w) =>
-      w.name.toLowerCase().includes(warehouseSearch.toLowerCase()) ||
-      w.code.toLowerCase().includes(warehouseSearch.toLowerCase()) ||
-      w.address.city.toLowerCase().includes(warehouseSearch.toLowerCase()) ||
-      w.address.district.toLowerCase().includes(warehouseSearch.toLowerCase())
+  const filteredWarehouses = warehouses.filter((w) => {
+    if (warehouseStatusFilter !== "all" && w.status !== warehouseStatusFilter) return false;
+    const q = warehouseSearch.toLowerCase();
+    return (
+      w.name.toLowerCase().includes(q) ||
+      w.code.toLowerCase().includes(q) ||
+      (w.address.city || "").toLowerCase().includes(q) ||
+      (w.address.district || "").toLowerCase().includes(q)
+    );
+  });
+
+  const isCompanySubAllowed = (subKey: string) =>
+    isModuleOrSubModuleAllowed(subKey, "company", currentUser, activeCompanyRecord);
+  const isSettingsGroupActive = ["settings", "companies", "mysoft", "logs"].includes(currentSubTab);
+  const isActiveCompanyMysoftReady = isCompanyMysoftMatched(
+    activeCompanyRecord,
+    profileForm || settings
   );
+  const canViewLogsTab =
+    isActiveCompanyMysoftReady && isCompanySubAllowed("company_logs");
+
+  const cleanTaxNo = String(profileForm.taxNumber || settings.taxNumber || "").replace(/\D/g, "");
+  const headerStats = [
+    {
+      label: "Mükellefiyet",
+      value: profileForm.taxpayerType || "Kurumsal",
+      tone: "neutral" as const,
+    },
+    {
+      label: cleanTaxNo.length === 11 ? "TCKN" : "VKN",
+      value: cleanTaxNo || "Tanımsız",
+      tone: cleanTaxNo ? ("info" as const) : ("warning" as const),
+    },
+    ...(isCompanySubAllowed("company_branches")
+      ? [
+          {
+            label: "Şubeler",
+            value: `${effectiveBranches.filter((b) => b.status === "active").length} / ${effectiveBranches.length}`,
+            tone: "neutral" as const,
+          },
+        ]
+      : []),
+    ...(isCompanySubAllowed("company_warehouses")
+      ? [
+          {
+            label: "Depolar",
+            value: `${warehouses.filter((w) => w.status === "active").length} / ${warehouses.length}`,
+            tone: "neutral" as const,
+          },
+        ]
+      : []),
+    ...(isActiveCompanyMysoftReady
+      ? [
+          {
+            label: "e-Belge",
+            value: "Mysoft Bağlı",
+            tone: "success" as const,
+          },
+        ]
+      : []),
+  ];
+
+  const renderHeaderAction = () => {
+    if (currentSubTab === "profile" && isCompanySubAllowed("company_profile")) {
+      return (
+        <div className="flex items-center gap-2">
+          {isSaved && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Kaydedildi</span>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => handleSaveProfile()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Save className="w-3.5 h-3.5 shrink-0" />
+            <span>Firma Bilgilerini Kaydet</span>
+          </button>
+        </div>
+      );
+    }
+    if (currentSubTab === "branches" && isCompanySubAllowed("company_branches")) {
+      return (
+        <button
+          type="button"
+          onClick={() => handleOpenBranchModal()}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+          style={{ backgroundColor: theme.primaryColor }}
+        >
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span>Yeni Şube Ekle</span>
+        </button>
+      );
+    }
+    if (currentSubTab === "warehouses" && isCompanySubAllowed("company_warehouses")) {
+      return (
+        <button
+          type="button"
+          onClick={() => handleOpenWarehouseModal()}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+          style={{ backgroundColor: theme.primaryColor }}
+        >
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span>Yeni Depo Ekle</span>
+        </button>
+      );
+    }
+    if (currentSubTab === "companies" && isAdmin) {
+      return (
+        <button
+          type="button"
+          onClick={handleOpenAddCompany}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+          style={{ backgroundColor: theme.primaryColor }}
+        >
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span>Yeni Şirket Ekle</span>
+        </button>
+      );
+    }
+    return null;
+  };
 
   return (
-    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-[#131b2e] rounded-lg p-6 text-white shadow-2xs border border-[#222a3d]">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex flex-col items-center text-center gap-3 flex-1">
-            <div className="w-12 h-12 rounded-md bg-[#0f6bae] text-white flex items-center justify-center shrink-0 shadow-2xs border border-[#2b82c5]/40 mx-auto">
-              <Building2 className="w-6 h-6" />
-            </div>
-            <div className="flex-1 text-center">
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <span className="bg-[#0f6bae]/20 text-[#c6cdff] border border-[#0f6bae]/30 text-[10px] font-semibold px-2.5 py-0.5 rounded uppercase tracking-wider">
-                  Firma Yönetim Modülü
-                </span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-editorial font-medium text-white tracking-tight text-center">
-                {settings.companyName || "Firma Bilgileri"}
-              </h1>
-              <p className="text-xs sm:text-sm text-[#9daec3] mt-1 max-w-2xl mx-auto font-sans leading-relaxed text-center">
-                Şirketinizin resmi kimlik bilgilerini, şubelerinizi, depolarınızı ve sistem ayarlarınızı (çoklu şirket & Mysoft eşleştirme dahil) bu modülden yönetin.
-              </p>
-            </div>
-          </div>
+    <div className="w-full px-4 sm:px-6 py-6 space-y-6">
+      <ModuleEntranceHeader
+        id="company-management-header"
+        badge="Kurumsal Yapı & Sicil Yönetimi"
+        badgeIcon={<Building2 className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400" />}
+        title={profileForm.companyName || settings.companyName || "Firma Bilgileri"}
+        subtitle={
+          profileForm.companyTitle && profileForm.companyTitle !== profileForm.companyName
+            ? `${profileForm.companyTitle} — Resmi vergi sicili, merkez adresi, şube ve depo organizasyonu.`
+            : "Şirketinizin resmi kimlik bilgilerini, merkez adresini, şubelerini, depolarını ve sistem yapılandırmasını yönetin."
+        }
+        stats={headerStats}
+        actions={renderHeaderAction()}
+      >
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+          {isCompanySubAllowed("company_profile") && (
+            <button
+              type="button"
+              onClick={() => handleTabChange("profile")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                currentSubTab === "profile"
+                  ? "text-white shadow-2xs"
+                  : "bg-white/85 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
+              }`}
+              style={currentSubTab === "profile" ? { backgroundColor: theme.primaryColor } : {}}
+            >
+              <Building className="w-3.5 h-3.5 shrink-0" />
+              <span>Firma Profili & Adres</span>
+            </button>
+          )}
 
-          <div className="flex items-center justify-center gap-2 shrink-0">
-            <div className="bg-[#0f172a]/70 border border-[#283044] rounded-md p-3 text-center min-w-[105px] shadow-2xs text-white">
-              <div className="text-lg font-bold text-white font-mono">{branches.length}</div>
-              <div className="text-[10px] text-[#9daec3] font-semibold">Kayıtlı Şube</div>
-            </div>
-            <div className="bg-[#0f172a]/70 border border-[#283044] rounded-md p-3 text-center min-w-[105px] shadow-2xs text-white">
-              <div className="text-lg font-bold text-white font-mono">{warehouses.length}</div>
-              <div className="text-[10px] text-[#9daec3] font-semibold">Kayıtlı Depo</div>
-            </div>
-          </div>
+          {isCompanySubAllowed("company_branches") && (
+            <button
+              type="button"
+              onClick={() => handleTabChange("branches")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                currentSubTab === "branches"
+                  ? "text-white shadow-2xs"
+                  : "bg-white/85 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
+              }`}
+              style={currentSubTab === "branches" ? { backgroundColor: theme.primaryColor } : {}}
+            >
+              <Store className="w-3.5 h-3.5 shrink-0" />
+              <span>Şubeler</span>
+              <span
+                className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded-md ${
+                  currentSubTab === "branches"
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {effectiveBranches.length}
+              </span>
+            </button>
+          )}
+
+          {isCompanySubAllowed("company_warehouses") && (
+            <button
+              type="button"
+              onClick={() => handleTabChange("warehouses")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                currentSubTab === "warehouses"
+                  ? "text-white shadow-2xs"
+                  : "bg-white/85 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
+              }`}
+              style={currentSubTab === "warehouses" ? { backgroundColor: theme.primaryColor } : {}}
+            >
+              <WarehouseIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Depolar</span>
+              <span
+                className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded-md ${
+                  currentSubTab === "warehouses"
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {warehouses.length}
+              </span>
+            </button>
+          )}
+
+          {isAdmin && isCompanySubAllowed("company_settings") && (
+            <button
+              type="button"
+              onClick={() => handleTabChange("settings")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                isSettingsGroupActive
+                  ? "text-white shadow-2xs"
+                  : "bg-white/85 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
+              }`}
+              style={isSettingsGroupActive ? { backgroundColor: theme.primaryColor } : {}}
+            >
+              <SettingsIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Sistem Ayarları</span>
+            </button>
+          )}
         </div>
+      </ModuleEntranceHeader>
 
-        {/* Sub-tab Navigation for Firma Bilgileri (Firma Profili, Şubeler, Depolar, Sistem Ayarları) */}
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mt-6 pt-4 border-t border-[#283044]">
+      {isAdmin && isSettingsGroupActive && (
+        <div
+          className="bg-white dark:bg-slate-900 p-3 rounded-2xl border shadow-2xs flex flex-wrap items-center justify-between gap-3"
+          style={{ borderColor: theme.cardBorder }}
+        >
           <div className="flex items-center gap-2 overflow-x-auto">
-            {(() => {
-              const activeCompObj =
-                effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
-              const isCompanySubAllowed = (subKey: string) =>
-                isModuleOrSubModuleAllowed(subKey, "company", currentUser, activeCompObj);
-              const isSettingsActive = ["settings", "companies", "mysoft", "logs"].includes(currentSubTab);
-
-              return (
-                <>
-                  {isCompanySubAllowed("company_profile") && (
-                    <button
-                      onClick={() => handleTabChange("profile")}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        currentSubTab === "profile"
-                          ? "bg-[#0f6bae] text-white shadow-2xs"
-                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-                      }`}
-                    >
-                      <Building className={`w-4 h-4 ${currentSubTab === "profile" ? "text-white" : "text-[#83b8ff]"}`} />
-                      <span>Firma Profili & Adres</span>
-                    </button>
-                  )}
-
-                  {isCompanySubAllowed("company_branches") && (
-                    <button
-                      onClick={() => handleTabChange("branches")}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        currentSubTab === "branches"
-                          ? "bg-[#0f6bae] text-white shadow-2xs"
-                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-                      }`}
-                    >
-                      <Store className={`w-4 h-4 ${currentSubTab === "branches" ? "text-white" : "text-[#83b8ff]"}`} />
-                      <span>Şubeler ({branches.length})</span>
-                    </button>
-                  )}
-
-                  {isCompanySubAllowed("company_warehouses") && (
-                    <button
-                      onClick={() => handleTabChange("warehouses")}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        currentSubTab === "warehouses"
-                          ? "bg-[#0f6bae] text-white shadow-2xs"
-                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-                      }`}
-                    >
-                      <WarehouseIcon className={`w-4 h-4 ${currentSubTab === "warehouses" ? "text-white" : "text-[#83b8ff]"}`} />
-                      <span>Depolar ({warehouses.length})</span>
-                    </button>
-                  )}
-
-                  {isCompanySubAllowed("company_settings") && (
-                    <button
-                      onClick={() => handleTabChange("settings")}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        isSettingsActive
-                          ? "bg-[#0f6bae] text-white shadow-2xs"
-                          : "bg-[#1a233a] hover:bg-[#202c48] text-[#c6cdff] border border-[#283044]"
-                      }`}
-                    >
-                      <SettingsIcon className={`w-4 h-4 ${isSettingsActive ? "text-white" : "text-[#83b8ff]"}`} />
-                      <span>Sistem Ayarları</span>
-                    </button>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      </div>
-
-      {/* Sistem Ayarları Alt Modül Sekme Çubuğu (Genel Ayarlar, Şirketler & Çoklu Şirket, Mysoft VKN/TCKN Eşleştirme, Log İzleme) */}
-      {["settings", "companies", "mysoft", "logs"].includes(currentSubTab) && (() => {
-        const activeCompObj = effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
-        const isMysoftMatched = isCompanyMysoftMatched(activeCompObj, profileForm || settings);
-
-        return (
-          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && isCompanySubAllowed("company_settings") && (
               <button
                 type="button"
                 onClick={() => handleTabChange("settings")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   currentSubTab === "settings"
-                    ? "bg-[#0f6bae] text-white shadow-2xs"
-                    : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+                    ? "text-white shadow-2xs"
+                    : "bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700"
                 }`}
+                style={currentSubTab === "settings" ? { backgroundColor: theme.primaryColor } : {}}
               >
-                <SettingsIcon className="w-4 h-4" />
+                <SettingsIcon className="w-3.5 h-3.5 shrink-0" />
                 <span>Genel & Sistem Ayarları</span>
               </button>
-
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("companies")}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    currentSubTab === "companies"
-                      ? "bg-[#0f6bae] text-white shadow-2xs"
-                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-                  }`}
-                >
-                  <Building2 className="w-4 h-4" />
-                  <span>Şirketler & Çoklu Şirket ({effectiveCompanies.length})</span>
-                </button>
-              )}
-
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("mysoft")}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    currentSubTab === "mysoft"
-                      ? "bg-[#0f6bae] text-white shadow-2xs"
-                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
-                  }`}
-                >
-                  <Globe className="w-4 h-4" />
-                  <span>Mysoft VKN/TCKN Eşleştirme</span>
-                </button>
-              )}
-
-              {isMysoftMatched && (
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("logs")}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    currentSubTab === "logs"
-                      ? "bg-amber-500 text-slate-950 shadow-2xs"
-                      : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
-                  }`}
-                >
-                  <Terminal className="w-4 h-4" />
-                  <span>Log İzleme Ekranı</span>
-                </button>
-              )}
-            </div>
+            )}
 
             {isAdmin && (
               <button
                 type="button"
-                onClick={handleOpenAddCompany}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-98 shrink-0"
+                onClick={() => handleTabChange("companies")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  currentSubTab === "companies"
+                    ? "text-white shadow-2xs"
+                    : "bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700"
+                }`}
+                style={currentSubTab === "companies" ? { backgroundColor: theme.primaryColor } : {}}
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Yeni Şirket Ekle</span>
+                <Building2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Şirketler & Çoklu Şirket</span>
+                <span
+                  className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded-md ${
+                    currentSubTab === "companies"
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                  }`}
+                >
+                  {effectiveCompanies.length}
+                </span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("mysoft")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  currentSubTab === "mysoft"
+                    ? "text-white shadow-2xs"
+                    : "bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700"
+                }`}
+                style={currentSubTab === "mysoft" ? { backgroundColor: theme.primaryColor } : {}}
+              >
+                <Globe className="w-3.5 h-3.5 shrink-0" />
+                <span>Mysoft VKN / TCKN Eşleştirme</span>
+              </button>
+            )}
+
+            {canViewLogsTab && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("logs")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  currentSubTab === "logs"
+                    ? "text-white shadow-2xs"
+                    : "bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700"
+                }`}
+                style={currentSubTab === "logs" ? { backgroundColor: theme.primaryColor } : {}}
+              >
+                <Terminal className="w-3.5 h-3.5 shrink-0" />
+                <span>API Log İzleme</span>
               </button>
             )}
           </div>
-        );
-      })()}
+
+          {isAdmin && currentSubTab !== "companies" && (
+            <button
+              type="button"
+              onClick={handleOpenAddCompany}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+              <span>Yeni Şirket Ekle</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* SUB-TAB 1: FIRMA PROFILI & RESMI BILGILER */}
       {currentSubTab === "profile" && (
-        <form onSubmit={handleSaveProfile} noValidate className="space-y-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-          {/* Üst Hızlı Kayıt & Durum Barı */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-[#0f6bae]" />
-              <span className="text-xs font-bold text-slate-800">
-                Firma Profili, Adres ve Banka Bilgileri Yönetimi
-              </span>
-              {isSaved && (
-                <span className="ml-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  Değişiklikler Kaydedildi!
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => handleSaveProfile()}
-              className="bg-[#0f6bae] hover:bg-[#0a5287] text-white text-xs font-bold px-4 py-2 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1.5"
+        <form onSubmit={handleSaveProfile} noValidate className="space-y-6">
+          {/* ÜST BÖLÜM (ZORUNLU KİMLİK & ADRES): RESMİ KİMLİK + İLETİŞİM (7 KOLON) | MERKEZ ADRES YAPILANDIRMASI (5 KOLON) */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
+            {/* SOL: RESMİ ŞİRKET KİMLİK, VERGİ SİCİL & KURUMSAL İLETİŞİM BİLGİLERİ */}
+            <section
+              className="xl:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border p-5 sm:p-6 shadow-2xs flex flex-col justify-between space-y-5"
+              style={{ borderColor: theme.cardBorder }}
             >
-              <Save className="w-3.5 h-3.5 text-white" />
-              <span>Firma Bilgilerini Kaydet</span>
-            </button>
-          </div>
-
-          {/* 1. ADRES BİLGİLERİ */}
-          <AddressSelector
-            title="Merkez Genel Adres Detayları"
-            address={{
-              country: profileForm.country || profileForm.addressDetails?.country || "Türkiye",
-              city: profileForm.city || profileForm.addressDetails?.city || "İstanbul",
-              district: profileForm.district ?? profileForm.addressDetails?.district ?? "",
-              neighborhood: profileForm.neighborhood ?? profileForm.addressDetails?.neighborhood ?? "",
-              street: profileForm.street ?? profileForm.addressDetails?.street ?? "",
-              buildingNo: profileForm.buildingNo ?? profileForm.addressDetails?.buildingNo ?? "",
-              doorNo: profileForm.doorNo ?? profileForm.addressDetails?.doorNo ?? "",
-              postalCode: profileForm.postalCode ?? profileForm.addressDetails?.postalCode ?? "",
-              fullAddress: profileForm.address ?? profileForm.addressDetails?.fullAddress ?? "",
-            }}
-            onChange={(updatedDetails) => {
-              updateAndAutoSaveProfile((prev) => ({
-                ...prev,
-                city: updatedDetails.city,
-                district: updatedDetails.district,
-                neighborhood: updatedDetails.neighborhood,
-                street: updatedDetails.street,
-                buildingNo: updatedDetails.buildingNo,
-                doorNo: updatedDetails.doorNo,
-                postalCode: updatedDetails.postalCode,
-                country: updatedDetails.country,
-                address: updatedDetails.fullAddress || prev.address,
-                addressDetails: updatedDetails,
-              }));
-            }}
-          />
-
-          {/* 2. RESMİ ŞİRKET KİMLİK BİLGİLERİ */}
-          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-2xs space-y-5 text-xs">
-            <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#0f6bae]" /> Resmi Şirket Kimlik Bilgileri
-              </span>
-              <div className="flex items-center gap-3">
-                {isSaved && (
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" />
-                    Bilgiler Kaydedildi
-                  </span>
-                )}
-                <span className="text-[10px] text-slate-500 font-normal">Değişiklik yapıldığında otomatik ve kalıcı olarak kaydedilir</span>
-                <button
-                  type="button"
-                  onClick={() => handleSaveProfile()}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
-                >
-                  <Save className="w-3 h-3 text-white" />
-                  <span>Kaydet</span>
-                </button>
-              </div>
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Kısa Şirket Adı *
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.companyName || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, companyName: val }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-bold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Mükellefiyet Türü *
-                </label>
-                <select
-                  value={profileForm.taxpayerType || "Anonim Şirket"}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, taxpayerType: val }), true);
-                  }}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold cursor-pointer focus:bg-white focus:border-[#0f6bae]"
-                >
-                  {TAXPAYER_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Tam Resmi Ticari Ünvan *
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.companyTitle || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, companyTitle: val }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block font-bold text-slate-700 mb-1">
-                  VKN / TCKN No
-                </label>
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    maxLength={11}
-                    value={profileForm.taxNumber}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, taxNumber: val }));
-                      const clean = val.replace(/\D/g, "").trim();
-                      if (clean.length === 10 || clean.length === 11) {
-                        void handleFetchProfileTaxpayer(clean);
-                      }
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    placeholder="10 haneli VKN veya 11 haneli TCKN..."
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleFetchProfileTaxpayer()}
-                    disabled={
-                      isFetchingTaxpayer ||
-                      !profileForm.taxNumber ||
-                      (profileForm.taxNumber.replace(/\D/g, "").length !== 10 &&
-                        profileForm.taxNumber.replace(/\D/g, "").length !== 11)
-                    }
-                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition-all shadow-2xs"
-                    title="VKN/TCKN ile GİB Mükellef ve Adres Bilgilerini Getir"
-                  >
-                    {isFetchingTaxpayer ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    )}
-                    <span>Bilgileri Getir</span>
-                  </button>
-                </div>
-                {vknFetchFeedback && (
-                  <p className="text-[11px] font-semibold text-emerald-700 mt-1 animate-fadeIn">
-                    {vknFetchFeedback}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Vergi Dairesi
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.taxOffice || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, taxOffice: val }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="Vergi Dairesi..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Ticaret Sicil / Esnaf Sicil / MERSİS No
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="Ticaret Sicil No"
-                    title="Ticaret Sicil Numarası (Yazıldıysa faturada gösterilir)"
-                    value={profileForm.tradeRegisterNo || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, tradeRegisterNo: val }));
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono text-[11px] focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Esnaf Sicil No"
-                    title="Esnaf Sicil Numarası (Yazıldıysa faturada gösterilir)"
-                    value={profileForm.esnafSicilNo || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, esnafSicilNo: val }));
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono text-[11px] focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                  <input
-                    type="text"
-                    placeholder="MERSİS No"
-                    title="MERSİS Numarası (Yazıldıysa faturada gösterilir)"
-                    value={profileForm.mersisNo || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, mersisNo: val }));
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono text-[11px] focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Ticaret Sicil No veya Esnaf Sicil No girildiğinde e-Fatura ve e-Arşiv belgelerinde otomatik gösterilir.
-                </p>
-              </div>
-            </div>
-
-            {/* Adres Alanları: Mahalle, Cadde-Sokak, İlçe, İl ve Tam Açık Adres */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Mahalle
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.neighborhood || ""}
-                  onChange={(e) => {
-                    const nextNeighborhood = e.target.value;
-                    updateAndAutoSaveProfile((prev) => {
-                      const nextAddress = compileStructuredAddress(
-                        nextNeighborhood,
-                        prev.street || prev.addressDetails?.street || "",
-                        prev.district,
-                        prev.city,
-                        prev.buildingNo,
-                        prev.doorNo,
-                        prev.postalCode
-                      ) || prev.address || "";
-                      return {
-                        ...prev,
-                        neighborhood: nextNeighborhood,
-                        address: nextAddress,
-                        addressDetails: {
-                          ...(prev.addressDetails || {
-                            country: prev.country || "Türkiye",
-                            city: prev.city || "",
-                            district: prev.district || "",
-                          }),
-                          neighborhood: nextNeighborhood,
-                          fullAddress: nextAddress,
-                        },
-                      };
-                    });
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="Mahalle..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Cadde - Sokak
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.street || profileForm.addressDetails?.street || ""}
-                  onChange={(e) => {
-                    const nextStreet = e.target.value;
-                    updateAndAutoSaveProfile((prev) => {
-                      const nextAddress = compileStructuredAddress(
-                        prev.neighborhood,
-                        nextStreet,
-                        prev.district,
-                        prev.city,
-                        prev.buildingNo,
-                        prev.doorNo,
-                        prev.postalCode
-                      ) || prev.address || "";
-                      return {
-                        ...prev,
-                        street: nextStreet,
-                        address: nextAddress,
-                        addressDetails: {
-                          ...(prev.addressDetails || {
-                            country: prev.country || "Türkiye",
-                            city: prev.city || "",
-                            district: prev.district || "",
-                          }),
-                          street: nextStreet,
-                          fullAddress: nextAddress,
-                        },
-                      };
-                    });
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="Cadde, Sokak, No..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  İlçe
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.district || ""}
-                  onChange={(e) => {
-                    const nextDistrict = e.target.value;
-                    updateAndAutoSaveProfile((prev) => {
-                      const nextAddress = compileStructuredAddress(
-                        prev.neighborhood,
-                        prev.street || prev.addressDetails?.street || "",
-                        nextDistrict,
-                        prev.city,
-                        prev.buildingNo,
-                        prev.doorNo,
-                        prev.postalCode
-                      ) || appendCityDistrictToAddress(
-                        prev.address || "",
-                        prev.city,
-                        nextDistrict,
-                        prev.city,
-                        prev.district
-                      );
-                      return {
-                        ...prev,
-                        district: nextDistrict,
-                        address: nextAddress,
-                        addressDetails: {
-                          ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
-                          city: prev.city || "",
-                          district: nextDistrict,
-                          neighborhood: prev.neighborhood || "",
-                          fullAddress: nextAddress,
-                        },
-                      };
-                    });
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="İlçe..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  İl
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.city || ""}
-                  onChange={(e) => {
-                    const nextCity = e.target.value;
-                    updateAndAutoSaveProfile((prev) => {
-                      const nextAddress = compileStructuredAddress(
-                        prev.neighborhood,
-                        prev.street || prev.addressDetails?.street || "",
-                        prev.district,
-                        nextCity,
-                        prev.buildingNo,
-                        prev.doorNo,
-                        prev.postalCode
-                      ) || appendCityDistrictToAddress(
-                        prev.address || "",
-                        nextCity,
-                        prev.district,
-                        prev.city,
-                        prev.district
-                      );
-                      return {
-                        ...prev,
-                        city: nextCity,
-                        address: nextAddress,
-                        addressDetails: {
-                          ...(prev.addressDetails || { country: prev.country || "Türkiye" }),
-                          city: nextCity,
-                          district: prev.district || "",
-                          neighborhood: prev.neighborhood || "",
-                          fullAddress: nextAddress,
-                        },
-                      };
-                    });
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  placeholder="İl..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                Tam Adres (Mahalle, Cadde-Sokak, İlçe, İl)
-              </label>
-              <textarea
-                rows={2}
-                value={profileForm.address || ""}
-                onChange={(e) => {
-                  const nextAddr = e.target.value;
-                  updateAndAutoSaveProfile((prev) => ({
-                    ...prev,
-                    address: nextAddr,
-                    addressDetails: {
-                      ...(prev.addressDetails || {
-                        country: prev.country || "Türkiye",
-                        city: prev.city || "",
-                        district: prev.district || "",
-                        neighborhood: prev.neighborhood || "",
-                      }),
-                      fullAddress: nextAddr,
-                    },
-                  }));
-                }}
-                onBlur={() => handleSaveProfile()}
-                placeholder="Mahalle, Cadde-Sokak, İlçe, İl..."
-                className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-              />
-            </div>
-
-            {isAdmin &&
-              !isCompanyMysoftMatched(
-                effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null,
-                profileForm || settings,
-              ) && (
-                <div className="rounded-lg border border-[#c6cdff] bg-[#eaedff]/50 p-4 space-y-3">
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
                   <div>
-                    <h4 className="text-sm font-extrabold text-[#131b2e] flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-[#0f6bae]" />
-                      Mysoft e-Belge mükellefi
-                    </h4>
-                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                      Demo firma VKN yerine erişim anahtarınıza bağlı gerçek mükellef VKN/TCKN
-                      seçin. Fatura kesimi ve e-belge senkronu bu değeri kullanır.
+                    <h2 className="text-base font-editorial font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                      <span>Resmi Şirket Kimlik & Vergi Sicil Bilgileri</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      e-Fatura, e-Arşiv ve resmi beyannamelerde yer alacak ticari ünvan, sicil ve iletişim kayıtları.
                     </p>
                   </div>
-                  <MysoftTenantPicker
-                    variant="compact"
-                    hideWhenMatched={true}
-                    currentUser={currentUser}
-                    hintVkn={profileForm.tenantIdentifierNumber}
-                    onSelect={(vkn) =>
-                      updateAndAutoSaveProfile(
-                        (prev) => ({
-                          ...prev,
-                          tenantIdentifierNumber: vkn,
-                          mysoftCredentials: {
-                            ...prev.mysoftCredentials,
-                            tenantIdentifierNumber: vkn,
-                          },
-                        }),
-                        true
-                      )
-                    }
-                  />
-                  {profileForm.tenantIdentifierNumber && (
-                    <p className="text-[11px] font-mono text-[#0f6bae] font-bold">
-                      Kayıtlı Mysoft tenantIdentifierNumber: {profileForm.tenantIdentifierNumber}
-                    </p>
-                  )}
-                </div>
-              )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-[#0f6bae]" /> Telefon Numarası
-                  </label>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                      (profileForm.phone || "").trim()
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {(profileForm.phone || "").trim() ? "✓ Faturada Gösterilir" : "İsteğe Bağlı"}
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {isSaved ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Otomatik kaydedildi</span>
+                      </span>
+                    ) : (
+                      "Alanlardan çıkıldığında otomatik kaydedilir"
+                    )}
                   </span>
                 </div>
-                <div className="relative">
-                  <input
-                    type="tel"
-                    autoComplete="tel"
-                    placeholder="Örn: 0 (212) 000 00 00 veya 0 (5XX) XXX XX XX"
-                    value={profileForm.phone || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, phone: val }));
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 pr-8 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                  {(profileForm.phone || "").trim() && (
-                    <button
-                      type="button"
-                      onClick={() => updateAndAutoSaveProfile((prev) => ({ ...prev, phone: "" }), true)}
-                      title="Telefon numarasını temizle"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5 text-[#0f6bae]" /> E-posta Adresi
-                  </label>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                      (profileForm.email || "").trim()
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {(profileForm.email || "").trim() ? "✓ Faturada Gösterilir" : "İsteğe Bağlı"}
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="email"
-                    autoComplete="email"
-                    placeholder="Örn: muhasebe@firma.com.tr"
-                    value={profileForm.email || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, email: val }));
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 pr-8 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                  {(profileForm.email || "").trim() && (
-                    <button
-                      type="button"
-                      onClick={() => updateAndAutoSaveProfile((prev) => ({ ...prev, email: "" }), true)}
-                      title="E-posta adresini temizle"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5 text-[#0f6bae]" /> Web Sitesi
-                  </label>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                      (profileForm.website || "").trim()
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {(profileForm.website || "").trim() ? "✓ Faturada Gösterilir" : "İsteğe Bağlı"}
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Örn: www.firma.com.tr"
-                    value={profileForm.website || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      updateAndAutoSaveProfile((prev) => ({ ...prev, website: val }));
-                    }}
-                    onBlur={() => handleSaveProfile()}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 pr-8 font-medium focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                  />
-                  {(profileForm.website || "").trim() && (
-                    <button
-                      type="button"
-                      onClick={() => updateAndAutoSaveProfile((prev) => ({ ...prev, website: "" }), true)}
-                      title="Web sitesini temizle"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Banka IBAN & Hesap Adı Detayları */}
-          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-2xs space-y-4 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-slate-900">
-                  Faturaya Basılacak Varsayılan Banka Bilgileri
-                </h3>
-                {isSaved && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    Kaydedildi
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {(profileForm.defaultBankName || profileForm.defaultIban || profileForm.defaultBankAccountName) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const cleared = {
-                        ...profileForm,
-                        defaultBankName: "",
-                        defaultBankAccountName: "",
-                        defaultIban: "",
-                      };
-                      setProfileForm(cleared);
-                      handleSaveProfile(cleared);
-                    }}
-                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
-                    title="Varsayılan banka ve IBAN bilgilerini sil"
-                  >
-                    <Trash2 className="w-3 h-3 text-rose-700" />
-                    <span>Banka Bilgilerini Sil</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleSaveProfile()}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center gap-1"
-                >
-                  <Save className="w-3 h-3 text-white" />
-                  <span>Banka & Firma Bilgilerini Kaydet</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Banka Adı (ve Şubesi)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Örn: Garanti BBVA - Levent Ticari Şb."
-                  value={profileForm.defaultBankName || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, defaultBankName: val }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Hesap Sahibi (Alıcı / Hesap Adı Ünvanı)
-                </label>
-                <input
-                  type="text"
-                  placeholder={profileForm.companyTitle || profileForm.companyName || "Örn: Muavin Bilişim A.Ş."}
-                  value={
-                    profileForm.defaultBankAccountName !== undefined
-                      ? profileForm.defaultBankAccountName
-                      : profileForm.companyTitle || profileForm.companyName || ""
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, defaultBankAccountName: val }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-semibold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  IBAN Numarası
-                </label>
-                <input
-                  type="text"
-                  placeholder="TR00 0000 0000 0000 0000 0000 00"
-                  value={profileForm.defaultBankIban || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    updateAndAutoSaveProfile((prev) => ({ ...prev, defaultBankIban: val }));
-                  }}
-                  onBlur={() => handleSaveProfile()}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono font-bold focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
-                />
-              </div>
-            </div>
-
-            {/* Faturada Görünecek Banka Adı, Hesap Sahibi ve IBAN Canlı Gösterim Kartı */}
-            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1 flex-1 min-w-0">
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-sky-900 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-sky-700" />
-                  <span>Faturaya Basılacak Varsayılan Banka Bilgileri Gösterimi</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 text-xs">
-                  <div className="bg-white/90 border border-sky-100 rounded-lg px-3 py-2">
-                    <span className="text-[10px] font-bold text-slate-500 block">Banka Adı:</span>
-                    <span className="font-extrabold text-slate-900">
-                      {profileForm.defaultBankName || "Belirtilmedi"}
-                    </span>
-                  </div>
-                  <div className="bg-white/90 border border-sky-100 rounded-lg px-3 py-2">
-                    <span className="text-[10px] font-bold text-slate-500 block">Hesap Sahibi:</span>
-                    <span className="font-extrabold text-slate-900">
-                      {profileForm.defaultBankAccountName ||
-                        profileForm.companyTitle ||
-                        profileForm.companyName ||
-                        "Belirtilmedi"}
-                    </span>
-                  </div>
-                  <div className="bg-white/90 border border-sky-100 rounded-lg px-3 py-2">
-                    <span className="text-[10px] font-bold text-slate-500 block">IBAN:</span>
-                    <span className="font-mono font-extrabold text-sky-950">
-                      {profileForm.defaultBankIban || "Belirtilmedi"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. KURUMSAL LOGO & GOOGLE CLOUD CONSOLE ENTEGRASYONU */}
-          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-2xs space-y-5 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Cloud className="w-4 h-4 text-[#0f6bae]" />
-                  Kurumsal Logo & Google Cloud Console Entegrasyonu
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Logonuz Google Cloud Console Firestore veritabanı (<code>system_settings/branding</code>) üzerinden canlı olarak senkronize edilir.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Cloud Console Bağlı
-                </span>
-              </div>
-            </div>
-
-            {cloudSyncStatus && (
-              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-[#0f6bae] text-xs font-medium flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{cloudSyncStatus}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Logo Önizleme Kartları */}
-              <div className="lg:col-span-5 space-y-3">
-                <label className="block font-bold text-slate-700">
-                  Canlı Şirket Logosu Önizleme ({profileForm.companyName || "Aktif Şirket"})
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Koyu Arka Plan Önizleme */}
-                  <div className="bg-[#0A192F] p-4 rounded-xl border border-slate-700 flex flex-col items-center justify-center text-center gap-2 min-h-[110px] shadow-xs overflow-hidden">
-                    <Logo
-                      size="lg"
-                      src={profileForm.logoUrl || "/logo.svg"}
-                      scale={profileForm.logoScale ?? 1}
-                    />
-                    <span className="text-[10px] font-semibold text-slate-400">Koyu Tema (Sidebar)</span>
-                  </div>
-
-                  {/* Açık Arka Plan Önizleme */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center gap-2 min-h-[110px] shadow-xs overflow-hidden">
-                    <Logo
-                      size="lg"
-                      src={profileForm.logoUrl || "/logo.svg"}
-                      scale={profileForm.logoScale ?? 1}
-                    />
-                    <span className="text-[10px] font-semibold text-slate-500">Açık Tema (Fatura / Belge)</span>
-                  </div>
-                </div>
-
-                {/* Muavin Logosuna Büyült veya Küçült Kontrol Kutusu */}
-                <div className="bg-blue-50/70 rounded-xl p-3 border border-blue-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-800">
-                      Muavin Logosuna Büyült / Küçült
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-[#0f6bae] text-white font-mono text-[10px] font-bold">
-                      %{Math.round(clampLogoScale(profileForm.logoScale ?? 1) * 100)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleAdjustLogoScale(clampLogoScale(profileForm.logoScale ?? 1) - 0.1)}
-                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold cursor-pointer"
-                    >
-                      - Küçült
-                    </button>
+                {/* Ünvan ve Mükellefiyet Satırı */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+                  <div className="md:col-span-4">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      Kısa Şirket Adı *
+                    </label>
                     <input
-                      type="range"
-                      min={0.5}
-                      max={1.5}
-                      step={0.05}
-                      value={clampLogoScale(profileForm.logoScale ?? 1)}
-                      onChange={(e) => handleAdjustLogoScale(Number(e.target.value))}
-                      className="flex-1 accent-[#0f6bae] cursor-pointer"
+                      type="text"
+                      value={profileForm.companyName || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, companyName: val }));
+                      }}
+                      onBlur={() => handleSaveProfile()}
+                      placeholder="Örn: Muavin Bilişim"
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-semibold focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
                     />
-                    <button
-                      type="button"
-                      onClick={() => handleAdjustLogoScale(1)}
-                      className="px-2 py-1.5 bg-blue-100 hover:bg-blue-200 text-[#0f6bae] rounded-lg text-[10px] font-bold cursor-pointer"
-                      title="Tam Muavin Logosu Boyutuna Eşitle (%100)"
-                    >
-                      %100
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAdjustLogoScale(clampLogoScale(profileForm.logoScale ?? 1) + 0.1)}
-                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold cursor-pointer"
-                    >
-                      + Büyült
-                    </button>
                   </div>
-                  <p className="text-[10px] text-slate-500">
-                    Yüklenen logo otomatik olarak Muavin logosu (200x50 px) çerçevesine sığdırılır; buradan büyütebilir veya küçültebilirsiniz.
-                  </p>
+
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      Mükellefiyet Türü *
+                    </label>
+                    <select
+                      value={profileForm.taxpayerType || "Anonim Şirket"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, taxpayerType: val }), true);
+                      }}
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-semibold cursor-pointer focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
+                    >
+                      {TAXPAYER_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-5">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      Tam Resmi Ticari Ünvan *
+                    </label>
+                    <input
+                      type="text"
+                      value={profileForm.companyTitle || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, companyTitle: val }));
+                      }}
+                      onBlur={() => handleSaveProfile()}
+                      placeholder="Örn: Muavin Bilişim Teknolojileri A.Ş."
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
+                    />
+                  </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200 text-[11px] text-slate-600 space-y-1">
-                  <div className="flex items-center justify-between text-slate-500">
-                    <span>Cloud Veritabanı:</span>
-                    <span className="font-mono text-slate-800 font-semibold truncate max-w-[180px]">
-                      {cloudBranding?.databaseId || "ai-studio-muavinnmuhasebep"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-500">
-                    <span>Koleksiyon Yolu:</span>
-                    <span className="font-mono text-[#0f6bae] font-semibold">system_settings / branding</span>
-                  </div>
-                  {cloudBranding?.updatedAt && (
-                    <div className="flex items-center justify-between text-slate-500">
-                      <span>Son Senkronizasyon:</span>
-                      <span className="text-slate-700 font-medium">
-                        {new Date(cloudBranding.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Logo Bilgisayardan Yükleme, URL ve Cloud İşlemleri */}
-              <div className="lg:col-span-7 space-y-4">
-                <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                        <Upload className="w-4 h-4 text-[#0f6bae]" />
-                        Şirkete Özel Logo Yükle ({profileForm.companyName || "Aktif Şirket"})
-                      </span>
-                      <p className="text-[11px] text-slate-600 mt-0.5">
-                        Bilgisayarınızdaki PNG, JPG, WEBP veya SVG formatındaki şirket logonuzu seçin; Muavin logosu boyutuna otomatik büyültülür/küçültülür.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                {/* VKN / TCKN ve Vergi Dairesi Satırı */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+                  <div className="md:col-span-7">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      VKN (10 Hane) / TCKN (11 Hane)
+                    </label>
+                    <div className="flex items-center gap-2">
                       <input
-                        ref={companyLogoFileInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
-                        onChange={handleUploadLogoFromComputer}
-                        className="hidden"
+                        type="text"
+                        maxLength={11}
+                        value={profileForm.taxNumber}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateAndAutoSaveProfile((prev) => ({ ...prev, taxNumber: val }));
+                          const clean = val.replace(/\D/g, "").trim();
+                          if (clean.length === 10 || clean.length === 11) {
+                            void handleFetchProfileTaxpayer(clean);
+                          }
+                        }}
+                        onBlur={() => handleSaveProfile()}
+                        placeholder="10 haneli VKN veya 11 haneli TCKN..."
+                        className="flex-1 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-mono tabular-nums font-semibold focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
                       />
                       <button
                         type="button"
-                        onClick={() => companyLogoFileInputRef.current?.click()}
-                        disabled={cloudLogoLoading}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-lg font-bold text-xs shadow-xs cursor-pointer transition-all disabled:opacity-50"
+                        onClick={() => void handleFetchProfileTaxpayer()}
+                        disabled={
+                          isFetchingTaxpayer ||
+                          !profileForm.taxNumber ||
+                          (profileForm.taxNumber.replace(/\D/g, "").length !== 10 &&
+                            profileForm.taxNumber.replace(/\D/g, "").length !== 11)
+                        }
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-white text-xs font-semibold shadow-2xs cursor-pointer transition-all whitespace-nowrap shrink-0 disabled:opacity-45 disabled:cursor-not-allowed hover:opacity-95"
+                        style={{ backgroundColor: theme.primaryColor }}
+                        title="VKN/TCKN ile GİB Mükellef ve Adres Bilgilerini Getir"
                       >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Bilgisayardan Logo Seç & Yükle</span>
+                        {isFetchingTaxpayer ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>GİB&apos;den Getir</span>
                       </button>
+                    </div>
+                    {vknFetchFeedback && (
+                      <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 mt-1.5">
+                        {vknFetchFeedback}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="md:col-span-5">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      Vergi Dairesi
+                    </label>
+                    <input
+                      type="text"
+                      value={profileForm.taxOffice || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, taxOffice: val }));
+                      }}
+                      onBlur={() => handleSaveProfile()}
+                      placeholder="Örn: Büyük Mükellefler V.D."
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Sicil & MERSİS Numaraları */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      Ticaret Sicil Numarası
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ticaret Sicil No"
+                      value={profileForm.tradeRegisterNo || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, tradeRegisterNo: val }));
+                      }}
+                      onBlur={() => handleSaveProfile()}
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-mono tabular-nums font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      Esnaf Sicil Numarası
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Esnaf Sicil No"
+                      value={profileForm.esnafSicilNo || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, esnafSicilNo: val }));
+                      }}
+                      onBlur={() => handleSaveProfile()}
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-mono tabular-nums font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                      MERSİS Numarası
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="0000000000000000"
+                      value={profileForm.mersisNo || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateAndAutoSaveProfile((prev) => ({ ...prev, mersisNo: val }));
+                      }}
+                      onBlur={() => handleSaveProfile()}
+                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-mono tabular-nums font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500 focus:ring-2 focus:ring-[#0f6bae]/15 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Kurumsal İletişim Bilgileri */}
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                      <span>Kurumsal İletişim Kanalları</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Doldurulan alanlar resmi belgelere otomatik eklenir
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          Telefon Numarası
+                        </label>
+                        {(profileForm.phone || "").trim() && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            Aktif
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          autoComplete="tel"
+                          placeholder="0 (212) 000 00 00"
+                          value={profileForm.phone || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            updateAndAutoSaveProfile((prev) => ({ ...prev, phone: val }));
+                          }}
+                          onBlur={() => handleSaveProfile()}
+                          className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 pr-7 font-mono tabular-nums font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                        />
+                        {(profileForm.phone || "").trim() && (
+                          <button
+                            type="button"
+                            onClick={() => updateAndAutoSaveProfile((prev) => ({ ...prev, phone: "" }), true)}
+                            title="Temizle"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          E-Posta Adresi
+                        </label>
+                        {(profileForm.email || "").trim() && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            Aktif
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="email"
+                          autoComplete="email"
+                          placeholder="muhasebe@firma.com.tr"
+                          value={profileForm.email || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            updateAndAutoSaveProfile((prev) => ({ ...prev, email: val }));
+                          }}
+                          onBlur={() => handleSaveProfile()}
+                          className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 pr-7 font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                        />
+                        {(profileForm.email || "").trim() && (
+                          <button
+                            type="button"
+                            onClick={() => updateAndAutoSaveProfile((prev) => ({ ...prev, email: "" }), true)}
+                            title="Temizle"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          Web Sitesi
+                        </label>
+                        {(profileForm.website || "").trim() && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            Aktif
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="www.firma.com.tr"
+                          value={profileForm.website || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            updateAndAutoSaveProfile((prev) => ({ ...prev, website: val }));
+                          }}
+                          onBlur={() => handleSaveProfile()}
+                          className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 pr-7 font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                        />
+                        {(profileForm.website || "").trim() && (
+                          <button
+                            type="button"
+                            onClick={() => updateAndAutoSaveProfile((prev) => ({ ...prev, website: "" }), true)}
+                            title="Temizle"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Logo Dosya Yolu veya Cloud Depolama URL'si
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={
-                        profileForm.logoUrl?.startsWith("data:")
-                          ? "Bilgisayardan Yüklenen Özel Logo (Base64 Görsel)"
-                          : profileForm.logoUrl || "/logo.svg"
+                {isAdmin && !isActiveCompanyMysoftReady && (
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                        <span>Mysoft e-Belge Mükellef Eşleştirmesi</span>
+                      </span>
+                      {profileForm.tenantIdentifierNumber && (
+                        <span className="text-[11px] font-mono tabular-nums font-semibold text-[#0f6bae] dark:text-sky-400">
+                          Seçili Mükellef: {profileForm.tenantIdentifierNumber}
+                        </span>
+                      )}
+                    </div>
+                    <MysoftTenantPicker
+                      variant="compact"
+                      hideWhenMatched={true}
+                      currentUser={currentUser}
+                      hintVkn={profileForm.tenantIdentifierNumber}
+                      onSelect={(vkn) =>
+                        updateAndAutoSaveProfile(
+                          (prev) => ({
+                            ...prev,
+                            tenantIdentifierNumber: vkn,
+                            mysoftCredentials: {
+                              ...prev.mysoftCredentials,
+                              tenantIdentifierNumber: vkn,
+                            },
+                          }),
+                          true
+                        )
                       }
-                      onChange={(e) => {
-                        if (!e.target.value.startsWith("Bilgisayardan Yüklenen")) {
-                          setProfileForm({ ...profileForm, logoUrl: e.target.value });
-                        }
-                      }}
-                      placeholder="/logo.svg veya https://storage.googleapis.com/..."
-                      className="flex-1 bg-white border border-slate-300 text-slate-900 rounded-lg p-2.5 font-mono text-xs focus:border-[#0f6bae] focus:ring-1 focus:ring-[#0f6bae]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const resetProfile = { ...profileForm, logoUrl: "/logo.svg" };
-                        setProfileForm(resetProfile);
-                        onSaveSettings({ ...settings, ...resetProfile });
-                      }}
-                      className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-all border border-slate-200"
-                      title="Varsayılan Kurumsal Vektör Logoyu Seç"
-                    >
-                      Varsayılan
-                    </button>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Bilgisayardan görsel yükleyebilir veya Google Cloud Storage bucket URL'si / SVG dosya yolu girebilirsiniz.
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+                Ticaret Sicil No, Esnaf Sicil No ve MERSİS alanları doldurulduğunda giden e-Fatura ve e-Arşiv belgelerinde otomatik olarak yer alır.
+              </p>
+            </section>
+
+            {/* SAĞ: MERKEZ AÇIK ADRES YAPILANDIRMASI */}
+            <section
+              className="xl:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border p-5 sm:p-6 shadow-2xs space-y-4"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                <div>
+                  <h2 className="text-base font-editorial font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                    <span>Merkez Açık Adres Yapılandırması</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Buradaki adres değişiklikleri Merkez (Ana Şube) kaydı ile çift yönlü senkronize çalışır.
                   </p>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleFetchFromCloudConsole}
-                    disabled={cloudLogoLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0f6bae] hover:bg-[#0a5287] text-white rounded-lg font-semibold text-xs shadow-xs cursor-pointer transition-all disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${cloudLogoLoading ? "animate-spin" : ""}`} />
-                    <span>Cloud Console'den Çek</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSaveToCloudConsole}
-                    disabled={cloudLogoLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold text-xs shadow-xs cursor-pointer transition-all disabled:opacity-50"
-                  >
-                    <Cloud className="w-3.5 h-3.5 text-[#83b8ff]" />
-                    <span>Cloud Console'a Kaydet</span>
-                  </button>
-                </div>
+                <span className="text-[11px] font-medium text-[#0f6bae] dark:text-sky-400 whitespace-nowrap">
+                  Merkez Şube Senkronize
+                </span>
               </div>
-            </div>
+
+              <AddressSelector
+                frameless={true}
+                title="Merkez Genel Adres Detayları"
+                address={{
+                  country: profileForm.country || profileForm.addressDetails?.country || "Türkiye",
+                  city: profileForm.city || profileForm.addressDetails?.city || "İstanbul",
+                  district: profileForm.district ?? profileForm.addressDetails?.district ?? "",
+                  neighborhood: profileForm.neighborhood ?? profileForm.addressDetails?.neighborhood ?? "",
+                  street: profileForm.street ?? profileForm.addressDetails?.street ?? "",
+                  buildingNo: profileForm.buildingNo ?? profileForm.addressDetails?.buildingNo ?? "",
+                  doorNo: profileForm.doorNo ?? profileForm.addressDetails?.doorNo ?? "",
+                  postalCode: profileForm.postalCode ?? profileForm.addressDetails?.postalCode ?? "",
+                  fullAddress: profileForm.address ?? profileForm.addressDetails?.fullAddress ?? "",
+                }}
+                onChange={(updatedDetails) => {
+                  updateAndAutoSaveProfile((prev) => ({
+                    ...prev,
+                    city: updatedDetails.city,
+                    district: updatedDetails.district,
+                    neighborhood: updatedDetails.neighborhood,
+                    street: updatedDetails.street,
+                    buildingNo: updatedDetails.buildingNo,
+                    doorNo: updatedDetails.doorNo,
+                    postalCode: updatedDetails.postalCode,
+                    country: updatedDetails.country,
+                    address: updatedDetails.fullAddress || prev.address,
+                    addressDetails: updatedDetails,
+                  }));
+                }}
+              />
+            </section>
           </div>
 
-          {/* Submit Action for Profile */}
-          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-2xs">
+          {/* ALT BÖLÜM (OPSİYONEL SEÇİLEBİLİR KUTUCUKLAR): KURUMSAL LOGO & CLOUD CONSOLE (6 KOLON) | VARSAYILAN BANKA BİLGİLERİ (6 KOLON) */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            {/* SOL SEÇİLEBİLİR KUTUCUK: KURUMSAL LOGO & GOOGLE CLOUD CONSOLE ENTEGRASYONU */}
+            {(() => {
+              const logoBoxChecked = isCompanyLogoEnabled(profileForm);
+              return (
+                <section
+                  className={`xl:col-span-6 rounded-2xl border p-5 sm:p-6 shadow-2xs transition-colors text-xs ${
+                    logoBoxChecked
+                      ? "bg-white dark:bg-slate-900"
+                      : "bg-slate-50/70 dark:bg-slate-900/60"
+                  }`}
+                  style={{
+                    borderColor: logoBoxChecked ? theme.primaryColor : theme.cardBorder,
+                  }}
+                >
+                  <label className="flex items-start justify-between gap-3 cursor-pointer select-none">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={logoBoxChecked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          updateAndAutoSaveProfile(
+                            (prev) => ({
+                              ...prev,
+                              useCorporateLogo: checked,
+                              logoUrl: checked
+                                ? prev.logoUrl && prev.logoUrl !== "/logo.svg"
+                                  ? prev.logoUrl
+                                  : ""
+                                : "",
+                            }),
+                            true
+                          );
+                        }}
+                        className="mt-1 w-4 h-4 rounded border-slate-300 dark:border-slate-600 accent-[#0f6bae] cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <span className="text-base font-editorial font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          <Cloud className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                          <span>Kurumsal Logo & Google Cloud Console Entegrasyonu</span>
+                        </span>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Menüde ve resmi e-Fatura / e-Arşiv belgelerinde şirketinize özel logo kullanılacaksa işaretleyin; kullanılmayacaksa boş geçin.
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[11px] font-semibold whitespace-nowrap shrink-0 mt-0.5 ${
+                        logoBoxChecked
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}
+                    >
+                      {logoBoxChecked ? "Seçili • Cloud Aktif" : "Boş Geçildi"}
+                    </span>
+                  </label>
+
+                  {!logoBoxChecked ? (
+                    <div className="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2">
+                      <span>
+                        Kurumsal logo kullanılmıyor. Düzenlenen faturalara şirket logosu basılmaz; etkinleştirmek için kutucuğu işaretleyin.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                      {cloudSyncStatus && (
+                        <div className="px-3 py-2 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-medium flex items-center gap-2">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>{cloudSyncStatus}</span>
+                        </div>
+                      )}
+
+                      {/* Canlı Önizleme Çifti */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-[#0f172a] p-3.5 rounded-xl border border-slate-800 flex flex-col items-center justify-center text-center gap-2 min-h-[96px] overflow-hidden">
+                          {profileForm.logoUrl && profileForm.logoUrl !== "/logo.svg" ? (
+                            <Logo
+                              size="lg"
+                              src={profileForm.logoUrl}
+                              scale={profileForm.logoScale ?? 1}
+                            />
+                          ) : (
+                            <span className="text-[11px] font-medium text-slate-400">
+                              Henüz özel şirket logosu seçilmedi
+                            </span>
+                          )}
+                          <span className="text-[10px] font-medium text-slate-400">Koyu Zemin (Menü)</span>
+                        </div>
+
+                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700 flex flex-col items-center justify-center text-center gap-2 min-h-[96px] overflow-hidden">
+                          {profileForm.logoUrl && profileForm.logoUrl !== "/logo.svg" ? (
+                            <Logo
+                              size="lg"
+                              src={profileForm.logoUrl}
+                              scale={profileForm.logoScale ?? 1}
+                            />
+                          ) : (
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                              Fatura için logo yükleyin
+                            </span>
+                          )}
+                          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                            Açık Zemin (Fatura Belgesi)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Ölçek Kontrolü */}
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                            Logo Görünüm Ölçeği
+                          </span>
+                          <span className="font-mono tabular-nums text-[11px] font-bold text-[#0f6bae] dark:text-sky-400">
+                            %{Math.round(clampLogoScale(profileForm.logoScale ?? 1) * 100)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustLogoScale(clampLogoScale(profileForm.logoScale ?? 1) - 0.1)}
+                            className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap"
+                          >
+                            - Küçült
+                          </button>
+                          <input
+                            type="range"
+                            min={0.5}
+                            max={1.5}
+                            step={0.05}
+                            value={clampLogoScale(profileForm.logoScale ?? 1)}
+                            onChange={(e) => handleAdjustLogoScale(Number(e.target.value))}
+                            className="flex-1 accent-[#0f6bae] cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustLogoScale(1)}
+                            className="px-2 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-[#0f6bae] dark:text-sky-400 border border-slate-200 dark:border-slate-700 rounded-lg font-mono tabular-nums text-[10px] font-bold cursor-pointer whitespace-nowrap"
+                          >
+                            %100
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustLogoScale(clampLogoScale(profileForm.logoScale ?? 1) + 0.1)}
+                            className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap"
+                          >
+                            + Büyült
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Dosya Yükleme & URL */}
+                      <div className="space-y-2.5 pt-1">
+                        <input
+                          ref={companyLogoFileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/*"
+                          onChange={handleUploadLogoFromComputer}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => companyLogoFileInputRef.current?.click()}
+                          disabled={cloudLogoLoading}
+                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl font-semibold text-xs shadow-2xs cursor-pointer transition-all disabled:opacity-50 hover:opacity-95 whitespace-nowrap"
+                          style={{ backgroundColor: theme.primaryColor }}
+                        >
+                          <Upload className="w-3.5 h-3.5 shrink-0" />
+                          <span>Bilgisayardan Logo Seç & Yükle</span>
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={
+                              profileForm.logoUrl?.startsWith("data:")
+                                ? "Bilgisayardan Yüklenen Özel Logo"
+                                : profileForm.logoUrl || ""
+                            }
+                            onChange={(e) => {
+                              if (!e.target.value.startsWith("Bilgisayardan Yüklenen")) {
+                                const val = e.target.value;
+                                updateAndAutoSaveProfile((prev) => ({
+                                  ...prev,
+                                  useCorporateLogo: true,
+                                  logoUrl: val,
+                                }));
+                              }
+                            }}
+                            onBlur={() => handleSaveProfile()}
+                            placeholder="Logo URL adresi (https://...) veya bilgisayardan yükleyin"
+                            className="flex-1 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 font-mono text-[11px] focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                          />
+                          {profileForm.logoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateAndAutoSaveProfile(
+                                  (prev) => ({
+                                    ...prev,
+                                    useCorporateLogo: true,
+                                    logoUrl: "",
+                                  }),
+                                  true
+                                );
+                              }}
+                              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-rose-600 dark:text-rose-400 rounded-xl text-[11px] font-semibold cursor-pointer border border-slate-200 dark:border-slate-700 whitespace-nowrap"
+                            >
+                              Temizle
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Cloud Console Senkron Butonları */}
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleFetchFromCloudConsole}
+                            disabled={cloudLogoLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold text-[11px] cursor-pointer transition-all disabled:opacity-50 whitespace-nowrap"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${cloudLogoLoading ? "animate-spin" : ""}`} />
+                            <span>Cloud&apos;dan Çek</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveToCloudConsole}
+                            disabled={cloudLogoLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white rounded-lg font-semibold text-[11px] cursor-pointer transition-all disabled:opacity-50 whitespace-nowrap"
+                          >
+                            <Cloud className="w-3 h-3 text-sky-300" />
+                            <span>Cloud&apos;a Kaydet</span>
+                          </button>
+                        </div>
+                        {cloudBranding?.updatedAt && (
+                          <span className="font-mono tabular-nums text-[10px] text-slate-400 whitespace-nowrap">
+                            {new Date(cloudBranding.updatedAt).toLocaleTimeString("tr-TR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
+
+            {/* SAĞ SEÇİLEBİLİR KUTUCUK: FATURAYA BASILACAK VARSAYILAN BANKA BİLGİLERİ */}
+            {(() => {
+              const bankBoxChecked = isCompanyDefaultBankEnabled(profileForm);
+              return (
+                <section
+                  className={`xl:col-span-6 rounded-2xl border p-5 sm:p-6 shadow-2xs transition-colors text-xs ${
+                    bankBoxChecked
+                      ? "bg-white dark:bg-slate-900"
+                      : "bg-slate-50/70 dark:bg-slate-900/60"
+                  }`}
+                  style={{
+                    borderColor: bankBoxChecked ? theme.primaryColor : theme.cardBorder,
+                  }}
+                >
+                  <label className="flex items-start justify-between gap-3 cursor-pointer select-none">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={bankBoxChecked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          updateAndAutoSaveProfile(
+                            (prev) => ({
+                              ...prev,
+                              useDefaultBankInfo: checked,
+                              defaultBankName: checked ? prev.defaultBankName || "" : "",
+                              defaultBankAccountName: checked
+                                ? prev.defaultBankAccountName || prev.companyTitle || prev.companyName || ""
+                                : "",
+                              defaultBankIban: checked ? prev.defaultBankIban || "" : "",
+                            }),
+                            true
+                          );
+                        }}
+                        className="mt-1 w-4 h-4 rounded border-slate-300 dark:border-slate-600 accent-[#0f6bae] cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <span className="text-base font-editorial font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          <Landmark className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                          <span>Faturaya Basılacak Varsayılan Banka Bilgileri</span>
+                        </span>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Düzenlenen e-Fatura ve e-Arşiv belgelerinin alt bilgisine varsayılan banka ve IBAN basılacaksa işaretleyin; kullanılmayacaksa boş geçin.
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[11px] font-semibold whitespace-nowrap shrink-0 mt-0.5 ${
+                        bankBoxChecked
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}
+                    >
+                      {bankBoxChecked ? "Seçili • Aktif" : "Boş Geçildi"}
+                    </span>
+                  </label>
+
+                  {!bankBoxChecked ? (
+                    <div className="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2">
+                      <span>
+                        Varsayılan banka bilgisi kullanılmıyor. Faturalara otomatik banka/IBAN basılmaz; etkinleştirmek için kutucuğu işaretleyin.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          Varsayılan Banka & IBAN Detayları
+                        </span>
+                        {(profileForm.defaultBankName ||
+                          profileForm.defaultBankIban ||
+                          profileForm.defaultBankAccountName) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateAndAutoSaveProfile(
+                                (prev) => ({
+                                  ...prev,
+                                  useDefaultBankInfo: true,
+                                  defaultBankName: "",
+                                  defaultBankAccountName: "",
+                                  defaultBankIban: "",
+                                }),
+                                true
+                              );
+                            }}
+                            className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer whitespace-nowrap"
+                          >
+                            Alanları Temizle
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                            Banka Adı ve Şubesi
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Örn: İş Bankası - Merkez Şubesi"
+                            value={profileForm.defaultBankName || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateAndAutoSaveProfile((prev) => ({
+                                ...prev,
+                                useDefaultBankInfo: true,
+                                defaultBankName: val,
+                              }));
+                            }}
+                            onBlur={() => handleSaveProfile()}
+                            className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                            Hesap Sahibi (Alıcı Ünvanı)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={profileForm.companyTitle || profileForm.companyName || "Alıcı ünvanı"}
+                            value={profileForm.defaultBankAccountName ?? ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateAndAutoSaveProfile((prev) => ({
+                                ...prev,
+                                useDefaultBankInfo: true,
+                                defaultBankAccountName: val,
+                              }));
+                            }}
+                            onBlur={() => handleSaveProfile()}
+                            className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                          IBAN Numarası
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="TR00 0000 0000 0000 0000 0000 00"
+                          value={profileForm.defaultBankIban || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            updateAndAutoSaveProfile((prev) => ({
+                              ...prev,
+                              useDefaultBankInfo: true,
+                              defaultBankIban: val,
+                            }));
+                          }}
+                          onBlur={() => handleSaveProfile()}
+                          className="w-full bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2.5 font-mono tabular-nums font-semibold tracking-wide focus:outline-none focus:border-[#0f6bae] dark:focus:border-sky-500"
+                        />
+                      </div>
+
+                      {/* Fatura Alt Bilgi Canlı Özet Satırı */}
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="truncate">
+                          <strong className="text-slate-700 dark:text-slate-200">
+                            {profileForm.defaultBankName || "Banka adı girilmedi"}
+                          </strong>
+                          {" • "}
+                          <span>
+                            {profileForm.defaultBankAccountName ||
+                              profileForm.companyTitle ||
+                              profileForm.companyName ||
+                              "Hesap sahibi yok"}
+                          </span>
+                        </span>
+                        <span className="font-mono tabular-nums font-semibold text-slate-800 dark:text-slate-200">
+                          {profileForm.defaultBankIban || "IBAN girilmedi"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
+          </div>
+
+          {/* ALT KAYIT ÇUBUĞU */}
+          <div
+            className="bg-white dark:bg-slate-900 px-5 py-3.5 rounded-2xl border shadow-2xs flex flex-wrap items-center justify-between gap-3"
+            style={{ borderColor: theme.cardBorder }}
+          >
             {isSaved ? (
-              <span className="text-xs font-semibold text-[#0d7f56] flex items-center gap-1.5">
-                <Check className="w-4 h-4" />
-                Firma bilgileri ve detaylı adres başarıyla kaydedildi!
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Firma kimlik, adres ve seçili opsiyonel bilgileriniz kaydedildi.</span>
               </span>
             ) : (
-              <span className="text-xs text-slate-600 font-medium">
-                Firma profili ve adres değişikliklerinizi kaydetmek için butona basınız.
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Tüm değişiklikler otomatik olarak saklanır; dilerseniz manuel olarak da kaydedebilirsiniz.
               </span>
             )}
 
             <button
               type="submit"
-              className="bg-[#0f6bae] hover:bg-[#0a5287] text-white font-semibold px-6 py-2.5 rounded-md shadow-2xs cursor-pointer transition-all flex items-center gap-2"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-xs font-semibold shadow-2xs cursor-pointer transition-all hover:opacity-95 whitespace-nowrap shrink-0"
+              style={{ backgroundColor: theme.primaryColor }}
             >
-              <Save className="w-4 h-4 text-white" />
+              <Save className="w-4 h-4 shrink-0" />
               <span>Firma Bilgilerini Kaydet</span>
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* SUB-TAB: E-İŞLEMLER (GİB, SGK, E-DEVLET VE KURUM ŞİFRELERİ) */}
-      {(false as any) && (
-        <form onSubmit={handleSaveCredentials} className="space-y-6">
-          {/* E-İşlemler Üst Bilgilendirme & Hızlı Portal Bağlantıları */}
-          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-2xs space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="bg-[#eaedff] text-[#0f6bae] border border-[#c6cdff] text-[10px] font-bold px-2.5 py-0.5 rounded uppercase tracking-wider">
-                    E-İşlemler Modülü
-                  </span>
-                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded">
-                    Resmi Kurum Portalları
-                  </span>
-                </div>
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-[#0f6bae]" />
-                  E-İşlemler, GİB, SGK ve Şirket Müdürü E-Devlet Şifreleri
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Vergi dairesi, SGK işveren portalı ve şirket müdürünün e-Devlet giriş şifrelerini tek bir güvenli panelden yönetin.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsGibModalOpen(true)}
-                  className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-3.5 py-2 rounded-md transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> Dijital Vergi Dairesi
-                </button>
-              </div>
-            </div>
-
-            {/* Hızlı Portal Başlatıcı Kartları */}
-            <div>
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-[#0f6bae]" />
-                Sık Kullanılan Resmi E-Devlet ve Kurum Portalları
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                <a
-                  href="https://dijital.gib.gov.tr"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-2.5 rounded-md bg-slate-50 hover:bg-red-50/60 border border-slate-200/80 hover:border-red-200 text-slate-700 hover:text-red-700 transition-all group"
-                >
-                  <div className="truncate">
-                    <div className="text-xs font-bold truncate">Dijital Vergi Dairesi</div>
-                    <div className="text-[10px] text-slate-400 group-hover:text-red-500 truncate">dijital.gib.gov.tr</div>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-red-600 shrink-0 ml-1" />
-                </a>
-
-                <a
-                  href="https://giris.turkiye.gov.tr/Giris/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-2.5 rounded-md bg-slate-50 hover:bg-blue-50/60 border border-slate-200/80 hover:border-blue-200 text-slate-700 hover:text-blue-700 transition-all group"
-                >
-                  <div className="truncate">
-                    <div className="text-xs font-bold truncate">e-Devlet Kapısı</div>
-                    <div className="text-[10px] text-slate-400 group-hover:text-blue-500 truncate">turkiye.gov.tr</div>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-1" />
-                </a>
-
-                <a
-                  href="https://uyg.sgk.gov.tr/IsverenSistemi/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-2.5 rounded-md bg-slate-50 hover:bg-emerald-50/60 border border-slate-200/80 hover:border-emerald-200 text-slate-700 hover:text-emerald-700 transition-all group"
-                >
-                  <div className="truncate">
-                    <div className="text-xs font-bold truncate">SGK İşveren Sistemi</div>
-                    <div className="text-[10px] text-slate-400 group-hover:text-emerald-500 truncate">uyg.sgk.gov.tr</div>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0 ml-1" />
-                </a>
-
-                <a
-                  href="https://earsivportal.efatura.gov.tr/intragiris.html"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-2.5 rounded-md bg-slate-50 hover:bg-amber-50/60 border border-slate-200/80 hover:border-amber-200 text-slate-700 hover:text-amber-700 transition-all group"
-                >
-                  <div className="truncate">
-                    <div className="text-xs font-bold truncate">GİB e-Arşiv Portalı</div>
-                    <div className="text-[10px] text-slate-400 group-hover:text-amber-500 truncate">earsivportal.gov.tr</div>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 shrink-0 ml-1" />
-                </a>
-
-                <a
-                  href="https://mersis.gtb.gov.tr/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-2.5 rounded-md bg-slate-50 hover:bg-[#eaedff]/60 border border-slate-200/80 hover:border-[#c6cdff] text-slate-700 hover:text-[#0f6bae] transition-all group"
-                >
-                  <div className="truncate">
-                    <div className="text-xs font-bold truncate">MERSİS Portalı</div>
-                    <div className="text-[10px] text-slate-400 group-hover:text-[#0f6bae] truncate">mersis.gtb.gov.tr</div>
-                  </div>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0f6bae] shrink-0 ml-1" />
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* 1. BÖLÜM: VERGİ DAİRESİ & GİB PORTAL ŞİFRELERİ */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-red-600" />
-                  1. Vergi Dairesi & GİB Portal Şifreleri
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  İnteraktif Vergi Dairesi, e-Beyanname ve Dijital Vergi Dairesi giriş bilgileriniz.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsGibModalOpen(true)}
-                  className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> Dijital VD Bağlan
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowTaxPasswords(!showTaxPasswords)}
-                  className="text-xs font-bold text-slate-700 hover:text-red-700 bg-slate-100 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  {showTaxPasswords ? (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5 text-rose-600" /> Şifreleri Gizle
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5 text-red-600" /> Şifreleri Göster
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-red-600" /> Kullanıcı Kodu
-                  </span>
-                  {profileForm.taxCredentials?.userCode && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.taxCredentials?.userCode, "tax_userCode")}
-                      className="text-[10px] text-slate-400 hover:text-red-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "tax_userCode" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  placeholder="GİB / İnteraktif VD Kullanıcı Kodu"
-                  value={profileForm.taxCredentials?.userCode || ""}
-                  onChange={(e) => handleTaxCredChange("userCode", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Key className="w-3.5 h-3.5 text-red-600" /> Parola
-                  </span>
-                  {profileForm.taxCredentials?.password && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.taxCredentials?.password, "tax_password")}
-                      className="text-[10px] text-slate-400 hover:text-red-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "tax_password" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type={showTaxPasswords ? "text" : "password"}
-                  placeholder="GİB Parola"
-                  value={profileForm.taxCredentials?.password || ""}
-                  onChange={(e) => handleTaxCredChange("password", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Lock className="w-3.5 h-3.5 text-red-600" /> Şifre (e-Beyanname)
-                  </span>
-                  {profileForm.taxCredentials?.codeSecret && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.taxCredentials?.codeSecret, "tax_codeSecret")}
-                      className="text-[10px] text-slate-400 hover:text-red-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "tax_codeSecret" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type={showTaxPasswords ? "text" : "password"}
-                  placeholder="e-Beyanname / İnternet VD Şifresi"
-                  value={profileForm.taxCredentials?.codeSecret || ""}
-                  onChange={(e) => handleTaxCredChange("codeSecret", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 2. BÖLÜM: SGK (SOSYAL GÜVENLİK KURUMU) ŞİFRELERİ */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  2. SGK (Sosyal Güvenlik Kurumu) Şifreleri
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  e-SGK, e-Bildirge v2, İşveren Sistemi ve MUHSGK bildirim şifreleriniz.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <a
-                  href="https://uyg.sgk.gov.tr/IsverenSistemi/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> e-SGK İşveren Portalı
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSgkPasswords(!showSgkPasswords)}
-                  className="text-xs font-bold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  {showSgkPasswords ? (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5 text-rose-600" /> Şifreleri Gizle
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5 text-emerald-600" /> Şifreleri Göster
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5 text-emerald-600" /> SGK İşyeri Sicil No
-                  </span>
-                  {profileForm.sgkCredentials?.workplaceRegistrationNo && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.workplaceRegistrationNo, "sgk_regNo")}
-                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "sgk_regNo" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  placeholder="2.8470.01.01.1029384..."
-                  value={profileForm.sgkCredentials?.workplaceRegistrationNo || ""}
-                  onChange={(e) => handleSgkCredChange("workplaceRegistrationNo", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-emerald-600" /> Kullanıcı Kodu
-                  </span>
-                  {profileForm.sgkCredentials?.userCode && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.userCode, "sgk_userCode")}
-                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "sgk_userCode" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  placeholder="SGK e-Bildirge Kullanıcı Kodu"
-                  value={profileForm.sgkCredentials?.userCode || ""}
-                  onChange={(e) => handleSgkCredChange("userCode", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Key className="w-3.5 h-3.5 text-emerald-600" /> Sistem Şifresi
-                  </span>
-                  {profileForm.sgkCredentials?.systemPassword && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.systemPassword, "sgk_sysPass")}
-                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "sgk_sysPass" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type={showSgkPasswords ? "text" : "password"}
-                  placeholder="e-SGK Sistem Şifresi"
-                  value={profileForm.sgkCredentials?.systemPassword || ""}
-                  onChange={(e) => handleSgkCredChange("systemPassword", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> İşyeri Şifresi
-                  </span>
-                  {profileForm.sgkCredentials?.workplacePassword && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.sgkCredentials?.workplacePassword, "sgk_wpPass")}
-                      className="text-[10px] text-slate-400 hover:text-emerald-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "sgk_wpPass" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type={showSgkPasswords ? "text" : "password"}
-                  placeholder="e-SGK İşyeri Şifresi"
-                  value={profileForm.sgkCredentials?.workplacePassword || ""}
-                  onChange={(e) => handleSgkCredChange("workplacePassword", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 3. BÖLÜM: ŞİRKET MÜDÜRÜ / YETKİLİSİ E-DEVLET ŞİFRELERİ (AYRI BÖLÜM) */}
-          <div className="bg-white p-6 rounded-2xl border border-blue-200/80 shadow-xs space-y-4 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
-                    Yönetici & İmza Yetkilisi
-                  </span>
-                </div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mt-1">
-                  <Fingerprint className="w-4 h-4 text-blue-600" />
-                  3. Şirket Müdürü / İmza Yetkilisi E-Devlet Şifreleri
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Ticaret Sicil, MERSİS, e-İmza, Noter ve e-Devlet kurumsal yetkili işlemlerinde kullanılan şifre ve yetki bilgileri.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <a
-                  href="https://giris.turkiye.gov.tr/Giris/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> e-Devlet Kapısına Git
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => setShowEDevletPasswords(!showEDevletPasswords)}
-                  className="text-xs font-bold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  {showEDevletPasswords ? (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5 text-rose-600" /> Şifreleri Gizle
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5 text-blue-600" /> Şifreleri Göster
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-blue-600" /> Müdür / Yetkili Adı Soyadı
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Örn: Ahmet Yılmaz"
-                  value={profileForm.eDevletCredentials?.managerName || ""}
-                  onChange={(e) => handleEDevletCredChange("managerName", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Fingerprint className="w-3.5 h-3.5 text-blue-600" /> T.C. Kimlik Numarası
-                  </span>
-                  {profileForm.eDevletCredentials?.tcKimlikNo && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.eDevletCredentials?.tcKimlikNo, "edevlet_tckn")}
-                      className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "edevlet_tckn" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  maxLength={11}
-                  placeholder="11 Haneli TCKN"
-                  value={profileForm.eDevletCredentials?.tcKimlikNo || ""}
-                  onChange={(e) => handleEDevletCredChange("tcKimlikNo", e.target.value.replace(/\D/g, ""))}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Key className="w-3.5 h-3.5 text-blue-600" /> e-Devlet Şifresi
-                  </span>
-                  {profileForm.eDevletCredentials?.eDevletPassword && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.eDevletCredentials?.eDevletPassword, "edevlet_pass")}
-                      className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "edevlet_pass" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type={showEDevletPasswords ? "text" : "password"}
-                  placeholder="e-Devlet Giriş Şifresi"
-                  value={profileForm.eDevletCredentials?.eDevletPassword || ""}
-                  onChange={(e) => handleEDevletCredChange("eDevletPassword", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Smartphone className="w-3.5 h-3.5 text-blue-600" /> Mobil İmza / Telefon
-                  </span>
-                  {profileForm.eDevletCredentials?.mobileSignaturePhone && (
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(profileForm.eDevletCredentials?.mobileSignaturePhone, "edevlet_phone")}
-                      className="text-[10px] text-slate-400 hover:text-blue-600 flex items-center gap-0.5 cursor-pointer font-normal"
-                    >
-                      {copiedKey === "edevlet_phone" ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                          <CheckCheck className="w-3 h-3" /> Kopyalandı
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-0.5">
-                          <Copy className="w-3 h-3" /> Kopyala
-                        </span>
-                      )}
-                    </button>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  placeholder="+90 (5xx) xxx xx xx"
-                  value={profileForm.eDevletCredentials?.mobileSignaturePhone || ""}
-                  onChange={(e) => handleEDevletCredChange("mobileSignaturePhone", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 font-mono text-xs transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-blue-600" /> İmza Sirküleri / Yetki Bitiş Tarihi
-                </label>
-                <input
-                  type="date"
-                  value={profileForm.eDevletCredentials?.validUntil || ""}
-                  onChange={(e) => handleEDevletCredChange("validUntil", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 text-xs transition-colors"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Info className="w-3.5 h-3.5 text-blue-600" /> Yetki Kapsamı ve Özel Notlar
-                </label>
-                <input
-                  type="text"
-                  placeholder="Örn: A Grubu Münferit İmza Yetkilisi (Şirket Müdürü / YK Başkanı)"
-                  value={profileForm.eDevletCredentials?.notes || ""}
-                  onChange={(e) => handleEDevletCredChange("notes", e.target.value)}
-                  className="w-full bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 text-slate-900 rounded-xl p-2.5 text-xs transition-colors"
-                />
-              </div>
-            </div>
-
-            {/* Güvenlik Notu */}
-            <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 flex items-start gap-2.5 text-slate-700">
-              <Shield className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed">
-                <span className="font-bold text-blue-900">Güvenlik & Gizlilik Bilgilendirmesi:</span> Kurumsal e-işlemler, vergi dairesi ve e-Devlet şifreleri şirketinizin muhasebe ve resmi işlemlerini kolaylaştırmak amacıyla güvenli veritabanınızda saklanır. Yetkisiz kişilerle paylaşılmamalıdır.
-              </div>
-            </div>
-          </div>
-
-          {/* Submit Action for E-İşlemler */}
-          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-2xs">
-            {isCredSaved ? (
-              <span className="text-xs font-semibold text-[#0d7f56] flex items-center gap-1.5">
-                <Check className="w-4 h-4" />
-                GİB, SGK ve e-Devlet şifreleri başarıyla kaydedildi!
-              </span>
-            ) : (
-              <span className="text-xs text-slate-600 font-medium">
-                Yapılan tüm kurum ve şifre değişikliklerini kaydetmek için butona basınız.
-              </span>
-            )}
-
-            <button
-              type="submit"
-              className="bg-[#0f6bae] hover:bg-[#0a5287] text-white font-semibold px-6 py-2.5 rounded-md shadow-2xs cursor-pointer transition-all flex items-center gap-2"
-            >
-              <Save className="w-4 h-4 text-white" />
-              <span>E-İşlem ve Kurum Şifrelerini Kaydet</span>
             </button>
           </div>
         </form>
@@ -3437,20 +2907,99 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       {/* SUB-TAB 2: ŞUBELER (BRANCHES) */}
       {currentSubTab === "branches" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-lg border border-slate-200 shadow-2xs">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="text"
-                placeholder="Şube adı, kodu, şehir veya ilçe ara..."
-                value={branchSearch}
-                onChange={(e) => setBranchSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:border-[#0f6bae]"
-              />
+        <div className="space-y-5">
+          {/* Şube Özet Metrikleri */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-2xs flex items-center justify-between"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Toplam Şube
+                </div>
+                <div className="text-2xl font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 mt-1">
+                  {effectiveBranches.length}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-[#0f6bae] dark:text-sky-400">
+                <Store className="w-5 h-5" />
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-2xs flex items-center justify-between"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Aktif Şube
+                </div>
+                <div className="text-2xl font-mono tabular-nums font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+                  {effectiveBranches.filter((b) => b.status === "active").length}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-2xs flex items-center justify-between"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Merkez Lokasyon
+                </div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-1.5 truncate">
+                  {effectiveBranches.find((b) => b.isMain)?.address.district || profileForm.district || "Merkez"}
+                  {" / "}
+                  {effectiveBranches.find((b) => b.isMain)?.address.city || profileForm.city || "İstanbul"}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-[#0f6bae] dark:text-sky-400 shrink-0">
+                <MapPin className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Arama & Filtre Çubuğu */}
+          <div
+            className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border shadow-2xs"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Şube adı, kodu, il veya ilçe ara..."
+                  value={branchSearch}
+                  onChange={(e) => setBranchSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-[#0f6bae] dark:focus:border-sky-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/70 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 self-start sm:self-auto">
+                {(["all", "active", "passive"] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setBranchStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                      branchStatusFilter === st
+                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {st === "all" ? "Tümü" : st === "active" ? "Aktif" : "Pasif"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
               <ExportButtons
                 getExportData={() => ({
                   filename: `Sube_Listesi_${new Date().toISOString().split("T")[0]}`,
@@ -3472,111 +3021,122 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 size="sm"
               />
               <button
+                type="button"
                 onClick={() => handleOpenBranchModal()}
-                className="bg-[#0f6bae] hover:bg-[#0a5287] text-white font-semibold text-xs px-4 py-2.5 rounded-md flex items-center gap-2 shadow-2xs transition-all cursor-pointer shrink-0"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+                style={{ backgroundColor: theme.primaryColor }}
               >
-                <Plus className="w-4 h-4 text-white" />
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Yeni Şube Ekle</span>
               </button>
             </div>
           </div>
 
-          {/* Branch Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Şube Kartları */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredBranches.map((branch) => (
               <div
                 key={branch.id}
-                className="bg-white rounded-lg border border-slate-200 hover:border-[#0f6bae]/40 shadow-2xs hover:shadow-xs transition-all p-5 space-y-3 relative group"
+                className="bg-white dark:bg-slate-900 rounded-2xl border p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group"
+                style={{ borderColor: theme.cardBorder }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-[#eaedff] text-[#0f6bae] border border-[#c6cdff] rounded-md font-mono text-xs font-black">
-                      {branch.code}
+                <div className="space-y-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="px-2.5 py-2 bg-slate-50 dark:bg-slate-800 text-[#0f6bae] dark:text-sky-400 border border-slate-200/80 dark:border-slate-700 rounded-xl font-mono tabular-nums text-xs font-bold shrink-0">
+                        {branch.code}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm truncate">
+                            {branch.name}
+                          </h4>
+                          {branch.isMain && (
+                            <span className="text-[10px] font-semibold text-[#0f6bae] dark:text-sky-400 whitespace-nowrap">
+                              • Merkez
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                          {branch.address.district || "Merkez"} / {branch.address.city || "İstanbul"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
-                        {branch.name}
-                        {branch.isMain && (
-                          <span className="bg-[#eaedff] text-[#0f6bae] text-[10px] font-bold px-2 py-0.5 rounded border border-[#c6cdff]">
-                            Ana Şube
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {branch.address.district} / {branch.address.city}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => handleOpenBranchModal(branch)}
-                      className="p-1.5 text-slate-400 hover:text-[#0f6bae] hover:bg-[#eaedff] rounded transition-colors cursor-pointer"
-                      title="Düzenle"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    {!branch.isMain && (
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={() => {
-                          if (confirm(`${branch.name} şubesini silmek istediğinize emin misiniz?`)) {
-                            onDeleteBranch(branch.id);
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                        title="Sil"
+                        type="button"
+                        onClick={() => handleOpenBranchModal(branch)}
+                        className="p-1.5 text-slate-400 hover:text-[#0f6bae] dark:hover:text-sky-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                        title="Şubeyi Düzenle"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                  {branch.managerName && (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="font-semibold text-slate-800">{branch.managerName}</span>
-                    </div>
-                  )}
-
-                  {branch.phone && (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{branch.phone}</span>
-                    </div>
-                  )}
-
-                  {branch.email && (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{branch.email}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-start gap-2 text-[11px] pt-1">
-                    <MapPin className="w-3.5 h-3.5 text-[#0f6bae] shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <span className="text-slate-700 leading-snug block">
-                        {branch.address.fullAddress ||
-                          `${branch.address.street || ""} ${branch.address.neighborhood || ""} ${branch.address.district}/${branch.address.city}`}
-                      </span>
-                      {branch.isMain && (
-                        <span className="inline-block text-[10px] font-semibold text-[#0f6bae] bg-[#eaedff]/70 px-1.5 py-0.5 rounded">
-                          Firma Profili Merkez Adresi ile Senkronize
-                        </span>
+                      {!branch.isMain && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPendingEntityDelete({
+                              type: "branch",
+                              id: branch.id,
+                              name: branch.name,
+                            })
+                          }
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Şubeyi Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </div>
                   </div>
+
+                  <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    {branch.managerName && (
+                      <div className="flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{branch.managerName}</span>
+                      </div>
+                    )}
+
+                    {branch.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="font-mono tabular-nums">{branch.phone}</span>
+                      </div>
+                    )}
+
+                    {branch.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{branch.email}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-start gap-2 pt-0.5">
+                      <MapPin className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1 min-w-0">
+                        <span className="text-slate-700 dark:text-slate-300 leading-relaxed block">
+                          {branch.address.fullAddress ||
+                            `${branch.address.street || ""} ${branch.address.neighborhood || ""} ${branch.address.district}/${branch.address.city}`}
+                        </span>
+                        {branch.isMain && (
+                          <span className="text-[11px] font-medium text-[#0f6bae] dark:text-sky-400 block">
+                            Firma Profili merkez adresi ile senkronize
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="pt-2 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100">
-                  <span>Kayıt: {branch.createdAt}</span>
+                <div className="pt-3 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                  <span className="font-mono tabular-nums">Kayıt: {branch.createdAt}</span>
                   <span
-                    className={`font-extrabold px-2 py-0.5 rounded-full ${
+                    className={`font-semibold ${
                       branch.status === "active"
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-slate-100 text-slate-600"
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-slate-500 dark:text-slate-400"
                     }`}
                   >
                     {branch.status === "active" ? "Aktif Şube" : "Pasif"}
@@ -3586,8 +3146,11 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             ))}
 
             {filteredBranches.length === 0 && (
-              <div className="col-span-full bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-400">
-                Arama kriterlerine uygun şube bulunamadı.
+              <div
+                className="col-span-full bg-white dark:bg-slate-900 p-12 text-center rounded-2xl border text-slate-500 dark:text-slate-400 text-xs"
+                style={{ borderColor: theme.cardBorder }}
+              >
+                Arama veya filtre kriterlerine uygun şube kaydı bulunamadı.
               </div>
             )}
           </div>
@@ -3596,20 +3159,98 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       {/* SUB-TAB 3: DEPOLAR (WAREHOUSES) */}
       {currentSubTab === "warehouses" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input
-                type="text"
-                placeholder="Depo adı, kodu, bağlı şube veya konum ara..."
-                value={warehouseSearch}
-                onChange={(e) => setWarehouseSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white"
-              />
+        <div className="space-y-5">
+          {/* Depo Özet Metrikleri */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-2xs flex items-center justify-between"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Toplam Depo
+                </div>
+                <div className="text-2xl font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 mt-1">
+                  {warehouses.length}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-[#0f6bae] dark:text-sky-400">
+                <WarehouseIcon className="w-5 h-5" />
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-2xs flex items-center justify-between"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Aktif Depo
+                </div>
+                <div className="text-2xl font-mono tabular-nums font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+                  {warehouses.filter((w) => w.status === "active").length}
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border p-4 shadow-2xs flex items-center justify-between"
+              style={{ borderColor: theme.cardBorder }}
+            >
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Toplam Kapasite
+                </div>
+                <div className="text-2xl font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 mt-1">
+                  {warehouses.reduce((acc, w) => acc + (Number(w.capacityM2) || 0), 0).toLocaleString("tr-TR")}{" "}
+                  <span className="text-xs font-sans font-medium text-slate-500">m²</span>
+                </div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-[#0f6bae] dark:text-sky-400">
+                <Layers className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Arama & Filtre Çubuğu */}
+          <div
+            className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border shadow-2xs"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Depo adı, kodu, şube veya konum ara..."
+                  value={warehouseSearch}
+                  onChange={(e) => setWarehouseSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:bg-white dark:focus:bg-slate-900 focus:border-[#0f6bae] dark:focus:border-sky-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/70 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 self-start sm:self-auto">
+                {(["all", "active", "passive"] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setWarehouseStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                      warehouseStatusFilter === st
+                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {st === "all" ? "Tümü" : st === "active" ? "Aktif" : "Pasif"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
               <ExportButtons
                 getExportData={() => ({
                   filename: `Depo_Listesi_${new Date().toISOString().split("T")[0]}`,
@@ -3631,109 +3272,119 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 size="sm"
               />
               <button
+                type="button"
                 onClick={() => handleOpenWarehouseModal()}
-                className="bg-[#0f6bae] hover:bg-[#0a5287] text-white font-semibold text-xs px-4 py-2.5 rounded-md flex items-center gap-2 shadow-2xs transition-all cursor-pointer shrink-0"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+                style={{ backgroundColor: theme.primaryColor }}
               >
-                <Plus className="w-4 h-4 text-white" />
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Yeni Depo Ekle</span>
               </button>
             </div>
           </div>
 
-          {/* Warehouse Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Depo Kartları */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredWarehouses.map((wh) => (
               <div
                 key={wh.id}
-                className="bg-white rounded-lg border border-slate-200 hover:border-[#0f6bae]/40 shadow-2xs hover:shadow-xs transition-all p-5 space-y-3 relative group"
+                className="bg-white dark:bg-slate-900 rounded-2xl border p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group"
+                style={{ borderColor: theme.cardBorder }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md font-mono text-xs font-black">
-                      {wh.code}
+                <div className="space-y-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="px-2.5 py-2 bg-slate-50 dark:bg-slate-800 text-amber-700 dark:text-amber-400 border border-slate-200/80 dark:border-slate-700 rounded-xl font-mono tabular-nums text-xs font-bold shrink-0">
+                        {wh.code}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm truncate">
+                          {wh.name}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                          <Store className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{wh.branchName || "Merkez Şube"}</span>
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-extrabold text-slate-900 text-sm">{wh.name}</h4>
-                      <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                        <Store className="w-3 h-3 text-slate-400" />
-                        {wh.branchName || "Şube Bağlantısız"}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => handleOpenWarehouseModal(wh)}
-                      className="p-1.5 text-slate-400 hover:text-[#0f6bae] hover:bg-[#eaedff] rounded transition-colors cursor-pointer"
-                      title="Düzenle"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`${wh.name} deposunu silmek istediğinize emin misiniz?`)) {
-                          onDeleteWarehouse(wh.id);
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWarehouseModal(wh)}
+                        className="p-1.5 text-slate-400 hover:text-[#0f6bae] dark:hover:text-sky-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                        title="Depoyu Düzenle"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPendingEntityDelete({
+                            type: "warehouse",
+                            id: wh.id,
+                            name: wh.name,
+                          })
                         }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                      title="Sil"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                        title="Depoyu Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-2.5 border-t border-slate-100 dark:border-slate-800">
+                    <span className="font-semibold text-[#0f6bae] dark:text-sky-400">
+                      {wh.type === "main"
+                        ? "Ana Depo"
+                        : wh.type === "regional"
+                        ? "Bölge Deposu"
+                        : wh.type === "transit"
+                        ? "Transit Lojistik"
+                        : wh.type === "cold_storage"
+                        ? "Soğuk Hava Deposu"
+                        : "Antrepo / Serbest Depo"}
+                    </span>
+                    {wh.capacityM2 ? (
+                      <span className="font-mono tabular-nums text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        {Number(wh.capacityM2).toLocaleString("tr-TR")} m²
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                    {wh.managerName && (
+                      <div className="flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{wh.managerName}</span>
+                      </div>
+                    )}
+
+                    {wh.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="font-mono tabular-nums">{wh.phone}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-start gap-2 pt-0.5">
+                      <MapPin className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0 mt-0.5" />
+                      <span className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                        {wh.address.fullAddress ||
+                          `${wh.address.street || ""} ${wh.address.neighborhood || ""} ${wh.address.district}/${wh.address.city}`}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="bg-[#eaedff] text-[#0f6bae] text-[10px] font-bold px-2.5 py-0.5 rounded border border-[#c6cdff]">
-                    {wh.type === "main"
-                      ? "Ana Depo"
-                      : wh.type === "regional"
-                      ? "Bölge Deposu"
-                      : wh.type === "transit"
-                      ? "Transit Lojistik"
-                      : wh.type === "cold_storage"
-                      ? "Soğuk Hava Deposu"
-                      : "Antrepo / Serbest Depo"}
-                  </span>
-
-                  {wh.capacityM2 && (
-                    <span className="bg-slate-100 text-slate-700 font-mono text-[10px] font-bold px-2 py-0.5 rounded">
-                      {wh.capacityM2} m² Kapasite
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                  {wh.managerName && (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="font-semibold text-slate-800">{wh.managerName}</span>
-                    </div>
-                  )}
-
-                  {wh.phone && (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{wh.phone}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-start gap-2 text-[11px] pt-1">
-                    <MapPin className="w-3.5 h-3.5 text-[#0f6bae] shrink-0 mt-0.5" />
-                    <span className="text-slate-700 leading-snug">
-                      {wh.address.fullAddress ||
-                        `${wh.address.street || ""} ${wh.address.neighborhood || ""} ${wh.address.district}/${wh.address.city}`}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100">
-                  <span>Eklenme: {wh.createdAt}</span>
+                <div className="pt-3 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                  <span className="font-mono tabular-nums">Kayıt: {wh.createdAt}</span>
                   <span
-                    className={`font-extrabold px-2 py-0.5 rounded-full ${
+                    className={`font-semibold ${
                       wh.status === "active"
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-slate-100 text-slate-600"
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-slate-500 dark:text-slate-400"
                     }`}
                   >
                     {wh.status === "active" ? "Aktif Depo" : "Pasif"}
@@ -3743,16 +3394,19 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             ))}
 
             {filteredWarehouses.length === 0 && (
-              <div className="col-span-full bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-400">
-                Arama kriterlerine uygun depo bulunamadı.
+              <div
+                className="col-span-full bg-white dark:bg-slate-900 p-12 text-center rounded-2xl border text-slate-500 dark:text-slate-400 text-xs"
+                style={{ borderColor: theme.cardBorder }}
+              >
+                Arama veya filtre kriterlerine uygun depo kaydı bulunamadı.
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* SUB-TAB 4: SISTEM AYARLARI */}
-      {currentSubTab === "settings" && (
+      {/* SUB-TAB 4: SISTEM AYARLARI (Yalnızca Admin ve Sistem Yöneticisi) */}
+      {isAdmin && currentSubTab === "settings" && (
         <div className="space-y-6">
           <Settings
             embedded={true}
@@ -3774,542 +3428,566 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       )}
 
       {/* SUB-TAB: ŞİRKETLER & ÇOKLU ŞİRKET YÖNETİMİ */}
-      {currentSubTab === "companies" && (
-        !isAdmin ? (
-          <div className="p-8 max-w-xl mx-auto bg-white rounded-2xl border border-amber-200 shadow-xs text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-              <Lock className="w-6 h-6" />
+      {currentSubTab === "companies" &&
+        (!isAdmin ? (
+          <div
+            className="p-8 max-w-xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border shadow-2xs text-center space-y-3"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
+              <Lock className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">
+            <h3 className="text-base font-editorial font-semibold text-slate-900 dark:text-slate-100">
               Çoklu Şirket Tanımı Yetki Kısıtlaması
             </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
               Çoklu şirket tanımlama, yeni şirket ekleme ve şirket yapılandırma işlemleri yalnızca <strong>Admin</strong> ve <strong>Sistem Yöneticisi</strong> yetkisine sahip kullanıcılar tarafından yapılabilir.
             </p>
           </div>
         ) : (
-        <div className="space-y-6">
-          {/* Header Bar */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#0f6bae]" />
-                Kayıtlı Şirketler & Çoklu Şirket Yönetimi
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Tüm şirketlerinizi yönetin. Her yeni eklenen şirkete tüm modüller (Faturalar, Cariler, Bankalar, Stoklar vb.) <strong>tamamen boş ve izole</strong> olarak gelir.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleOpenAddCompany}
-              className="px-4 py-2 bg-[#0f6bae] hover:bg-[#005289] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 cursor-pointer shrink-0"
+          <div className="space-y-5">
+            <div
+              className="bg-white dark:bg-slate-900 p-5 rounded-2xl border shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              style={{ borderColor: theme.cardBorder }}
             >
-              <Plus className="w-4 h-4" />
-              <span>Yeni Şirket Ekle</span>
-            </button>
-          </div>
+              <div>
+                <h3 className="text-base font-editorial font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                  <span>Kayıtlı Şirketler & Çoklu Şirket Yönetimi</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Her yeni eklenen şirkete fatura, cari, banka ve stok modülleri tamamen izole ve temiz veri alanı olarak açılır.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenAddCompany}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-white text-xs font-semibold rounded-xl shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+                style={{ backgroundColor: theme.primaryColor }}
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span>Yeni Şirket Ekle</span>
+              </button>
+            </div>
 
-          {/* Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {effectiveCompanies.map((comp) => {
-              const isActive = comp.id === currentActiveCompanyId;
-              return (
-                <div
-                  key={comp.id}
-                  className={`bg-white rounded-2xl border p-5 transition-all shadow-xs flex flex-col justify-between ${
-                    isActive
-                      ? "border-[#0f6bae] ring-2 ring-[#0f6bae]/20 bg-gradient-to-b from-[#f0f7fc] to-white"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
-                          isActive ? "bg-[#0f6bae] text-white" : "bg-slate-100 text-slate-600"
-                        }`}>
-                          <Building className="w-5 h-5" />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {effectiveCompanies.map((comp) => {
+                const isActive = comp.id === currentActiveCompanyId;
+                return (
+                  <div
+                    key={comp.id}
+                    className={`bg-white dark:bg-slate-900 rounded-2xl border p-5 transition-all shadow-2xs flex flex-col justify-between ${
+                      isActive
+                        ? "ring-2 ring-[#0f6bae]/20"
+                        : "hover:border-slate-300 dark:hover:border-slate-600"
+                    }`}
+                    style={{
+                      borderColor: isActive ? theme.primaryColor : theme.cardBorder,
+                    }}
+                  >
+                    <div className="space-y-3.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              isActive
+                                ? "text-white"
+                                : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                            }`}
+                            style={isActive ? { backgroundColor: theme.primaryColor } : {}}
+                          >
+                            <Building className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                              {comp.companyName}
+                            </h4>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {comp.companyType === "anonim"
+                                ? "Anonim Şirket (A.Ş.)"
+                                : comp.companyType === "sahis"
+                                ? "Şahıs Firması"
+                                : "Limited Şirket (Ltd. Şti.)"}
+                            </span>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="text-sm font-bold text-slate-900 truncate">
-                            {comp.companyName}
-                          </h4>
-                          <span className="text-[10px] text-slate-400 capitalize">
-                            {comp.companyType === "anonim" ? "Anonim Şirket (A.Ş.)" : comp.companyType === "sahis" ? "Şahıs Firması" : "Limited Şirket (Ltd. Şti.)"}
+
+                        {isActive ? (
+                          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap shrink-0">
+                            Aktif Şirket
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onSelectCompany) {
+                                onSelectCompany(comp.id);
+                              } else {
+                                setActiveCompanyId(comp.id);
+                                window.location.reload();
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-[#0f6bae] hover:text-white text-slate-700 dark:text-slate-200 text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Bu Şirkete Geç
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                        {comp.companyTitle || comp.companyName}
+                      </div>
+
+                      {/* Vergi & Mysoft Sicil Satırları */}
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-500 dark:text-slate-400">Vergi Dairesi</span>
+                          <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                            {comp.taxOffice || "Merkez"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-500 dark:text-slate-400">VKN / TCKN</span>
+                          <span className="font-mono tabular-nums font-semibold text-slate-800 dark:text-slate-200">
+                            {comp.vkn || comp.tckn || "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-500 dark:text-slate-400">Mysoft Mükellef</span>
+                          <span className="font-mono tabular-nums font-semibold text-[#0f6bae] dark:text-sky-400">
+                            {comp.tenantIdentifierNumber || comp.vkn || comp.tckn || "Eşleşmedi"}
                           </span>
                         </div>
                       </div>
 
-                      {isActive ? (
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                          Aktif Şirket
-                        </span>
-                      ) : (
+                      {/* Yetki & Giriş Durumu */}
+                      <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                        {comp.moduleRestrictionEnabled ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400">
+                            <Lock className="w-3 h-3 shrink-0" />
+                            <span className="tabular-nums">
+                              Kısıtlı Modül ({comp.allowedModules?.length || 0} / 19)
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            <span>Tüm Modüller Açık (19)</span>
+                          </span>
+                        )}
+
+                        {comp.loginUsername && (
+                          <span className="inline-flex items-center gap-1 font-mono text-slate-600 dark:text-slate-300 truncate">
+                            <Key className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{comp.loginUsername}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Alt İşlemler */}
+                    <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 mt-4">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (onSelectCompany) {
-                              onSelectCompany(comp.id);
-                            } else {
-                              setActiveCompanyId(comp.id);
-                              window.location.reload();
-                            }
-                          }}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-[#0f6bae] hover:text-white text-slate-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer"
+                          onClick={() => handleOpenMysoftMatch(comp)}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-[#0f6bae] dark:text-sky-400 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                          title="Mysoft VKN / TCKN Eşleştirmesini Düzenle"
                         >
-                          Bu Şirkete Geç
+                          <Globe className="w-3 h-3 shrink-0" />
+                          <span>Mysoft Eşle</span>
                         </button>
-                      )}
-                    </div>
 
-                    <div className="text-xs text-slate-600 line-clamp-2">
-                      {comp.companyTitle || comp.companyName}
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditCompany(comp)}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                          title="Şirketi Düzenle"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
 
-                    {/* VKN & TCKN details */}
-                    <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-150 space-y-1 text-[11px]">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-semibold">Vergi Dairesi:</span>
-                        <span className="font-bold text-slate-800">{comp.taxOffice || "Merkez"}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-semibold">VKN (10 hane):</span>
-                        <span className="font-mono font-bold text-slate-800">{comp.vkn || "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-semibold">TCKN (11 hane):</span>
-                        <span className="font-mono font-bold text-slate-800">{comp.tckn || "—"}</span>
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-                        <span className="text-indigo-600 font-semibold">Mysoft Eşleşme:</span>
-                        <span className="font-mono text-indigo-700 font-bold">
-                          {comp.tenantIdentifierNumber || comp.vkn || comp.tckn || "Eşleşmedi"} ({comp.mysoftMatchedType?.toUpperCase() || "VKN"})
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Modül Durumu Bilgisi */}
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      {comp.moduleRestrictionEnabled ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold border border-amber-200 dark:border-amber-800">
-                          🔒 Kısıtlı Modül ({comp.allowedModules?.length || 0} / 19)
-                        </span>
+                      {!isProtectedCompanyId(comp.id) && !comp.isDefault ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCompanyItem(comp.id)}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap"
+                          title="Şirketi Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>Sil</span>
+                        </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800">
-                          ✨ Tüm Modüller Açık (19)
-                        </span>
-                      )}
-                      {comp.id !== "comp_default" && (
-                        <span className="text-slate-500 flex items-center gap-1 text-[10px]">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          İzole Temiz Veri
+                        <span
+                          className="text-[11px] font-medium text-slate-400 flex items-center gap-1 whitespace-nowrap"
+                          title="Ana şirket kaydı korunmaktadır"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>Korunan Kayıt</span>
                         </span>
                       )}
                     </div>
-
-                    {/* Giriş Bilgileri Rozeti */}
-                    {comp.loginUsername && (
-                      <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <Key className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="font-semibold text-slate-600 dark:text-slate-400">Giriş:</span>
-                          <span className="font-mono font-bold">{comp.loginUsername}</span>
-                          {comp.loginPasswordPlain && (
-                            <span className="font-mono text-[10px] text-slate-500">({comp.loginPasswordPlain})</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-bold shrink-0">
-                          {comp.loginRole || "Giriş Yetkili"}
-                        </span>
-                      </div>
-                    )}
                   </div>
-
-                  {/* Actions */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-3">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenMysoftMatch(comp)}
-                        className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
-                        title="Mysoft VKN / TCKN Eşleştirmesini Düzenle"
-                      >
-                        <Globe className="w-3 h-3" />
-                        <span>Mysoft Eşle</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditCompany(comp)}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                        title="Şirketi Düzenle"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {!isProtectedCompanyId(comp.id) && !comp.isDefault ? (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCompanyItem(comp.id)}
-                        className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                        title="Şirketi Sil"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Şirket Sil</span>
-                      </button>
-                    ) : (
-                      <span
-                        className="px-2.5 py-1 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-lg flex items-center gap-1 cursor-not-allowed"
-                        title="Mevcut ana şirketler silinemez"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Korunan Şirket</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-        )
-      )}
+        ))}
 
       {/* SUB-TAB: MYSOFT ENTEGRASYON & VKN/TCKN EŞLEŞTİRME MASASI */}
       {currentSubTab === "mysoft" && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-            <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-indigo-600" />
-                  Mysoft e-Belge Entegrasyonu — VKN / TCKN Eşleştirme Masası
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Eşleştirilen tüm şirket ve firmaların Mysoft e-Fatura, e-Arşiv ve e-İrsaliye API erişimleri merkezi <strong>Mysoft İş Ortağı</strong> hesabı üzerinden yürütülür. VKN/TCKN eşleştirmelerini, bağlı iş ortağı mükelleflerini ve ardışık numaratörleri buradan yönetebilirsiniz.
+        <div className="space-y-5">
+          {/* KART 1: MERKEZİ MYSOFT İŞ ORTAĞI API ERİŞİM ÖZETİ & ŞİRKET SEÇİCİ */}
+          <div
+            className="bg-white dark:bg-slate-900 p-6 rounded-2xl border shadow-2xs space-y-5"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Mysoft e-Belge Entegrasyonu — VKN / TCKN Eşleştirme Masası
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-semibold whitespace-nowrap">
+                    {partnerSummary?.mockMode
+                      ? "İş Ortağı Simülasyon Modu"
+                      : partnerSummary?.configured
+                        ? "Canlı İş Ortağı OAuth2 Bağlantısı"
+                        : "İş Ortağı Proxy Hazır"}
+                  </span>
+                  {partnerSummary?.businessPartnerId && (
+                    <span className="text-[10px] font-mono tabular-nums px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
+                      Partner ID: #{partnerSummary.businessPartnerId}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Eşleştirilen tüm şirketlerin Mysoft e-Fatura, e-Arşiv ve e-İrsaliye API erişimleri merkezi <strong className="text-slate-700 dark:text-slate-200">Mysoft İş Ortağı</strong> hesabı (<code className="font-mono text-[#0f6bae] dark:text-sky-400">tenantIdentifierNumber</code>) üzerinden yürütülür.
                 </p>
               </div>
 
-              {/* Company Selector */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
                   disabled={isSyncingPartnerLinks}
                   onClick={() => void handleBindAllCompaniesToBusinessPartner()}
-                  className="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+                  className="h-9 px-3.5 rounded-xl text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0 hover:opacity-95"
+                  style={{ backgroundColor: theme.primaryColor }}
                 >
-                  <ShieldCheck className={`w-3.5 h-3.5 ${isSyncingPartnerLinks ? "animate-pulse" : ""}`} />
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                   <span>
                     {isSyncingPartnerLinks
                       ? "İş Ortağına Bağlanıyor..."
                       : "Eşleşmiş Şirketleri İş Ortağına Bağla"}
                   </span>
                 </button>
-                <label className="text-xs font-bold text-slate-600 whitespace-nowrap">
-                  İşlem Yapılacak Şirket:
-                </label>
-                <select
-                  value={selectedMysoftCompId}
-                  onChange={(e) => setSelectedMysoftCompId(e.target.value)}
-                  className="h-9 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                >
-                  {effectiveCompanies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.companyName} {c.id === currentActiveCompanyId ? "(Aktif)" : ""}
-                    </option>
-                  ))}
-                </select>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                    Şirket:
+                  </label>
+                  <select
+                    value={selectedMysoftCompId}
+                    onChange={(e) => setSelectedMysoftCompId(e.target.value)}
+                    className="h-9 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#0f6bae] transition-colors"
+                  >
+                    {effectiveCompanies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.companyName} {c.id === currentActiveCompanyId ? "(Aktif)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            {/* MERKEZİ MYSOFT İŞ ORTAĞI API ERİŞİM ÖZETİ VE EŞLEŞEN ŞİRKETLER TABLOSU */}
-            <div className="p-4 rounded-2xl bg-slate-900 text-white border border-slate-800 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-5 h-5 text-indigo-300" />
+            {/* Özet Metrik Şeridi */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    İş Ortağı Mükellefi
                   </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-sm font-bold text-white">
-                        Mysoft İş Ortağı Üzerinden Merkezi API Erişimi Aktif
-                      </h4>
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-bold">
-                        {partnerSummary?.mockMode
-                          ? "İş Ortağı Simülasyon Modu"
-                          : partnerSummary?.configured
-                            ? "Canlı İş Ortağı OAuth2 Bağlantısı"
-                            : "İş Ortağı Proxy Hazır"}
-                      </span>
-                      {partnerSummary?.businessPartnerId && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
-                          Partner ID: #{partnerSummary.businessPartnerId}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-300 mt-1">
-                      Bu masada VKN veya TCKN eşleştirmesi yapılan tüm şirketlerin e-Belge sorgulama, GİB mükellef doğrulama, taslak önizleme ve fatura gönderim işlemleri ayrı kullanıcı şifresi gerektirmeden doğrudan <strong>Mysoft İş Ortağı</strong> yetkisiyle (<code className="text-indigo-300">tenantIdentifierNumber</code>) gerçekleştirilir.
-                    </p>
+                  <div className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-white mt-0.5">
+                    {mysoftDeskTenants.length}
                   </div>
                 </div>
-
-                <div className="flex items-center gap-3 shrink-0 text-xs">
-                  <div className="px-3 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-center">
-                    <div className="text-[10px] text-slate-400">İş Ortağı Mükellefi</div>
-                    <div className="text-sm font-extrabold text-indigo-300">
-                      {mysoftDeskTenants.length}
-                    </div>
-                  </div>
-                  <div className="px-3 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-center">
-                    <div className="text-[10px] text-slate-400">Eşleşen Şirket</div>
-                    <div className="text-sm font-extrabold text-emerald-300">
-                      {effectiveCompanies.filter((c) => isCompanyMysoftMatched(c)).length} / {effectiveCompanies.length}
-                    </div>
-                  </div>
-                </div>
+                <Building2 className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
               </div>
 
-              {/* Tüm Şirketlerin Eşleşme & İş Ortağı API Durum Listesi */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800">
-                {effectiveCompanies.map((comp) => {
-                  const compTenantId =
-                    resolveCompanyMysoftTenantIdentifier(comp) ||
-                    String(comp.vkn || comp.tckn || "").replace(/\D/g, "");
-                  const isMatched = isCompanyMysoftMatched(comp);
-                  const linkedPartner = mysoftDeskTenants.find(
-                    (t) => String(t.taxNumber || "").replace(/\D/g, "") === compTenantId,
-                  );
-                  const isSelectedRow = comp.id === selectedMysoftCompId;
-                  return (
-                    <div
-                      key={comp.id}
-                      onClick={() => setSelectedMysoftCompId(comp.id)}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
-                        isSelectedRow
-                          ? "bg-indigo-950/80 border-indigo-400"
-                          : "bg-slate-800/60 border-slate-700/80 hover:border-slate-600"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-white truncate">
-                          {comp.companyName}
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-300 mt-0.5 flex items-center gap-1.5">
-                          <span>{compTenantId || "VKN/TCKN Yok"}</span>
-                          {linkedPartner && (
-                            <span className="text-emerald-300 truncate">
-                              • İş Ortağı Kayıtlı
-                            </span>
-                          )}
-                        </div>
-                        {isMatched && (
-                          <div className="text-[10px] font-mono text-indigo-200 mt-1 flex flex-wrap items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-400/30">
-                              e-Fat: {comp.eFaturaNextNumber || `${comp.eFaturaPrefix || "GIB"}${new Date().getFullYear()}000000001`}
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-400/30">
-                              e-Arş: {comp.eArsivNextNumber || `${comp.eArsivPrefix || "EAR"}${new Date().getFullYear()}000000001`}
-                            </span>
-                          </div>
+              <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Eşleşen Şirket
+                  </div>
+                  <div className="text-xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    {effectiveCompanies.filter((c) => isCompanyMysoftMatched(c)).length} / {effectiveCompanies.length}
+                  </div>
+                </div>
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              </div>
+
+              <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Merkezi Kanal
+                  </div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+                    Mysoft İş Ortağı OAuth2
+                  </div>
+                </div>
+                <Globe className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
+              </div>
+            </div>
+
+            {/* Tüm Şirketlerin Eşleşme & İş Ortağı API Durum Listesi */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {effectiveCompanies.map((comp) => {
+                const compTenantId =
+                  resolveCompanyMysoftTenantIdentifier(comp) ||
+                  String(comp.vkn || comp.tckn || "").replace(/\D/g, "");
+                const isMatched = isCompanyMysoftMatched(comp);
+                const linkedPartner = mysoftDeskTenants.find(
+                  (t) => String(t.taxNumber || "").replace(/\D/g, "") === compTenantId,
+                );
+                const isSelectedRow = comp.id === selectedMysoftCompId;
+                return (
+                  <div
+                    key={comp.id}
+                    onClick={() => setSelectedMysoftCompId(comp.id)}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start justify-between gap-2 ${
+                      isSelectedRow
+                        ? "bg-sky-50/70 dark:bg-sky-950/30 border-[#0f6bae] dark:border-sky-500"
+                        : "bg-slate-50/60 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {comp.companyName}
+                      </div>
+                      <div className="text-[11px] font-mono tabular-nums text-slate-600 dark:text-slate-300 mt-0.5 flex items-center gap-1.5">
+                        <span>{compTenantId || "VKN/TCKN Yok"}</span>
+                        {linkedPartner && (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-sans font-semibold truncate">
+                            • İş Ortağı Kayıtlı
+                          </span>
                         )}
                       </div>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${
-                          isMatched
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                            : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                        }`}
-                      >
-                        {isMatched ? "İş Ortağı API" : "Eşleşmedi"}
-                      </span>
+                      {isMatched && (
+                        <div className="text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-300 mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                            e-Fat: {comp.eFaturaNextNumber || `${comp.eFaturaPrefix || "GIB"}${new Date().getFullYear()}000000001`}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                            e-Arş: {comp.eArsivNextNumber || `${comp.eArsivPrefix || "EAR"}${new Date().getFullYear()}000000001`}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Selected Company Mapping Detail */}
-            {(() => {
-              const selectedComp = effectiveCompanies.find((c) => c.id === selectedMysoftCompId) || effectiveCompanies[0];
-              if (!selectedComp) return null;
-              const currentYear = new Date().getFullYear();
-              const activeEFatPrefix = (deskEFaturaPrefix || selectedComp.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
-              const activeEArsPrefix = (deskEArsivPrefix || selectedComp.eArsivPrefix || "EAR").toUpperCase().slice(0, 3);
-              const activeEFatNext = deskEFaturaNextNo || selectedComp.eFaturaNextNumber || `${activeEFatPrefix}${currentYear}000000001`;
-              const activeEArsNext = deskEArsivNextNo || selectedComp.eArsivNextNumber || `${activeEArsPrefix}${currentYear}000000001`;
-              const selectedMatchedTenant =
-                resolveCompanyMysoftTenantIdentifier(selectedComp) ||
-                selectedComp.tenantIdentifierNumber ||
-                selectedComp.vkn ||
-                selectedComp.tckn ||
-                "";
-              const isSelectedMatched = isCompanyMysoftMatched(selectedComp);
-              const linkedPartnerRecord = mysoftDeskTenants.find(
-                (t) => String(t.taxNumber || "").replace(/\D/g, "") === selectedMatchedTenant,
-              );
-
-              const handleSavePrefixSettingsOnDesk = () => {
-                const normEFatPfx = activeEFatPrefix.replace(/[^A-Z0-9]/g, "").slice(0, 3).padEnd(3, "X");
-                const normEArsPfx = activeEArsPrefix.replace(/[^A-Z0-9]/g, "").slice(0, 3).padEnd(3, "X");
-                const updatedComp: CompanyItem = {
-                  ...selectedComp,
-                  mysoftAccessMode: "business_partner",
-                  eFaturaPrefix: normEFatPfx,
-                  eFaturaNextNumber: activeEFatNext.trim().toUpperCase(),
-                  eArsivPrefix: normEArsPfx,
-                  eArsivNextNumber: activeEArsNext.trim().toUpperCase(),
-                  defaultInvoicePrefix: normEFatPfx,
-                };
-                handleSaveCompanyFromModal(updatedComp, false);
-                setMysoftDeskFeedback(
-                  `Şirketin resmi belge ön ekleri (${normEFatPfx} / ${normEArsPfx}) ve sıradaki ardışık fatura numaraları (${activeEFatNext} / ${activeEArsNext}) başarıyla kaydedildi.`,
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-md font-semibold shrink-0 whitespace-nowrap ${
+                        isMatched
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                          : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                      }`}
+                    >
+                      {isMatched ? "İş Ortağı API" : "Eşleşmedi"}
+                    </span>
+                  </div>
                 );
-                setTimeout(() => setMysoftDeskFeedback(null), 5000);
-              };
+              })}
+            </div>
+          </div>
 
-              return (
-                <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50/70 to-blue-50/40 p-5 rounded-2xl border border-indigo-150 space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 block">
-                        Seçili Şirket & Mysoft İş Ortağı Mükellef Bilgisi
+          {/* SEÇİLİ ŞİRKET DETAY KARTLARI (TEK SEVİYE ELEVASYON) */}
+          {(() => {
+            const selectedComp = effectiveCompanies.find((c) => c.id === selectedMysoftCompId) || effectiveCompanies[0];
+            if (!selectedComp) return null;
+            const currentYear = new Date().getFullYear();
+            const activeEFatPrefix = (deskEFaturaPrefix || selectedComp.eFaturaPrefix || "GIB").toUpperCase().slice(0, 3);
+            const activeEArsPrefix = (deskEArsivPrefix || selectedComp.eArsivPrefix || "EAR").toUpperCase().slice(0, 3);
+            const activeEFatNext = deskEFaturaNextNo || selectedComp.eFaturaNextNumber || `${activeEFatPrefix}${currentYear}000000001`;
+            const activeEArsNext = deskEArsivNextNo || selectedComp.eArsivNextNumber || `${activeEArsPrefix}${currentYear}000000001`;
+            const selectedMatchedTenant =
+              resolveCompanyMysoftTenantIdentifier(selectedComp) ||
+              selectedComp.tenantIdentifierNumber ||
+              selectedComp.vkn ||
+              selectedComp.tckn ||
+              "";
+            const isSelectedMatched = isCompanyMysoftMatched(selectedComp);
+            const linkedPartnerRecord = mysoftDeskTenants.find(
+              (t) => String(t.taxNumber || "").replace(/\D/g, "") === selectedMatchedTenant,
+            );
+
+            const handleSavePrefixSettingsOnDesk = () => {
+              const normEFatPfx = activeEFatPrefix.replace(/[^A-Z0-9]/g, "").slice(0, 3).padEnd(3, "X");
+              const normEArsPfx = activeEArsPrefix.replace(/[^A-Z0-9]/g, "").slice(0, 3).padEnd(3, "X");
+              const updatedComp: CompanyItem = {
+                ...selectedComp,
+                mysoftAccessMode: "business_partner",
+                eFaturaPrefix: normEFatPfx,
+                eFaturaNextNumber: activeEFatNext.trim().toUpperCase(),
+                eArsivPrefix: normEArsPfx,
+                eArsivNextNumber: activeEArsNext.trim().toUpperCase(),
+                defaultInvoicePrefix: normEFatPfx,
+              };
+              handleSaveCompanyFromModal(updatedComp, false);
+              setMysoftDeskFeedback(
+                `Şirketin resmi belge ön ekleri (${normEFatPfx} / ${normEArsPfx}) ve sıradaki ardışık fatura numaraları (${activeEFatNext} / ${activeEArsNext}) başarıyla kaydedildi.`,
+              );
+              setTimeout(() => setMysoftDeskFeedback(null), 5000);
+            };
+
+            return (
+              <>
+                {/* KART 2: SEÇİLİ ŞİRKET & E-FATURA / E-ARŞİV SERİ NUMARALARI */}
+                <div
+                  className="bg-white dark:bg-slate-900 p-6 rounded-2xl border shadow-2xs space-y-5"
+                  style={{ borderColor: theme.cardBorder }}
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#0f6bae] dark:text-sky-400 block">
+                        Seçili Şirket &amp; Mysoft İş Ortağı Mükellef Bilgisi
                       </span>
-                      <h4 className="text-base font-bold text-slate-900">
+                      <h4 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
                         {selectedComp.companyTitle || selectedComp.companyName}
                       </h4>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         Vergi Dairesi: {selectedComp.taxOffice || "Merkez"} • İl: {selectedComp.city || "İstanbul"}
                         {(linkedPartnerRecord?.name || selectedComp.mysoftPartnerName) && (
-                          <span className="text-indigo-700 font-semibold">
+                          <span className="text-slate-700 dark:text-slate-200 font-semibold">
                             {" "}• İş Ortağı Kaydı: {linkedPartnerRecord?.name || selectedComp.mysoftPartnerName}
                           </span>
                         )}
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <button
                         type="button"
                         disabled={isSyncingMysoftPrefixes}
                         onClick={() => void syncSelectedCompanyMysoftPrefixes(selectedComp.id, true)}
-                        className="px-3.5 py-2 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+                        className="h-9 px-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMysoftPrefixes ? "animate-spin" : ""}`} />
-                        <span>e-Fatura &amp; e-Arşiv Seri Numaralarını Çek</span>
+                        <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncingMysoftPrefixes ? "animate-spin" : ""}`} />
+                        <span>Seri Numaralarını Çek</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => handleOpenMysoftMatch(selectedComp)}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+                        className="h-9 px-4 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:opacity-95"
+                        style={{ backgroundColor: theme.primaryColor }}
                       >
-                        <Globe className="w-3.5 h-3.5" />
+                        <Globe className="w-3.5 h-3.5 shrink-0" />
                         <span>Mysoft Eşleştir &amp; Seri Numaraları</span>
                       </button>
                     </div>
                   </div>
 
                   {mysoftDeskFeedback && (
-                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>{mysoftDeskFeedback}</span>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                      <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                  {/* 5'li Tabular Kimlik & Numaratör Özeti */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mb-1">
                         Kurumsal VKN (10 Hane)
                       </div>
-                      <div className="text-base font-mono font-bold text-slate-900">
+                      <div className="text-sm font-mono tabular-nums font-bold text-slate-900 dark:text-white">
                         {selectedComp.vkn || "Girilmedi"}
                       </div>
                       <span className="text-[10px] text-slate-400 mt-1 block">Tüzel Kişi Vergi No</span>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                      <div className="text-[11px] text-slate-500 font-semibold mb-1">
+                    <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mb-1">
                         Yetkili TCKN (11 Hane)
                       </div>
-                      <div className="text-base font-mono font-bold text-slate-900">
+                      <div className="text-sm font-mono tabular-nums font-bold text-slate-900 dark:text-white">
                         {selectedComp.tckn || "Girilmedi"}
                       </div>
                       <span className="text-[10px] text-slate-400 mt-1 block">Gerçek Kişi / Şahıs No</span>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-indigo-200">
-                      <div className="text-[11px] text-indigo-600 font-bold mb-1">
-                        Aktif İş Ortağı Mükellef Kimliği
+                    <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] text-[#0f6bae] dark:text-sky-400 font-semibold mb-1">
+                        İş Ortağı Mükellef Kimliği
                       </div>
-                      <div className="text-base font-mono font-bold text-indigo-900">
+                      <div className="text-sm font-mono tabular-nums font-bold text-slate-900 dark:text-white">
                         {selectedMatchedTenant || "Eşleşmedi"}
                       </div>
-                      <span className="text-[10px] text-emerald-600 mt-1 block font-semibold">
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 block font-semibold">
                         İş Ortağı API ({selectedComp.mysoftMatchedType?.toUpperCase() || (selectedMatchedTenant.length === 11 ? "TCKN" : "VKN")})
                       </span>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-blue-200">
-                      <div className="text-[11px] text-blue-700 font-bold mb-1 flex items-center justify-between">
-                        <span>Resmi e-Fatura Ön Eki</span>
-                        <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                    <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold mb-1 flex items-center justify-between gap-1">
+                        <span className="truncate">e-Fatura Ön Eki</span>
+                        <span className="text-[10px] bg-white dark:bg-slate-900 text-[#0f6bae] dark:text-sky-400 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded font-mono tabular-nums font-bold shrink-0">
                           {activeEFatPrefix}
                         </span>
                       </div>
-                      <div className="text-xs font-mono font-bold text-blue-950 truncate mt-1">
+                      <div className="text-xs font-mono tabular-nums font-bold text-slate-900 dark:text-white truncate mt-1">
                         {activeEFatNext}
                       </div>
-                      <span className="text-[10px] text-blue-600 mt-1 block">
+                      <span className="text-[10px] font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-1 block truncate">
                         {deskEFaturaLastNo ? `Son: ${deskEFaturaLastNo}` : "Sıradaki Ardışık No"}
                       </span>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-purple-200">
-                      <div className="text-[11px] text-purple-700 font-bold mb-1 flex items-center justify-between">
-                        <span>Resmi e-Arşiv Ön Eki</span>
-                        <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-mono font-bold">
+                    <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold mb-1 flex items-center justify-between gap-1">
+                        <span className="truncate">e-Arşiv Ön Eki</span>
+                        <span className="text-[10px] bg-white dark:bg-slate-900 text-[#0f6bae] dark:text-sky-400 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded font-mono tabular-nums font-bold shrink-0">
                           {activeEArsPrefix}
                         </span>
                       </div>
-                      <div className="text-xs font-mono font-bold text-purple-950 truncate mt-1">
+                      <div className="text-xs font-mono tabular-nums font-bold text-slate-900 dark:text-white truncate mt-1">
                         {activeEArsNext}
                       </div>
-                      <span className="text-[10px] text-purple-600 mt-1 block">
+                      <span className="text-[10px] font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-1 block truncate">
                         {deskEArsivLastNo ? `Son: ${deskEArsivLastNo}` : "Sıradaki Ardışık No"}
                       </span>
                     </div>
                   </div>
 
-                  {/* EŞLEŞEN FİRMANIN E-FATURA & E-ARŞİV SERİ NUMARALARI VE ARDIŞIK NUMARATÖR MASASI */}
-                  <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  {/* E-FATURA & E-ARŞİV ARDIŞIK NUMARATÖR YÖNETİMİ */}
+                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
-                        <h5 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                          <Tag className="w-4 h-4 text-indigo-600" />
-                          Eşleşen Firmanın e-Fatura &amp; e-Arşiv Seri Numaraları (Mysoft Ön Ek &amp; Ardışık Numaratör)
+                        <h5 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                          <span>Eşleşen Firmanın e-Fatura &amp; e-Arşiv Seri Numaraları (Ardışık Numaratör)</span>
                         </h5>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Mysoft tarafında eşleştirmesi yapılan firmanın <strong>e-Fatura</strong> ve <strong>e-Arşiv</strong> seri numaraları, son kesilen belge numaraları ve sıradaki ardışık seri numaraları buradan yönetilir.
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Mysoft tarafında eşleştirmesi yapılan firmanın resmi belge ön ekleri ve sıradaki ardışık seri numaraları buradan yönetilir.
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={handleSavePrefixSettingsOnDesk}
-                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+                        className="h-9 px-3.5 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto whitespace-nowrap shrink-0 hover:opacity-95"
+                        style={{ backgroundColor: theme.primaryColor }}
                       >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>e-Fatura &amp; e-Arşiv Seri Numaralarını Kaydet</span>
+                        <Save className="w-3.5 h-3.5 shrink-0" />
+                        <span>Seri Numaralarını Kaydet</span>
                       </button>
                     </div>
 
-                    {/* All Official Prefixes Table / Badges */}
+                    {/* Tanımlı Seriler Seçim Satırı */}
                     <div className="space-y-2">
-                      <div className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-                        <span>Mysoft Portalında Eşleşen Firmanın Tanımlı e-Fatura &amp; e-Arşiv Serileri</span>
-                        <span className="text-[10px] text-slate-500 font-normal">
+                      <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between gap-2">
+                        <span>Mysoft Portalında Tanımlı e-Fatura &amp; e-Arşiv Serileri</span>
+                        <span className="text-[10px] text-slate-400 font-normal">
                           Üzerine tıklayarak aktif seri numarası olarak seçebilirsiniz
                         </span>
                       </div>
@@ -4378,34 +4056,37 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                               }}
                               className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
                                 isSelected
-                                  ? "bg-indigo-50/80 border-indigo-400 ring-1 ring-indigo-300"
-                                  : "bg-slate-50/70 border-slate-200 hover:border-indigo-300"
+                                  ? "bg-sky-50/70 dark:bg-sky-950/30 border-[#0f6bae] dark:border-sky-500"
+                                  : "bg-slate-50/70 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                               }`}
                             >
                               <div className="space-y-0.5 min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-mono text-xs font-extrabold tracking-wider">
+                                  <span
+                                    className="px-2 py-0.5 rounded-md text-white font-mono tabular-nums text-xs font-bold tracking-wider"
+                                    style={{ backgroundColor: theme.primaryColor }}
+                                  >
                                     {pfxCode}
                                   </span>
-                                  <span className="text-xs font-bold text-slate-800 truncate">
+                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
                                     {docTypeLabel}
                                   </span>
                                   {p.isDefault && (
-                                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                                    <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded font-semibold">
                                       Varsayılan
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-mono truncate">
-                                  En Son: <strong className="text-slate-700">{p.lastNumber || "Henüz kesilmedi (0)"}</strong>
+                                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono tabular-nums truncate">
+                                  En Son: <strong className="text-slate-700 dark:text-slate-200">{p.lastNumber || "Henüz kesilmedi (0)"}</strong>
                                 </div>
-                                <div className="text-[10px] text-indigo-700 font-mono truncate">
+                                <div className="text-[10px] text-[#0f6bae] dark:text-sky-400 font-mono tabular-nums truncate">
                                   Sıradaki: <strong>{p.nextNumber || `${pfxCode}${currentYear}000000001`}</strong>
                                 </div>
                               </div>
                               <CheckCircle2
                                 className={`w-4 h-4 shrink-0 ${
-                                  isSelected ? "text-indigo-600" : "text-slate-300"
+                                  isSelected ? "text-[#0f6bae] dark:text-sky-400" : "text-slate-300 dark:text-slate-600"
                                 }`}
                               />
                             </div>
@@ -4414,9 +4095,9 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       </div>
                     </div>
 
-                    {/* Editable Official Prefix & Next Sequential Inputs */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                      {/* e-Fatura Card */}
+                    {/* Düzenlenebilir Seri Giriş Alanları */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                      {/* e-Fatura Alanı */}
                       {(() => {
                         const efatSeqCheck = validateSequentialInvoiceNumber({
                           enteredNumber: activeEFatNext,
@@ -4425,20 +4106,20 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                           year: currentYear,
                         });
                         return (
-                          <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                                e-Fatura Seri Numarası (Ön Ek &amp; Sıradaki No)
+                          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                                <span>e-Fatura Seri Numarası</span>
                               </span>
-                              <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold">
-                                Mysoft Son No: {deskEFaturaLastNo || "Yok (Yeni Seri)"}
+                              <span className="text-[10px] font-mono tabular-nums bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md font-semibold">
+                                Son No: {deskEFaturaLastNo || "Yok"}
                               </span>
                             </div>
                             <div className="grid grid-cols-3 gap-2.5">
                               <div>
-                                <label className="block text-[10px] font-bold text-blue-800 mb-1">
-                                  Seri Ön Ek (3 Harf)
+                                <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  Ön Ek (3 Harf)
                                 </label>
                                 <input
                                   type="text"
@@ -4453,12 +4134,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                                       setDeskEFaturaNextNo(seqInfo.nextInvoiceNumber);
                                     }
                                   }}
-                                  className="w-full h-9 px-2.5 bg-white border border-blue-300 rounded-lg font-mono text-xs font-extrabold text-blue-950 uppercase text-center"
-                                  placeholder="Örn: TLL"
+                                  className="w-full h-9 px-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono tabular-nums text-xs font-bold text-slate-900 dark:text-white uppercase text-center outline-none focus:border-[#0f6bae]"
+                                  placeholder="TLL"
                                 />
                               </div>
                               <div className="col-span-2">
-                                <label className="block text-[10px] font-bold text-blue-800 mb-1">
+                                <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
                                   Sıradaki e-Fatura Seri Numarası
                                 </label>
                                 <input
@@ -4466,31 +4147,31 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                                   maxLength={16}
                                   value={activeEFatNext}
                                   onChange={(e) => setDeskEFaturaNextNo(e.target.value.toUpperCase().trim())}
-                                  className={`w-full h-9 px-3 bg-white border rounded-lg font-mono text-xs font-bold ${
+                                  className={`w-full h-9 px-3 bg-white dark:bg-slate-900 border rounded-lg font-mono tabular-nums text-xs font-bold outline-none ${
                                     efatSeqCheck.hasWarning
-                                      ? "border-red-400 text-red-950"
-                                      : "border-blue-300 text-blue-950"
+                                      ? "border-rose-400 text-rose-900 dark:text-rose-300"
+                                      : "border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:border-[#0f6bae]"
                                   }`}
                                 />
                               </div>
                             </div>
                             <div
-                              className={`p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
+                              className={`p-2.5 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
                                 efatSeqCheck.hasWarning
                                   ? efatSeqCheck.status === "gap"
-                                    ? "bg-amber-50 border-amber-200 text-amber-900"
-                                    : "bg-red-50 border-red-200 text-red-900"
-                                  : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                                    ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300"
+                                    : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-300"
+                                  : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300"
                               }`}
                             >
                               <div className="flex items-start gap-1.5 min-w-0">
                                 {efatSeqCheck.hasWarning ? (
-                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
                                 ) : (
-                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
                                 )}
                                 <div className="min-w-0">
-                                  <div className="font-extrabold">{efatSeqCheck.title}</div>
+                                  <div className="font-bold">{efatSeqCheck.title}</div>
                                   <p>{efatSeqCheck.message}</p>
                                 </div>
                               </div>
@@ -4498,7 +4179,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => setDeskEFaturaNextNo(efatSeqCheck.expectedNextNumber)}
-                                  className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold shrink-0 cursor-pointer"
+                                  className="px-2 py-1 rounded text-white font-semibold shrink-0 cursor-pointer whitespace-nowrap"
+                                  style={{ backgroundColor: theme.primaryColor }}
                                 >
                                   Düzelt
                                 </button>
@@ -4508,7 +4190,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                         );
                       })()}
 
-                      {/* e-Arşiv Card */}
+                      {/* e-Arşiv Alanı */}
                       {(() => {
                         const earsSeqCheck = validateSequentialInvoiceNumber({
                           enteredNumber: activeEArsNext,
@@ -4517,20 +4199,20 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                           year: currentYear,
                         });
                         return (
-                          <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                                <FileText className="w-3.5 h-3.5 text-purple-600" />
-                                e-Arşiv Seri Numarası (Ön Ek &amp; Sıradaki No)
+                          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                                <span>e-Arşiv Seri Numarası</span>
                               </span>
-                              <span className="text-[10px] font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-bold">
-                                Mysoft Son No: {deskEArsivLastNo || "Yok (Yeni Seri)"}
+                              <span className="text-[10px] font-mono tabular-nums bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md font-semibold">
+                                Son No: {deskEArsivLastNo || "Yok"}
                               </span>
                             </div>
                             <div className="grid grid-cols-3 gap-2.5">
                               <div>
-                                <label className="block text-[10px] font-bold text-purple-800 mb-1">
-                                  Seri Ön Ek (3 Harf)
+                                <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  Ön Ek (3 Harf)
                                 </label>
                                 <input
                                   type="text"
@@ -4545,12 +4227,12 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                                       setDeskEArsivNextNo(seqInfo.nextInvoiceNumber);
                                     }
                                   }}
-                                  className="w-full h-9 px-2.5 bg-white border border-purple-300 rounded-lg font-mono text-xs font-extrabold text-purple-950 uppercase text-center"
-                                  placeholder="Örn: EAR"
+                                  className="w-full h-9 px-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono tabular-nums text-xs font-bold text-slate-900 dark:text-white uppercase text-center outline-none focus:border-[#0f6bae]"
+                                  placeholder="EAR"
                                 />
                               </div>
                               <div className="col-span-2">
-                                <label className="block text-[10px] font-bold text-purple-800 mb-1">
+                                <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
                                   Sıradaki e-Arşiv Seri Numarası
                                 </label>
                                 <input
@@ -4558,31 +4240,31 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                                   maxLength={16}
                                   value={activeEArsNext}
                                   onChange={(e) => setDeskEArsivNextNo(e.target.value.toUpperCase().trim())}
-                                  className={`w-full h-9 px-3 bg-white border rounded-lg font-mono text-xs font-bold ${
+                                  className={`w-full h-9 px-3 bg-white dark:bg-slate-900 border rounded-lg font-mono tabular-nums text-xs font-bold outline-none ${
                                     earsSeqCheck.hasWarning
-                                      ? "border-red-400 text-red-950"
-                                      : "border-purple-300 text-purple-950"
+                                      ? "border-rose-400 text-rose-900 dark:text-rose-300"
+                                      : "border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:border-[#0f6bae]"
                                   }`}
                                 />
                               </div>
                             </div>
                             <div
-                              className={`p-2 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
+                              className={`p-2.5 rounded-lg border text-[10px] flex items-start justify-between gap-2 ${
                                 earsSeqCheck.hasWarning
                                   ? earsSeqCheck.status === "gap"
-                                    ? "bg-amber-50 border-amber-200 text-amber-900"
-                                    : "bg-red-50 border-red-200 text-red-900"
-                                  : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                                    ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300"
+                                    : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-300"
+                                  : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300"
                               }`}
                             >
                               <div className="flex items-start gap-1.5 min-w-0">
                                 {earsSeqCheck.hasWarning ? (
-                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
                                 ) : (
-                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
                                 )}
                                 <div className="min-w-0">
-                                  <div className="font-extrabold">{earsSeqCheck.title}</div>
+                                  <div className="font-bold">{earsSeqCheck.title}</div>
                                   <p>{earsSeqCheck.message}</p>
                                 </div>
                               </div>
@@ -4590,7 +4272,8 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => setDeskEArsivNextNo(earsSeqCheck.expectedNextNumber)}
-                                  className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold shrink-0 cursor-pointer"
+                                  className="px-2 py-1 rounded text-white font-semibold shrink-0 cursor-pointer whitespace-nowrap"
+                                  style={{ backgroundColor: theme.primaryColor }}
                                 >
                                   Düzelt
                                 </button>
@@ -4601,341 +4284,355 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                       })()}
                     </div>
                   </div>
+                </div>
 
-                  {/* KART 1: MYSOFT İŞ ORTAĞI API ERİŞİM KANALI & OPSİYONEL PORTAL BİLGİLERİ */}
-                  <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                          <h5 className="text-sm font-bold text-slate-900">
-                            Mysoft API Erişim Kanalı: Mysoft İş Ortağı (Merkezi OAuth2 Erişimi)
-                          </h5>
-                          {isSelectedMatched && selectedMatchedTenant ? (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" />
-                              İş Ortağı Üzerinden Bağlı ({selectedMatchedTenant})
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-md font-bold flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              VKN / TCKN Eşleşmesi Bekleniyor
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-600 mt-1">
-                          <strong>{selectedComp.companyTitle || selectedComp.companyName}</strong> şirketinin tüm Mysoft e-Fatura, e-Arşiv, e-İrsaliye ve mükellef sorgulama API çağrıları, bireysel kullanıcı adı/şifre gerektirmeden doğrudan <strong>Mysoft İş Ortağı</strong> hesabı üzerinden (<code className="font-mono text-indigo-700">{selectedMatchedTenant || "tenantIdentifierNumber"}</code>) gerçekleştirilir.
-                        </p>
+                {/* KART 3: MYSOFT API ERİŞİM KANALI & OPSİYONEL PORTAL BİLGİLERİ */}
+                <div
+                  className="bg-white dark:bg-slate-900 p-6 rounded-2xl border shadow-2xs space-y-4"
+                  style={{ borderColor: theme.cardBorder }}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <h5 className="text-sm font-bold text-slate-900 dark:text-white">
+                          Mysoft API Erişim Kanalı: Mysoft İş Ortağı (Merkezi OAuth2 Erişimi)
+                        </h5>
+                        {isSelectedMatched && selectedMatchedTenant ? (
+                          <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-md font-semibold flex items-center gap-1 whitespace-nowrap">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            <span>İş Ortağı Üzerinden Bağlı (<span className="font-mono tabular-nums">{selectedMatchedTenant}</span>)</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-2.5 py-0.5 rounded-md font-semibold flex items-center gap-1 whitespace-nowrap">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            <span>VKN / TCKN Eşleşmesi Bekleniyor</span>
+                          </span>
+                        )}
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowOptionalPortalCreds((prev) => !prev)}
-                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto shrink-0"
-                      >
-                        <Key className="w-3.5 h-3.5 text-slate-500" />
-                        <span>
-                          {showOptionalPortalCreds
-                            ? "Opsiyonel Portal Bilgilerini Gizle"
-                            : "Opsiyonel Bireysel Portal Bilgisi"}
-                        </span>
-                      </button>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        <strong className="text-slate-700 dark:text-slate-200">{selectedComp.companyTitle || selectedComp.companyName}</strong> şirketinin tüm e-Belge ve mükellef sorgulama çağrıları bireysel şifre gerektirmeden <strong className="text-slate-700 dark:text-slate-200">Mysoft İş Ortağı</strong> hesabı üzerinden (<code className="font-mono tabular-nums text-[#0f6bae] dark:text-sky-400">{selectedMatchedTenant || "tenantIdentifierNumber"}</code>) yürütülür.
+                      </p>
                     </div>
 
-                    {showOptionalPortalCreds && (
-                      <div className="pt-1 space-y-3">
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between gap-2">
-                          <span>
-                            Not: API erişimi <strong>Mysoft İş Ortağı</strong> üzerinden yapılır. Aşağıdaki alanlar yalnızca şirketin kendi Mysoft Portal ekranı giriş notunu saklamak isterseniz opsiyoneldir.
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveDeskMysoftCredentials(selectedComp.id)}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shrink-0 cursor-pointer"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Kaydet</span>
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-slate-500" />
-                              Mysoft Portal Kullanıcı Adı (Opsiyonel)
-                            </label>
-                            <input
-                              type="text"
-                              value={deskMysoftUsername}
-                              onChange={(e) => setDeskMysoftUsername(e.target.value)}
-                              placeholder="Opsiyonel portal kullanıcı adı"
-                              className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                              <Lock className="w-3.5 h-3.5 text-slate-500" />
-                              Mysoft Portal Şifresi (Opsiyonel)
-                            </label>
-                            <div className="relative">
-                              <input
-                                type={showDeskMysoftPassword ? "text" : "password"}
-                                value={deskMysoftPassword}
-                                onChange={(e) => setDeskMysoftPassword(e.target.value)}
-                                placeholder="••••••••••••"
-                                className="w-full h-10 px-3 pr-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowDeskMysoftPassword(!showDeskMysoftPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                                title={showDeskMysoftPassword ? "Şifreyi Gizle" : "Şifreyi Göster"}
-                              >
-                                {showDeskMysoftPassword ? (
-                                  <EyeOff className="w-4 h-4" />
-                                ) : (
-                                  <Eye className="w-4 h-4" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowOptionalPortalCreds((prev) => !prev)}
+                      className="h-9 px-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto shrink-0 whitespace-nowrap"
+                    >
+                      <Key className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                      <span>
+                        {showOptionalPortalCreds
+                          ? "Opsiyonel Portal Bilgilerini Gizle"
+                          : "Opsiyonel Bireysel Portal Bilgisi"}
+                      </span>
+                    </button>
                   </div>
 
-                  {/* KART 2: MYSOFT İŞ ORTAKLARI & MÜKELLEF LİSTESİ (EŞLEŞTİRME MASASI) */}
-                  <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-indigo-600" />
-                          <h5 className="text-sm font-bold text-slate-900">
-                            Mysoft İş Ortakları & Bağlı Mükellef Listesi
-                          </h5>
-                          <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md font-bold">
-                            {mysoftDeskTenants.length} İş Ortağı Mükellefi
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Mysoft İş Ortağı hesabınıza bağlı mükellefleri görüntüleyebilir ve <strong>{selectedComp.companyName}</strong> şirketini doğrudan iş ortağı API yetkisiyle eşleştirebilirsiniz.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void reloadMysoftDeskTenants();
-                          void refreshPartnerSummary();
-                        }}
-                        disabled={isMysoftDeskTenantsLoading}
-                        className="px-3.5 py-2 bg-slate-50 hover:bg-indigo-50 text-indigo-700 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto disabled:opacity-60"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isMysoftDeskTenantsLoading ? "animate-spin" : ""}`} />
-                        <span>İş Ortaklarını Yenile</span>
-                      </button>
-                    </div>
-
-                    {mysoftDeskPartnerHint && (
-                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
-                        <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>{mysoftDeskPartnerHint}</span>
-                      </div>
-                    )}
-
-                    {mysoftDeskTenantsError && (
-                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                          <span>{mysoftDeskTenantsError}</span>
-                        </div>
+                  {showOptionalPortalCreds && (
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span>
+                          Not: API erişimi <strong>Mysoft İş Ortağı</strong> üzerinden yapılır. Aşağıdaki alanlar yalnızca şirketin kendi Mysoft Portal ekranı giriş notunu saklamak isterseniz opsiyoneldir.
+                        </span>
                         <button
                           type="button"
-                          onClick={() => void reloadMysoftDeskTenants()}
-                          className="px-2.5 py-1 bg-white border border-rose-300 rounded-lg text-rose-700 font-bold hover:bg-rose-100"
+                          onClick={() => handleSaveDeskMysoftCredentials(selectedComp.id)}
+                          className="h-8 px-3 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap self-end sm:self-auto"
+                          style={{ backgroundColor: theme.primaryColor }}
                         >
-                          Tekrar Dene
+                          <Save className="w-3.5 h-3.5 shrink-0" />
+                          <span>Kaydet</span>
                         </button>
                       </div>
-                    )}
 
-                    {/* Arama & Manuel VKN Sorgulama Çubuğu */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                      <div className="md:col-span-7 relative">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={tenantSearchQuery}
-                          onChange={(e) => setTenantSearchQuery(e.target.value)}
-                          placeholder="İş ortağı adı, VKN veya TCKN ile filtrele..."
-                          className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                        />
-                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>Mysoft Portal Kullanıcı Adı (Opsiyonel)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={deskMysoftUsername}
+                            onChange={(e) => setDeskMysoftUsername(e.target.value)}
+                            placeholder="Opsiyonel portal kullanıcı adı"
+                            className="w-full h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-all font-mono"
+                          />
+                        </div>
 
-                      <div className="md:col-span-5 flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={deskManualVkn}
-                          onChange={(e) => setDeskManualVkn(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                          placeholder="10 VKN / 11 TCKN getir"
-                          className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const res = await deskLookupByVkn();
-                            if (res) {
-                              handleMatchTenantWithSelectedComp(res);
-                            }
-                          }}
-                          disabled={isDeskManualVknLoading || !deskManualVkn.trim()}
-                          className="h-10 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                        >
-                          {isDeskManualVknLoading ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Search className="w-3.5 h-3.5" />
-                          )}
-                          <span>VKN ile Getir</span>
-                        </button>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>Mysoft Portal Şifresi (Opsiyonel)</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showDeskMysoftPassword ? "text" : "password"}
+                              value={deskMysoftPassword}
+                              onChange={(e) => setDeskMysoftPassword(e.target.value)}
+                              placeholder="••••••••••••"
+                              className="w-full h-10 px-3 pr-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-all font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowDeskMysoftPassword(!showDeskMysoftPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                              title={showDeskMysoftPassword ? "Şifreyi Gizle" : "Şifreyi Göster"}
+                            >
+                              {showDeskMysoftPassword ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    {/* İş Ortakları Kartları / Listesi */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-                        <span>Kayıtlı İş Ortakları</span>
-                        <span className="font-normal text-slate-400">
-                          Seçili şirkete atamak için &quot;Bu Şirkete Eşle&quot; butonunu kullanın
+                {/* KART 4: MYSOFT İŞ ORTAKLARI & BAĞLI MÜKELLEF LİSTESİ */}
+                <div
+                  className="bg-white dark:bg-slate-900 p-6 rounded-2xl border shadow-2xs space-y-4"
+                  style={{ borderColor: theme.cardBorder }}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Building2 className="w-4 h-4 text-[#0f6bae] dark:text-sky-400 shrink-0" />
+                        <h5 className="text-sm font-bold text-slate-900 dark:text-white">
+                          Mysoft İş Ortakları &amp; Bağlı Mükellef Listesi
+                        </h5>
+                        <span className="text-[10px] font-mono tabular-nums bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md font-semibold">
+                          {mysoftDeskTenants.length} Mükellef
                         </span>
                       </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Mysoft İş Ortağı hesabınıza bağlı mükellefleri görüntüleyebilir ve <strong className="text-slate-700 dark:text-slate-200">{selectedComp.companyName}</strong> şirketini doğrudan iş ortağı API yetkisiyle eşleştirebilirsiniz.
+                      </p>
+                    </div>
 
-                      {isMysoftDeskTenantsLoading ? (
-                        <div className="p-8 text-center text-xs text-slate-500 bg-slate-50/50 rounded-xl border border-slate-100 flex flex-col items-center justify-center gap-2">
-                          <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                          <span>Mysoft iş ortakları ve mükellef rehberi yükleniyor...</span>
-                        </div>
-                      ) : (() => {
-                        const q = tenantSearchQuery.trim().toLowerCase();
-                        const filteredTenants = mysoftDeskTenants.filter((t) => {
-                          if (!q) return true;
-                          const name = String(t.name || "").toLowerCase();
-                          const taxNo = String(t.taxNumber || "");
-                          const tid = String(t.id || "");
-                          return name.includes(q) || taxNo.includes(q) || tid.includes(q);
-                        });
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void reloadMysoftDeskTenants();
+                        void refreshPartnerSummary();
+                      }}
+                      disabled={isMysoftDeskTenantsLoading}
+                      className="h-9 px-3.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto disabled:opacity-60 whitespace-nowrap shrink-0"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isMysoftDeskTenantsLoading ? "animate-spin" : ""}`} />
+                      <span>İş Ortaklarını Yenile</span>
+                    </button>
+                  </div>
 
-                        if (filteredTenants.length === 0) {
-                          return (
-                            <div className="p-6 text-center text-xs text-slate-500 bg-slate-50/50 rounded-xl border border-slate-100">
-                              {tenantSearchQuery ? (
-                                <span>Arama kriterinize uygun Mysoft iş ortağı bulunamadı.</span>
-                              ) : (
-                                <span>Henüz Mysoft iş ortağı kaydı bulunamadı. Yukarıdaki alandan VKN/TCKN ile sorgulama yapabilirsiniz.</span>
-                              )}
-                            </div>
-                          );
-                        }
+                  {mysoftDeskPartnerHint && (
+                    <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center gap-2">
+                      <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>{mysoftDeskPartnerHint}</span>
+                    </div>
+                  )}
 
-                        const selectedCompMatchedId = (
-                          selectedComp.tenantIdentifierNumber ||
-                          selectedComp.vkn ||
-                          selectedComp.tckn ||
-                          ""
-                        ).trim();
+                  {mysoftDeskTenantsError && (
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                        <span>{mysoftDeskTenantsError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void reloadMysoftDeskTenants()}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700 rounded-lg text-rose-700 dark:text-rose-300 font-semibold hover:bg-rose-50 whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        Tekrar Dene
+                      </button>
+                    </div>
+                  )}
 
+                  {/* Arama & Manuel VKN Sorgulama Çubuğu */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div className="md:col-span-7 relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={tenantSearchQuery}
+                        onChange={(e) => setTenantSearchQuery(e.target.value)}
+                        placeholder="İş ortağı adı, VKN veya TCKN ile filtrele..."
+                        className="w-full h-10 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-all"
+                      />
+                    </div>
+
+                    <div className="md:col-span-5 flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={deskManualVkn}
+                        onChange={(e) => setDeskManualVkn(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                        placeholder="10 VKN / 11 TCKN getir"
+                        className="flex-1 h-10 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono tabular-nums font-bold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await deskLookupByVkn();
+                          if (res) {
+                            handleMatchTenantWithSelectedComp(res);
+                          }
+                        }}
+                        disabled={isDeskManualVknLoading || !deskManualVkn.trim()}
+                        className="h-10 px-3.5 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0 whitespace-nowrap hover:opacity-95"
+                        style={{ backgroundColor: theme.primaryColor }}
+                      >
+                        {isDeskManualVknLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        ) : (
+                          <Search className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>VKN ile Getir</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* İş Ortakları Listesi */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                      <span>Kayıtlı İş Ortakları</span>
+                      <span className="font-normal text-slate-400">
+                        Seçili şirkete atamak için &quot;Bu Şirkete Eşle&quot; butonunu kullanın
+                      </span>
+                    </div>
+
+                    {isMysoftDeskTenantsLoading ? (
+                      <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="w-5 h-5 animate-spin text-[#0f6bae] dark:text-sky-400" />
+                        <span>Mysoft iş ortakları ve mükellef rehberi yükleniyor...</span>
+                      </div>
+                    ) : (() => {
+                      const q = tenantSearchQuery.trim().toLowerCase();
+                      const filteredTenants = mysoftDeskTenants.filter((t) => {
+                        if (!q) return true;
+                        const name = String(t.name || "").toLowerCase();
+                        const taxNo = String(t.taxNumber || "");
+                        const tid = String(t.id || "");
+                        return name.includes(q) || taxNo.includes(q) || tid.includes(q);
+                      });
+
+                      if (filteredTenants.length === 0) {
                         return (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
-                            {filteredTenants.map((t, idx) => {
-                              const tTax = String(t.taxNumber || "").trim();
-                              const isMatched = Boolean(tTax && tTax === selectedCompMatchedId);
-
-                              return (
-                                <div
-                                  key={`${tTax}_${t.id || idx}`}
-                                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
-                                    isMatched
-                                      ? "bg-indigo-50/80 border-indigo-400 ring-2 ring-indigo-300 shadow-2xs"
-                                      : "bg-slate-50/70 border-slate-200 hover:border-indigo-300 hover:bg-white"
-                                  }`}
-                                >
-                                  <div>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <h6 className="text-xs font-bold text-slate-900 line-clamp-2" title={t.name}>
-                                        {t.name || "İsimsiz İş Ortağı"}
-                                      </h6>
-                                      {t.id && (
-                                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                                          #{t.id}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <div className="flex items-center gap-2 mt-2">
-                                      <span className="text-[11px] font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                        {tTax}
-                                      </span>
-                                      <span className="text-[10px] text-slate-500">
-                                        {tTax.length === 10 ? "VKN" : tTax.length === 11 ? "TCKN" : "Kimlik"}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
-                                    {isMatched ? (
-                                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg">
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span>Eşleşmiş Şirket</span>
-                                      </div>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleMatchTenantWithSelectedComp(t)}
-                                        className="w-full py-1.5 px-3 bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-300 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                        <span>Bu Şirkete Eşle</span>
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                          <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                            {tenantSearchQuery ? (
+                              <span>Arama kriterinize uygun Mysoft iş ortağı bulunamadı.</span>
+                            ) : (
+                              <span>Henüz Mysoft iş ortağı kaydı bulunamadı. Yukarıdaki alandan VKN/TCKN ile sorgulama yapabilirsiniz.</span>
+                            )}
                           </div>
                         );
-                      })()}
-                    </div>
+                      }
+
+                      const selectedCompMatchedId = (
+                        selectedComp.tenantIdentifierNumber ||
+                        selectedComp.vkn ||
+                        selectedComp.tckn ||
+                        ""
+                      ).trim();
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                          {filteredTenants.map((t, idx) => {
+                            const tTax = String(t.taxNumber || "").trim();
+                            const isMatched = Boolean(tTax && tTax === selectedCompMatchedId);
+
+                            return (
+                              <div
+                                key={`${tTax}_${t.id || idx}`}
+                                className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
+                                  isMatched
+                                    ? "bg-sky-50/70 dark:bg-sky-950/30 border-[#0f6bae] dark:border-sky-500"
+                                    : "bg-slate-50/70 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                                }`}
+                              >
+                                <div>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <h6 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2" title={t.name}>
+                                      {t.name || "İsimsiz İş Ortağı"}
+                                    </h6>
+                                    {t.id && (
+                                      <span className="text-[10px] font-mono tabular-nums text-slate-400 shrink-0">
+                                        #{t.id}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <span className="text-[11px] font-mono tabular-nums font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                      {tTax}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                      {tTax.length === 10 ? "VKN" : tTax.length === 11 ? "TCKN" : "Kimlik"}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between gap-2">
+                                  {isMatched ? (
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-lg">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                      <span>Eşleşmiş Şirket</span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMatchTenantWithSelectedComp(t)}
+                                      className="w-full py-1.5 px-3 bg-white dark:bg-slate-900 hover:bg-[#0f6bae] hover:text-white dark:hover:bg-sky-600 text-[#0f6bae] dark:text-sky-400 border border-slate-300 dark:border-slate-700 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                                    >
+                                      <Check className="w-3.5 h-3.5 shrink-0" />
+                                      <span>Bu Şirkete Eşle</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
-              );
-            })()}
-          </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
       {/* Şube Ekle / Düzenle Modal */}
       {isBranchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-[#131b2e] text-white px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl border shadow-2xl w-full max-w-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#0f6bae] flex items-center justify-center">
-                  <Store className="w-5 h-5 text-white" />
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
+                  style={{ backgroundColor: theme.primaryColor }}
+                >
+                  <Store className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold">
+                  <h3 className="text-base font-bold font-editorial text-slate-900 dark:text-white">
                     {editingBranch ? "Şube Bilgilerini Düzenle" : "Yeni Şube Tanımla"}
                   </h3>
-                  <p className="text-[11px] text-slate-300">
-                    {settings.companyName || "İşletme"} bünyesine yeni şube kaydı ekleyin
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {settings.companyName || "İşletme"} bünyesine şube kaydı ekleyin veya güncelleyin
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleCloseBranch}
-                className="p-1.5 text-slate-300 hover:text-white rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -4944,81 +4641,79 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             <form onSubmit={handleSubmitBranch} className="p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube Kodu *</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Şube Kodu *</label>
                   <input
                     type="text"
                     required
                     value={branchForm.code || ""}
                     onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value })}
                     placeholder="SUB-001"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-mono tabular-nums font-bold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Şube Adı *</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Şube Adı *</label>
                   <input
                     type="text"
                     required
                     value={branchForm.name || ""}
                     onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
                     placeholder="Örn: Merkez Şube, Kadıköy Şubesi..."
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Şube Sorumlusu</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Şube Sorumlusu</label>
                   <input
                     type="text"
                     value={branchForm.managerName || ""}
                     onChange={(e) => setBranchForm({ ...branchForm, managerName: e.target.value })}
                     placeholder="Ad Soyad"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Telefon</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Telefon</label>
                   <input
                     type="text"
                     value={branchForm.phone || ""}
                     onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
                     placeholder="+90 (212) 000 00 00"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-mono tabular-nums text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">E-Posta</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">E-Posta</label>
                   <input
                     type="email"
                     value={branchForm.email || ""}
                     onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })}
                     placeholder="sube@firma.com"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                 {editingBranch?.isMain ? (
-                  <div className="flex items-center gap-2 font-bold text-[#0f6bae]">
-                    <span className="bg-[#eaedff] text-[#0f6bae] text-[11px] font-bold px-2.5 py-1 rounded border border-[#c6cdff]">
-                      Merkez (Ana Şube — Firma Profili Adresi)
-                    </span>
-                  </div>
+                  <span className="bg-sky-50 dark:bg-sky-950/40 text-[#0f6bae] dark:text-sky-400 text-[11px] font-semibold px-2.5 py-1 rounded-md border border-sky-200 dark:border-sky-800">
+                    Merkez (Ana Şube — Firma Profili Adresi)
+                  </span>
                 ) : (
-                  <div className="flex items-center gap-2 font-semibold text-slate-600">
-                    <span>Şube Türü: <strong className="text-slate-900">Ek Şube</strong> (Merkez şubeye bağlı)</span>
-                  </div>
+                  <span className="text-slate-600 dark:text-slate-300 font-medium">
+                    Şube Türü: <strong className="text-slate-900 dark:text-white">Ek Şube</strong> (Merkez şubeye bağlı)
+                  </span>
                 )}
 
-                <div className="flex items-center justify-end gap-2">
-                  <span className="font-bold text-slate-700">Durum:</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">Durum:</span>
                   <select
                     value={branchForm.status || "active"}
                     onChange={(e) => setBranchForm({ ...branchForm, status: e.target.value as "active" | "passive" })}
-                    className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-900"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae]"
                   >
                     <option value="active">Aktif</option>
                     <option value="passive">Pasif</option>
@@ -5026,37 +4721,41 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </div>
               </div>
 
-              <AddressSelector
-                title="Şube Adres Bilgileri"
-                address={
-                  branchForm.address || {
-                    country: "Türkiye",
-                    city: "İstanbul",
-                    district: "Şişli",
-                    neighborhood: "Mecidiyeköy",
-                    street: "",
-                    buildingNo: "",
-                    doorNo: "",
-                    postalCode: "",
-                    fullAddress: "",
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                <AddressSelector
+                  title="Şube Adres Bilgileri"
+                  frameless={true}
+                  address={
+                    branchForm.address || {
+                      country: "Türkiye",
+                      city: "İstanbul",
+                      district: "Şişli",
+                      neighborhood: "Mecidiyeköy",
+                      street: "",
+                      buildingNo: "",
+                      doorNo: "",
+                      postalCode: "",
+                      fullAddress: "",
+                    }
                   }
-                }
-                onChange={(updatedAddress) => setBranchForm({ ...branchForm, address: updatedAddress })}
-              />
+                  onChange={(updatedAddress) => setBranchForm({ ...branchForm, address: updatedAddress })}
+                />
+              </div>
 
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleCloseBranch}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer whitespace-nowrap"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#0f6bae] hover:bg-[#0a5287] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl text-white font-semibold shadow-2xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap hover:opacity-95 transition-all"
+                  style={{ backgroundColor: theme.primaryColor }}
                 >
-                  <Check className="w-4 h-4" />
+                  <Check className="w-4 h-4 shrink-0" />
                   <span>{editingBranch ? "Şubeyi Güncelle" : "Şubeyi Kaydet"}</span>
                 </button>
               </div>
@@ -5067,26 +4766,32 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
 
       {/* Depo Ekle / Düzenle Modal */}
       {isWarehouseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-[#131b2e] text-white px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl border shadow-2xl w-full max-w-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#0f6bae] flex items-center justify-center">
-                  <WarehouseIcon className="w-5 h-5 text-white" />
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
+                  style={{ backgroundColor: theme.primaryColor }}
+                >
+                  <WarehouseIcon className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold">
+                  <h3 className="text-base font-bold font-editorial text-slate-900 dark:text-white">
                     {editingWarehouse ? "Depo Bilgilerini Düzenle" : "Yeni Depo Tanımla"}
                   </h3>
-                  <p className="text-[11px] text-slate-300">
-                    {settings.companyName || "İşletme"} için yeni stok ve lojistik deposu ekleyin
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {settings.companyName || "İşletme"} için stok ve lojistik deposu ekleyin veya güncelleyin
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleCloseWarehouse}
-                className="p-1.5 text-slate-300 hover:text-white rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -5095,36 +4800,36 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
             <form onSubmit={handleSubmitWarehouse} className="p-6 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Kodu *</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Depo Kodu *</label>
                   <input
                     type="text"
                     required
                     value={warehouseForm.code || ""}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, code: e.target.value })}
                     placeholder="DEP-001"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono font-bold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-mono tabular-nums font-bold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block font-bold text-slate-700 mb-1">Depo Adı *</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Depo Adı *</label>
                   <input
                     type="text"
                     required
                     value={warehouseForm.name || ""}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
                     placeholder="Örn: Merkez Ana Depo, Gebze Lojistik Depo..."
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Tipi</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Depo Tipi</label>
                   <select
                     value={warehouseForm.type || "main"}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, type: e.target.value as Warehouse["type"] })}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-semibold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   >
                     <option value="main">Ana Depo</option>
                     <option value="regional">Bölge Deposu</option>
@@ -5135,7 +4840,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Bağlı Şube</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Bağlı Şube</label>
                   <select
                     value={warehouseForm.branchId || ""}
                     onChange={(e) => {
@@ -5146,7 +4851,7 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                         branchName: b?.name || "Merkez Şube",
                       });
                     }}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-semibold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   >
                     <option value="">Merkez / Genel</option>
                     {branches.map((b) => (
@@ -5158,45 +4863,45 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Kapasite (m²)</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Kapasite (m²)</label>
                   <input
                     type="number"
                     value={warehouseForm.capacityM2 ?? 1000}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, capacityM2: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-mono text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-mono tabular-nums font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Depo Sorumlusu</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Depo Sorumlusu</label>
                   <input
                     type="text"
                     value={warehouseForm.managerName || ""}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, managerName: e.target.value })}
                     placeholder="Ad Soyad"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">İletişim Telefonu</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">İletişim Telefonu</label>
                   <input
                     type="text"
                     value={warehouseForm.phone || ""}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, phone: e.target.value })}
                     placeholder="+90 (212) 000 00 00"
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-mono tabular-nums text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Durum</label>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Durum</label>
                   <select
                     value={warehouseForm.status || "active"}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, status: e.target.value as "active" | "passive" })}
-                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 font-bold text-slate-900"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 font-semibold text-slate-900 dark:text-white outline-none focus:border-[#0f6bae] focus:bg-white dark:focus:bg-slate-900 transition-colors"
                   >
                     <option value="active">Aktif Depo</option>
                     <option value="passive">Pasif</option>
@@ -5204,37 +4909,41 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
                 </div>
               </div>
 
-              <AddressSelector
-                title="Depo Adres Bilgileri"
-                address={
-                  warehouseForm.address || {
-                    country: "Türkiye",
-                    city: "İstanbul",
-                    district: "Şişli",
-                    neighborhood: "Mecidiyeköy",
-                    street: "",
-                    buildingNo: "",
-                    doorNo: "",
-                    postalCode: "",
-                    fullAddress: "",
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                <AddressSelector
+                  title="Depo Adres Bilgileri"
+                  frameless={true}
+                  address={
+                    warehouseForm.address || {
+                      country: "Türkiye",
+                      city: "İstanbul",
+                      district: "Şişli",
+                      neighborhood: "Mecidiyeköy",
+                      street: "",
+                      buildingNo: "",
+                      doorNo: "",
+                      postalCode: "",
+                      fullAddress: "",
+                    }
                   }
-                }
-                onChange={(updatedAddress) => setWarehouseForm({ ...warehouseForm, address: updatedAddress })}
-              />
+                  onChange={(updatedAddress) => setWarehouseForm({ ...warehouseForm, address: updatedAddress })}
+                />
+              </div>
 
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleCloseWarehouse}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer whitespace-nowrap"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#0f6bae] hover:bg-[#0a5287] text-white font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl text-white font-semibold shadow-2xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap hover:opacity-95 transition-all"
+                  style={{ backgroundColor: theme.primaryColor }}
                 >
-                  <Check className="w-4 h-4" />
+                  <Check className="w-4 h-4 shrink-0" />
                   <span>{editingWarehouse ? "Depoyu Güncelle" : "Depoyu Kaydet"}</span>
                 </button>
               </div>
@@ -5243,47 +4952,118 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         </div>
       )}
 
-      {/* Şirket Silme Onay Modalı */}
-      {companyToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-5 bg-gradient-to-r from-rose-700 to-red-700 text-white flex items-center justify-between">
+      {/* Şube / Depo Silme Onay Modalı */}
+      {pendingEntityDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl border shadow-2xl w-full max-w-md overflow-hidden"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-                  <Trash2 className="w-5 h-5 text-white" />
+                <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Şirket Silme Onayı</h3>
-                  <p className="text-xs text-rose-100">Seçili şirket sistemden kaldırılacak</p>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {pendingEntityDelete.type === "branch" ? "Şube Silme Onayı" : "Depo Silme Onayı"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Kayıt sistemden kalıcı olarak kaldırılacaktır
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingEntityDelete(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5">
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <strong className="text-slate-900 dark:text-white">{pendingEntityDelete.name}</strong>{" "}
+                {pendingEntityDelete.type === "branch"
+                  ? "şubesini silmek istediğinize emin misiniz?"
+                  : "deposunu silmek istediğinize emin misiniz?"}
+              </p>
+            </div>
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingEntityDelete(null)}
+                className="px-4 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer whitespace-nowrap"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingEntityDelete.type === "branch") {
+                    onDeleteBranch(pendingEntityDelete.id);
+                  } else {
+                    onDeleteWarehouse(pendingEntityDelete.id);
+                  }
+                  setPendingEntityDelete(null);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {pendingEntityDelete.type === "branch" ? "Evet, Şubeyi Sil" : "Evet, Depoyu Sil"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Şirket Silme Onay Modalı */}
+      {companyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl border shadow-2xl w-full max-w-md overflow-hidden"
+            style={{ borderColor: theme.cardBorder }}
+          >
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Şirket Silme Onayı</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Seçili şirket sistemden kaldırılacak</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setCompanyToDelete(null)}
-                className="p-1.5 text-rose-100 hover:text-white rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-slate-700">
-                <strong>{companyToDelete.companyName}</strong> ({companyToDelete.companyTitle || companyToDelete.vkn || companyToDelete.tckn}) şirketini ve yapılandırmasını silmek istediğinize emin misiniz?
+            <div className="p-5">
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <strong className="text-slate-900 dark:text-white">{companyToDelete.companyName}</strong>{" "}
+                (<span className="font-mono tabular-nums">{companyToDelete.companyTitle || companyToDelete.vkn || companyToDelete.tckn}</span>) şirketini ve yapılandırmasını silmek istediğinize emin misiniz?
               </p>
             </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+            <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setCompanyToDelete(null)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 cursor-pointer"
+                className="px-4 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer whitespace-nowrap"
               >
                 Vazgeç
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteCompanyItem}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
                 <span>Evet, Şirketi Sil</span>
               </button>
             </div>
@@ -5294,7 +5074,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
       {/* SUB-TAB: LOG İZLEME EKRANI (MYSOFT API & TEKNİK HATA KONSOLU) */}
       {currentSubTab === "logs" && (() => {
         const activeCompObj = effectiveCompanies.find((c) => c.id === currentActiveCompanyId) || null;
-        const isMysoftMatched = isCompanyMysoftMatched(activeCompObj, profileForm || settings);
 
         return (
           <AdminMysoftLogMonitorPanel
@@ -5320,7 +5099,6 @@ export const CompanyManagement: React.FC<CompanyManagementProps> = ({
         mode={companyModalMode}
         currentUser={currentUser}
       />
-
     </div>
   );
 };

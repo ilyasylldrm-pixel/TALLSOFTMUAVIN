@@ -5,7 +5,7 @@ export function getGitHubRouter(): Router {
   const router = Router();
 
   // Get current status of Git and GitHub sync
-  router.get("/status", async (req, res) => {
+  router.get("/status", async (_req, res) => {
     try {
       const status = await gitHubSyncService.getStatus();
       res.json({ success: true, ...status });
@@ -15,7 +15,7 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Trigger publish / sync to GitHub (Pull + Rebuild + Commit + Push)
+  // Trigger pull + merge + push to GitHub main + GitHub Actions workflow dispatch
   router.post("/publish", async (req, res) => {
     try {
       const { commitMessage, token, repoUrl, pullFirst, rebuild } = req.body || {};
@@ -37,14 +37,13 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Pull / Fetch from GitHub (and optionally publish/rebuild)
+  // Pull & merge remote changes from GitHub main into workspace
   router.post("/pull", async (req, res) => {
     try {
-      const { token, repoUrl, publishAfterPull } = req.body || {};
+      const { token, repoUrl } = req.body || {};
       const result = await gitHubSyncService.pullFromGitHub({
         token,
         repoUrl,
-        publishAfterPull: publishAfterPull !== false,
       });
       res.json(result);
     } catch (error: any) {
@@ -56,7 +55,7 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Bidirectional sync (Pull + Rebuild + Commit + Push)
+  // Bidirectional sync (Pull + Merge + Commit + Push + Actions)
   router.post("/sync", async (req, res) => {
     try {
       const { commitMessage, token, repoUrl, rebuild } = req.body || {};
@@ -78,18 +77,21 @@ export function getGitHubRouter(): Router {
     }
   });
 
-  // Save config (token, repo url)
+  // Save config (token, repo url, or clearToken)
   router.post("/config", (req, res) => {
     try {
-      const { repoUrl, token, autoSync } = req.body || {};
+      const { repoUrl, token, autoSync, clearToken } = req.body || {};
       const updated = gitHubSyncService.saveConfig({
         repoUrl,
         token,
         autoSync,
+        clearToken: Boolean(clearToken),
       });
       res.json({
         success: true,
-        message: "GitHub senkronizasyon ayarları başarıyla güncellendi.",
+        message: clearToken
+          ? "Kayıtlı GitHub anahtarı temizlendi."
+          : "GitHub senkronizasyon ayarları başarıyla güncellendi.",
         config: {
           repoUrl: updated.repoUrl,
           owner: updated.owner,
@@ -119,7 +121,7 @@ export function getGitHubRouter(): Router {
         return res.json({
           success: false,
           code: "MISSING_TOKEN",
-          error: "Test için GitHub Personal Access Token (PAT) gereklidir.",
+          error: "Doğrulama için GitHub Personal Access Token (PAT) girilmelidir.",
         });
       }
 
@@ -144,7 +146,7 @@ export function getGitHubRouter(): Router {
           defaultBranch: permCheck.defaultBranch,
           error:
             permCheck.errorReason ||
-            "Token okuma (Pull) yetkisine sahip ancak yazma (Push) yetkisi kapalı (HTTP 403). GitHub Token ayarlarından 'Contents: Read and write' iznini açın.",
+            "Girilen anahtar okuma (Pull) yetkisine sahip ancak yazma (Push) yetkisi kapalı (HTTP 403).",
         });
       }
 
@@ -152,7 +154,7 @@ export function getGitHubRouter(): Router {
         success: true,
         canRead: true,
         canPush: true,
-        message: "GitHub okuma (Pull) ve yazma (Push) bağlantısı başarıyla doğrulandı!",
+        message: "GitHub okuma (Pull) ve main dalına yazma (Push) yetkisi doğrulandı.",
         repoName: permCheck.repoName,
         isPrivate: permCheck.isPrivate,
         defaultBranch: permCheck.defaultBranch,
@@ -168,4 +170,3 @@ export function getGitHubRouter(): Router {
 
   return router;
 }
-

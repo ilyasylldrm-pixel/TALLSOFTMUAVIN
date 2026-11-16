@@ -106,7 +106,7 @@ interface ContactsProps {
   onUpdateContact: (contact: Contact) => void;
   onDeleteContact: (id: string) => void;
   onBulkDeleteContacts?: (ids: string[]) => void;
-  onOpenNewInvoiceForContact: (contactId: string) => void;
+  onOpenNewInvoiceForContact?: (contactId: string) => void;
   onOpenPaymentModal?: (contact: Contact) => void;
   onAddTransaction?: (tx: Transaction) => void;
   onAddCheque?: (cheque: Cheque) => void;

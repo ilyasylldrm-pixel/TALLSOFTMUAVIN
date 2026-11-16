@@ -6,6 +6,7 @@ import { ModuleEntranceHeader } from "./common/ModuleEntranceHeader";
 import { BankStatementImportModal } from "./BankStatementImportModal";
 import { ExportData, formatCurrency, formatDate, sanitizeOklchForHtml2Canvas, exportElementToPDF, printHtmlElement, exportToExcel, exportToPDF } from "../utils/exportUtils";
 import { exportElementToPDFWithPrintStyling } from "../utils/pdfService";
+import { safeGetStorageItem } from "../utils/storage";
 import { useTheme } from "../context/ThemeContext";
 import { ASSET_ICONS } from "../utils/assetIcons";
 import {
@@ -319,6 +320,7 @@ interface AccountsProps {
   ) => void;
   standaloneFisSubTab?: "fis_girisi" | "fis_listesi";
   onSelectStandaloneFisSubTab?: (subTab: "fis_girisi" | "fis_listesi") => void;
+  allowedFinanceSubTabs?: FinanceSubModule[];
 }
 
 export const Accounts: React.FC<AccountsProps> = ({
@@ -353,9 +355,17 @@ export const Accounts: React.FC<AccountsProps> = ({
   onEndorsePromissoryNote,
   standaloneFisSubTab,
   onSelectStandaloneFisSubTab,
+  allowedFinanceSubTabs,
 }) => {
   const { theme } = useTheme();
-  const [internalSubModule, setInternalSubModule] = useState<FinanceSubModule>("kasa");
+  const isFinanceSubAllowed = (tab: FinanceSubModule) =>
+    !allowedFinanceSubTabs || allowedFinanceSubTabs.includes(tab);
+  const firstAllowedFinanceSub: FinanceSubModule =
+    allowedFinanceSubTabs && allowedFinanceSubTabs.length > 0
+      ? allowedFinanceSubTabs[0]
+      : "kasa";
+
+  const [internalSubModule, setInternalSubModule] = useState<FinanceSubModule>(firstAllowedFinanceSub);
   const [internalFisViewMode, setInternalFisViewMode] = useState<"fis_girisi" | "fis_listesi">("fis_girisi");
   const isStandaloneFis = Boolean(standaloneFisSubTab);
   const activeFisViewMode = standaloneFisSubTab || internalFisViewMode;
@@ -365,7 +375,11 @@ export const Accounts: React.FC<AccountsProps> = ({
       onSelectStandaloneFisSubTab(mode);
     }
   };
-  const activeSubModule: FinanceSubModule = isStandaloneFis ? "fis" : (activeFinanceSubTab || internalSubModule);
+  const rawSubModule: FinanceSubModule = isStandaloneFis ? "fis" : (activeFinanceSubTab || internalSubModule);
+  const activeSubModule: FinanceSubModule =
+    isStandaloneFis || isFinanceSubAllowed(rawSubModule)
+      ? rawSubModule
+      : firstAllowedFinanceSub;
 
   // Tablo Satır / İşlem Seçme (Multi-Select) Hook'ları
   const kasaSelection = useTableSelection();
@@ -447,6 +461,7 @@ export const Accounts: React.FC<AccountsProps> = ({
   }, [isNoteColVisible]);
 
   const setActiveSubModule = (tab: FinanceSubModule) => {
+    if (!isFinanceSubAllowed(tab)) return;
     setInternalSubModule(tab);
     if (onSelectFinanceSubTab) {
       onSelectFinanceSubTab(tab);
@@ -2347,7 +2362,7 @@ export const Accounts: React.FC<AccountsProps> = ({
     let customTdhpOpts: { key: string; code: string; label: string; group: string; taxNumber: string }[] = [];
     if (typeof window !== "undefined") {
       try {
-        const raw = window.localStorage.getItem("muavin_hesap_plani_custom_v1");
+        const raw = safeGetStorageItem("muavin_hesap_plani_custom_v1");
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
@@ -7034,204 +7049,234 @@ export const Accounts: React.FC<AccountsProps> = ({
                       onClick={() => setIsQuickActionMenuOpen(false)}
                     />
                     <div className="absolute left-0 right-auto top-full mt-2 w-80 sm:w-88 max-h-[min(82vh,560px)] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-[100] text-xs custom-scrollbar">
-                      <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-50/70">
-                        💵 Nakit Kasa İşlemleri
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("kasa");
-                          handleOpenAddTxModal("kasa");
-                          setTxType("income");
-                          setTxCategory("Kasa Tahsilat / Nakit Gelir");
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Nakit Kasa Tahsilatı (Giriş +)</span>
-                        <span className="text-[10px] font-bold text-emerald-600">+ Tahsilat</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("kasa");
-                          handleOpenAddTxModal("kasa");
-                          setTxType("expense");
-                          setTxCategory("Kasa Tediye / Nakit Ödeme");
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Nakit Kasa Tediyesi (Çıkış -)</span>
-                        <span className="text-[10px] font-bold text-rose-600">- Ödeme</span>
-                      </button>
+                      {isFinanceSubAllowed("kasa") && (
+                        <>
+                          <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-50/70">
+                            💵 Nakit Kasa İşlemleri
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickActionMenuOpen(false);
+                              setActiveSubModule("kasa");
+                              handleOpenAddTxModal("kasa");
+                              setTxType("income");
+                              setTxCategory("Kasa Tahsilat / Nakit Gelir");
+                            }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <span>Nakit Kasa Tahsilatı (Giriş +)</span>
+                            <span className="text-[10px] font-bold text-emerald-600">+ Tahsilat</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickActionMenuOpen(false);
+                              setActiveSubModule("kasa");
+                              handleOpenAddTxModal("kasa");
+                              setTxType("expense");
+                              setTxCategory("Kasa Tediye / Nakit Ödeme");
+                            }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-amber-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <span>Nakit Kasa Tediyesi (Çıkış -)</span>
+                            <span className="text-[10px] font-bold text-rose-600">- Ödeme</span>
+                          </button>
+                        </>
+                      )}
 
-                      <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50/70">
-                        🏦 Banka & POS İşlemleri
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("banka");
-                          handleOpenAddTxModal("banka");
-                          setTxType("income");
-                          setTxCategory("Banka Gelen Havale / EFT");
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Gelen Havale / EFT Tahsilatı (+)</span>
-                        <span className="text-[10px] font-bold text-emerald-600">+ Gelen</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("banka");
-                          handleOpenAddTxModal("banka");
-                          setTxType("expense");
-                          setTxCategory("Banka Giden Havale / EFT");
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Giden Havale / EFT Ödemesi (-)</span>
-                        <span className="text-[10px] font-bold text-rose-600">- Giden</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("banka");
-                          handleOpenAddTxModal("pos");
-                          setTxType("income");
-                          setTxCategory("POS Tahsilatı (Kredi Kartı)");
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Kredi Kartı POS Slip Tahsilatı</span>
-                        <span className="text-[10px] font-bold text-emerald-600">POS</span>
-                      </button>
+                      {isFinanceSubAllowed("banka") && (
+                        <>
+                          <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-50/70">
+                            🏦 Banka & POS İşlemleri
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickActionMenuOpen(false);
+                              setActiveSubModule("banka");
+                              handleOpenAddTxModal("banka");
+                              setTxType("income");
+                              setTxCategory("Banka Gelen Havale / EFT");
+                            }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <span>Gelen Havale / EFT Tahsilatı (+)</span>
+                            <span className="text-[10px] font-bold text-emerald-600">+ Gelen</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickActionMenuOpen(false);
+                              setActiveSubModule("banka");
+                              handleOpenAddTxModal("banka");
+                              setTxType("expense");
+                              setTxCategory("Banka Giden Havale / EFT");
+                            }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-blue-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <span>Giden Havale / EFT Ödemesi (-)</span>
+                            <span className="text-[10px] font-bold text-rose-600">- Giden</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickActionMenuOpen(false);
+                              setActiveSubModule("banka");
+                              handleOpenAddTxModal("pos");
+                              setTxType("income");
+                              setTxCategory("POS Tahsilatı (Kredi Kartı)");
+                            }}
+                            className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <span>Kredi Kartı POS Slip Tahsilatı</span>
+                            <span className="text-[10px] font-bold text-emerald-600">POS</span>
+                          </button>
+                        </>
+                      )}
 
-                      <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50/70">
-                        📑 Çek & Senet İşlemleri
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("cek");
-                          setChqType("received");
-                          setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
-                          setIsChequeModalOpen(true);
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Müşteri Çeki Girişi (Alınan Çek)</span>
-                        <span className="text-[10px] font-bold text-indigo-600">Çek Al</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("cek");
-                          setChqType("issued");
-                          setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
-                          setIsChequeModalOpen(true);
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Firma Borç Çeki Çıkışı (Verilen)</span>
-                        <span className="text-[10px] font-bold text-amber-600">Çek Ver</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("cek");
-                          handleOpenEndorseModal("cheque");
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Portföyden Çek Ciro Et</span>
-                        <span className="text-[10px] font-bold text-purple-600">Ciro</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("senet");
-                          setNtType("received");
-                          setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
-                          setIsNoteModalOpen(true);
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Müşteri Senedi Girişi (Alınan)</span>
-                        <span className="text-[10px] font-bold text-purple-600">Senet Al</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setActiveSubModule("senet");
-                          setNtType("issued");
-                          setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
-                          setIsNoteModalOpen(true);
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Borç Senedi Çıkışı (Verilen)</span>
-                        <span className="text-[10px] font-bold text-amber-600">Senet Ver</span>
-                      </button>
+                      {(isFinanceSubAllowed("cek") || isFinanceSubAllowed("senet")) && (
+                        <>
+                          <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50/70">
+                            📑 Çek & Senet İşlemleri
+                          </div>
+                          {isFinanceSubAllowed("cek") && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsQuickActionMenuOpen(false);
+                                  setActiveSubModule("cek");
+                                  setChqType("received");
+                                  setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                                  setIsChequeModalOpen(true);
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                              >
+                                <span>Müşteri Çeki Girişi (Alınan Çek)</span>
+                                <span className="text-[10px] font-bold text-indigo-600">Çek Al</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsQuickActionMenuOpen(false);
+                                  setActiveSubModule("cek");
+                                  setChqType("issued");
+                                  setChqNumber(`CHK-${Math.floor(100000 + Math.random() * 900000)}`);
+                                  setIsChequeModalOpen(true);
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                              >
+                                <span>Firma Borç Çeki Çıkışı (Verilen)</span>
+                                <span className="text-[10px] font-bold text-amber-600">Çek Ver</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsQuickActionMenuOpen(false);
+                                  setActiveSubModule("cek");
+                                  handleOpenEndorseModal("cheque");
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                              >
+                                <span>Portföyden Çek Ciro Et</span>
+                                <span className="text-[10px] font-bold text-purple-600">Ciro</span>
+                              </button>
+                            </>
+                          )}
+                          {isFinanceSubAllowed("senet") && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsQuickActionMenuOpen(false);
+                                  setActiveSubModule("senet");
+                                  setNtType("received");
+                                  setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                                  setIsNoteModalOpen(true);
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                              >
+                                <span>Müşteri Senedi Girişi (Alınan)</span>
+                                <span className="text-[10px] font-bold text-purple-600">Senet Al</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsQuickActionMenuOpen(false);
+                                  setActiveSubModule("senet");
+                                  setNtType("issued");
+                                  setNtNumber(`SNT-2026-${Math.floor(100 + Math.random() * 900)}`);
+                                  setIsNoteModalOpen(true);
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-purple-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                              >
+                                <span>Borç Senedi Çıkışı (Verilen)</span>
+                                <span className="text-[10px] font-bold text-amber-600">Senet Ver</span>
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
 
-                      <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50/70">
-                        🔄 Virman & Hesap Tanımları
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setIsTransferModalOpen(true);
-                          detailNav.openTransfer();
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Hesaplar Arası Virman / Transfer</span>
-                        <span className="text-[10px] font-bold text-emerald-600">Virman</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setAccType("cash");
-                          setIsAccountModalOpen(true);
-                          detailNav.openCreate();
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Yeni Nakit Kasa Hesabı Aç</span>
-                        <span className="text-[10px] font-bold text-slate-500">Kasa</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsQuickActionMenuOpen(false);
-                          setAccType("bank");
-                          setIsAccountModalOpen(true);
-                          detailNav.openCreate();
-                        }}
-                        className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
-                      >
-                        <span>Yeni Banka Hesabı Aç</span>
-                        <span className="text-[10px] font-bold text-slate-500">Banka</span>
-                      </button>
+                      {(isFinanceSubAllowed("virman") || isFinanceSubAllowed("kasa") || isFinanceSubAllowed("banka")) && (
+                        <>
+                          <div className="px-3 py-1.5 mt-1 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50/70">
+                            🔄 Virman & Hesap Tanımları
+                          </div>
+                          {isFinanceSubAllowed("virman") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsQuickActionMenuOpen(false);
+                                setIsTransferModalOpen(true);
+                                detailNav.openTransfer();
+                              }}
+                              className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                            >
+                              <span>Hesaplar Arası Virman / Transfer</span>
+                              <span className="text-[10px] font-bold text-emerald-600">Virman</span>
+                            </button>
+                          )}
+                          {isFinanceSubAllowed("kasa") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsQuickActionMenuOpen(false);
+                                setAccType("cash");
+                                setIsAccountModalOpen(true);
+                                detailNav.openCreate();
+                              }}
+                              className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                            >
+                              <span>Yeni Nakit Kasa Hesabı Aç</span>
+                              <span className="text-[10px] font-bold text-slate-500">Kasa</span>
+                            </button>
+                          )}
+                          {isFinanceSubAllowed("banka") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsQuickActionMenuOpen(false);
+                                setAccType("bank");
+                                setIsAccountModalOpen(true);
+                                detailNav.openCreate();
+                              }}
+                              className="w-full text-left px-3.5 py-2 hover:bg-slate-100 flex items-center justify-between text-slate-700 font-semibold cursor-pointer"
+                            >
+                              <span>Yeni Banka Hesabı Aç</span>
+                              <span className="text-[10px] font-bold text-slate-500">Banka</span>
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </>
                 )}
               </div>
             )}
 
-            {!isStandaloneFis && activeSubModule !== "virman" && (
+            {!isStandaloneFis && activeSubModule !== "virman" && isFinanceSubAllowed("virman") && (
               <button
                 onClick={() => {
                   setIsTransferModalOpen(true);
@@ -7423,116 +7468,140 @@ export const Accounts: React.FC<AccountsProps> = ({
           {/* 2. Top 4 KPI Summary Cards Grid (Reference Design) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card 1: Nakit Kasalar */}
-            <div
-              onClick={() => {
-                setActiveSubModule("kasa");
-                setSelectedCashAccountId(null);
-              }}
-              className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
-                activeSubModule === "kasa" ? "ring-2 ring-amber-500/50" : ""
-              }`}
-              style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "kasa" ? "#f59e0b" : theme.cardBorder }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-slate-400">Nakit Kasa Bakiyesi</p>
-                  <p className="text-2xl font-bold font-mono tracking-tight text-amber-600 mt-2">
-                    ₺{totalCashBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </p>
+            {isFinanceSubAllowed("kasa") && (
+              <div
+                onClick={() => {
+                  setActiveSubModule("kasa");
+                  setSelectedCashAccountId(null);
+                }}
+                className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
+                  activeSubModule === "kasa" ? "ring-2 ring-amber-500/50" : ""
+                }`}
+                style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "kasa" ? "#f59e0b" : theme.cardBorder }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Nakit Kasa Bakiyesi</p>
+                    <p className="text-2xl font-bold font-mono tracking-tight text-amber-600 mt-2">
+                      ₺{totalCashBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
+                    <img src={ASSET_ICONS.nakit} alt="Nakit" className="w-6 h-6 object-contain" />
+                  </div>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
-                  <img src={ASSET_ICONS.nakit} alt="Nakit" className="w-6 h-6 object-contain" />
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="font-semibold text-amber-600">
+                    {accounts.filter((a) => a.type === "cash").length}
+                  </span>
+                  <span>aktif nakit kasa</span>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="font-semibold text-amber-600">
-                  {accounts.filter((a) => a.type === "cash").length}
-                </span>
-                <span>aktif nakit kasa</span>
-              </div>
-            </div>
+            )}
 
             {/* Card 2: Banka Bakiyeleri */}
-            <div
-              onClick={() => {
-                setActiveSubModule("banka");
-                setSelectedBankAccountId(null);
-              }}
-              className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
-                activeSubModule === "banka" ? "ring-2 ring-blue-500/50" : ""
-              }`}
-              style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "banka" ? "#3b82f6" : theme.cardBorder }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-slate-400">Banka & POS Bakiyesi</p>
-                  <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
-                    ₺{totalBankBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </p>
+            {isFinanceSubAllowed("banka") && (
+              <div
+                onClick={() => {
+                  setActiveSubModule("banka");
+                  setSelectedBankAccountId(null);
+                }}
+                className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
+                  activeSubModule === "banka" ? "ring-2 ring-blue-500/50" : ""
+                }`}
+                style={{ backgroundColor: theme.cardBg, borderColor: activeSubModule === "banka" ? "#3b82f6" : theme.cardBorder }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Banka & POS Bakiyesi</p>
+                    <p className="text-2xl font-bold font-mono tracking-tight text-blue-600 mt-2">
+                      ₺{totalBankBalance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
+                    <img src={ASSET_ICONS.nakit} alt="Banka" className="w-6 h-6 object-contain" />
+                  </div>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
-                  <img src={ASSET_ICONS.nakit} alt="Banka" className="w-6 h-6 object-contain" />
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="font-semibold text-blue-600">
+                    {accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length}
+                  </span>
+                  <span>banka hesabı</span>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="font-semibold text-blue-600">
-                  {accounts.filter((a) => a.type === "bank" || a.type === "credit_card").length}
-                </span>
-                <span>banka hesabı</span>
-              </div>
-            </div>
+            )}
 
             {/* Card 3: Çek & Senet Portföyü */}
-            <div
-              onClick={() => setActiveSubModule("cek")}
-              className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
-                activeSubModule === "cek" || activeSubModule === "senet" ? "ring-2 ring-indigo-500/50" : ""
-              }`}
-              style={{ backgroundColor: theme.cardBg, borderColor: (activeSubModule === "cek" || activeSubModule === "senet") ? (theme.primaryColor || "#005289") : theme.cardBorder }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-slate-400">Çek / Senet Portföyü</p>
-                  <p className="text-2xl font-bold font-mono tracking-tight text-indigo-600 mt-2">
-                    ₺{(portfolioChequesTotal + portfolioNotesTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </p>
+            {(isFinanceSubAllowed("cek") || isFinanceSubAllowed("senet")) && (
+              <div
+                onClick={() => setActiveSubModule(isFinanceSubAllowed("cek") ? "cek" : "senet")}
+                className={`rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer haze-kpi-card-bg relative overflow-hidden ${
+                  activeSubModule === "cek" || activeSubModule === "senet" ? "ring-2 ring-indigo-500/50" : ""
+                }`}
+                style={{ backgroundColor: theme.cardBg, borderColor: (activeSubModule === "cek" || activeSubModule === "senet") ? (theme.primaryColor || "#005289") : theme.cardBorder }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Çek / Senet Portföyü</p>
+                    <p className="text-2xl font-bold font-mono tracking-tight text-indigo-600 mt-2">
+                      ₺{(
+                        (isFinanceSubAllowed("cek") ? portfolioChequesTotal : 0) +
+                        (isFinanceSubAllowed("senet") ? portfolioNotesTotal : 0)
+                      ).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                    <img src={ASSET_ICONS.toplamAlacak} alt="Portföy" className="w-6 h-6 object-contain" />
+                  </div>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-                  <img src={ASSET_ICONS.toplamAlacak} alt="Portföy" className="w-6 h-6 object-contain" />
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                  {isFinanceSubAllowed("cek") && (
+                    <span className="font-semibold text-indigo-600">
+                      {cheques.filter((c) => c.status === "portfolio").length} çek
+                    </span>
+                  )}
+                  {isFinanceSubAllowed("cek") && isFinanceSubAllowed("senet") && <span>•</span>}
+                  {isFinanceSubAllowed("senet") && (
+                    <span className="font-semibold text-indigo-600">
+                      {promissoryNotes.filter((n) => n.status === "portfolio").length} senet
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="font-semibold text-indigo-600">
-                  {cheques.filter((c) => c.status === "portfolio").length} çek
-                </span>
-                <span>•</span>
-                <span className="font-semibold text-indigo-600">
-                  {promissoryNotes.filter((n) => n.status === "portfolio").length} senet
-                </span>
-              </div>
-            </div>
+            )}
 
             {/* Card 4: Toplam Net Likidite */}
-            <div
-              className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
-              style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-slate-400">Kullanılabilir Net Likidite</p>
-                  <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
-                    ₺{(totalCashBalance + totalBankBalance).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
-                  </p>
+            {(isFinanceSubAllowed("kasa") || isFinanceSubAllowed("banka")) && (
+              <div
+                className="rounded-2xl p-5 border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between haze-kpi-card-bg relative overflow-hidden"
+                style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Kullanılabilir Net Likidite</p>
+                    <p className="text-2xl font-bold font-mono tracking-tight text-emerald-600 mt-2">
+                      ₺{(
+                        (isFinanceSubAllowed("kasa") ? totalCashBalance : 0) +
+                        (isFinanceSubAllowed("banka") ? totalBankBalance : 0)
+                      ).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+                    <img src={ASSET_ICONS.ciro} alt="Likidite" className="w-6 h-6 object-contain" />
+                  </div>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
-                  <img src={ASSET_ICONS.ciro} alt="Likidite" className="w-6 h-6 object-contain" />
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>
+                    {isFinanceSubAllowed("kasa") && isFinanceSubAllowed("banka")
+                      ? "Kasa + Banka toplam fon"
+                      : isFinanceSubAllowed("kasa")
+                      ? "Nakit kasa toplam fon"
+                      : "Banka & POS toplam fon"}
+                  </span>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Kasa + Banka toplam fon</span>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* 3. Sub-Module Navigation Toolbar */}
@@ -7541,71 +7610,81 @@ export const Accounts: React.FC<AccountsProps> = ({
             style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
           >
             <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-              <button
-                onClick={() => {
-                  setActiveSubModule("kasa");
-                  setSelectedCashAccountId(null);
-                }}
-                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeSubModule === "kasa"
-                    ? "bg-amber-600 text-white font-bold shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <Banknote className="w-4 h-4" />
-                <span>Nakit Kasalar ({accounts.filter((a) => a.type === "cash").length})</span>
-              </button>
+              {isFinanceSubAllowed("kasa") && (
+                <button
+                  onClick={() => {
+                    setActiveSubModule("kasa");
+                    setSelectedCashAccountId(null);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                    activeSubModule === "kasa"
+                      ? "bg-amber-600 text-white font-bold shadow-2xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <Banknote className="w-4 h-4" />
+                  <span>Nakit Kasalar ({accounts.filter((a) => a.type === "cash").length})</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setActiveSubModule("banka");
-                  setSelectedBankAccountId(null);
-                }}
-                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeSubModule === "banka"
-                    ? "bg-blue-600 text-white font-bold shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <Building className="w-4 h-4" />
-                <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos").length})</span>
-              </button>
+              {isFinanceSubAllowed("banka") && (
+                <button
+                  onClick={() => {
+                    setActiveSubModule("banka");
+                    setSelectedBankAccountId(null);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                    activeSubModule === "banka"
+                      ? "bg-blue-600 text-white font-bold shadow-2xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <Building className="w-4 h-4" />
+                  <span>Banka & POS ({accounts.filter((a) => a.type === "bank" || a.type === "credit_card" || a.type === "pos").length})</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveSubModule("cek")}
-                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeSubModule === "cek"
-                    ? "bg-indigo-600 text-white font-bold shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <FileCheck2 className="w-4 h-4" />
-                <span>Çek Portföyü ({cheques.filter((c) => c.status === "portfolio").length})</span>
-              </button>
+              {isFinanceSubAllowed("cek") && (
+                <button
+                  onClick={() => setActiveSubModule("cek")}
+                  className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                    activeSubModule === "cek"
+                      ? "bg-indigo-600 text-white font-bold shadow-2xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <FileCheck2 className="w-4 h-4" />
+                  <span>Çek Portföyü ({cheques.filter((c) => c.status === "portfolio").length})</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveSubModule("senet")}
-                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeSubModule === "senet"
-                    ? "bg-fuchsia-600 text-white font-bold shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <Stamp className="w-4 h-4" />
-                <span>Senet Portföyü ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
-              </button>
+              {isFinanceSubAllowed("senet") && (
+                <button
+                  onClick={() => setActiveSubModule("senet")}
+                  className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                    activeSubModule === "senet"
+                      ? "bg-fuchsia-600 text-white font-bold shadow-2xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <Stamp className="w-4 h-4" />
+                  <span>Senet Portföyü ({promissoryNotes.filter((n) => n.status === "portfolio").length})</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => setActiveSubModule("virman")}
-                className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
-                  activeSubModule === "virman"
-                    ? "bg-emerald-600 text-white font-bold shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <ArrowRightLeft className="w-4 h-4" />
-                <span>Virman / Transfer ({virmanTransactions.length})</span>
-              </button>
+              {isFinanceSubAllowed("virman") && (
+                <button
+                  onClick={() => setActiveSubModule("virman")}
+                  className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+                    activeSubModule === "virman"
+                      ? "bg-emerald-600 text-white font-bold shadow-2xs"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>Virman / Transfer ({virmanTransactions.length})</span>
+                </button>
+              )}
             </div>
           </div>
         </>

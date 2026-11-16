@@ -27,11 +27,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
       const attempt = (remaining: number) => {
         factory()
           .then((mod) => {
-            try {
-              sessionStorage.removeItem("chunk_reload_lock");
-            } catch {
-              // ignore storage errors in iframe/sandboxed environments
-            }
+            safeRemoveStorageItem("chunk_reload_lock");
             resolve(mod);
           })
           .catch((error) => {
@@ -43,18 +39,9 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
                 error?.message?.includes("MIME type") ||
                 error?.message?.includes("valid JavaScript") ||
                 error?.name === "ChunkLoadError";
-              let reloadLock = null;
-              try {
-                reloadLock = sessionStorage.getItem("chunk_reload_lock");
-              } catch {
-                // ignore
-              }
+              const reloadLock = safeGetStorageItem("chunk_reload_lock");
               if (isChunkError && !reloadLock) {
-                try {
-                  sessionStorage.setItem("chunk_reload_lock", Date.now().toString());
-                } catch {
-                  // ignore
-                }
+                safeSetStorageItem("chunk_reload_lock", Date.now().toString());
                 window.location.reload();
                 return;
               }
@@ -116,7 +103,11 @@ import {
   snoozeManualBackupReminder,
   ManualBackupStatus,
   syncAccountBalancesFromTransactions,
+  safeGetStorageItem,
+  safeSetStorageItem,
+  safeRemoveStorageItem,
 } from "./utils/storage";
+import { resolveCentralUrl } from "./config/env";
 import {
   verifyAndSyncAllUsersLocalDb,
   subscribeToCentralSyncState,
@@ -175,6 +166,8 @@ import {
   isAdminOrSysAdmin,
   isModuleOrSubModuleAllowed,
   isCompanyMysoftMatched,
+  isCompanyLogoEnabled,
+  isCompanyDefaultBankEnabled,
 } from "./types";
 
 import { Plus, FileText, Users, ArrowUpRight, ArrowDownLeft, X, Lock, AlertTriangle, Download, Clock } from "lucide-react";
@@ -215,7 +208,7 @@ export default function App() {
   useDataGridRowHighlight();
   // Interactive data grid row resizing across all tables
   useDataGridRowResizing();
-  // Interactive data grid column resizing & localStorage persistence across all tables
+  // Interactive data grid column resizing & central storage persistence across all tables
   useDataGridColumnResizing();
 
   const [currentTab, setCurrentTab] = useState<NavItem>("dashboard");
@@ -261,6 +254,8 @@ export default function App() {
     const comp = effectiveList.find((c) => c.id === companyId);
     if (comp) {
       writeStoredMysoftTenantVkn(comp.tenantIdentifierNumber || comp.vkn || comp.tckn);
+      const logoEnabled = isCompanyLogoEnabled(comp);
+      const bankEnabled = isCompanyDefaultBankEnabled(comp);
       freshData.settings = {
         ...freshData.settings,
         companyName: comp.companyName || freshData.settings.companyName,
@@ -286,9 +281,16 @@ export default function App() {
         doorNo: comp.doorNo ?? freshData.settings.doorNo,
         postalCode: comp.postalCode ?? freshData.settings.postalCode,
         addressDetails: comp.addressDetails ?? freshData.settings.addressDetails,
-        defaultBankAccountName: comp.defaultBankAccountName ?? freshData.settings.defaultBankAccountName,
-        defaultBankName: comp.defaultBankName ?? freshData.settings.defaultBankName,
-        defaultBankIban: comp.defaultBankIban ?? freshData.settings.defaultBankIban,
+        useDefaultBankInfo: bankEnabled,
+        defaultBankAccountName: bankEnabled
+          ? (comp.defaultBankAccountName ?? freshData.settings.defaultBankAccountName ?? "")
+          : "",
+        defaultBankName: bankEnabled
+          ? (comp.defaultBankName ?? freshData.settings.defaultBankName ?? "")
+          : "",
+        defaultBankIban: bankEnabled
+          ? (comp.defaultBankIban ?? freshData.settings.defaultBankIban ?? "")
+          : "",
         mysoftMatchedType: comp.mysoftMatchedType ?? freshData.settings.mysoftMatchedType,
         tenantIdentifierNumber: comp.tenantIdentifierNumber ?? freshData.settings.tenantIdentifierNumber,
         mysoftStatus: comp.mysoftStatus ?? freshData.settings.mysoftStatus,
@@ -297,10 +299,14 @@ export default function App() {
         eArsivPrefix: comp.eArsivPrefix ?? freshData.settings.eArsivPrefix,
         eArsivNextNumber: comp.eArsivNextNumber ?? freshData.settings.eArsivNextNumber,
         defaultInvoicePrefix: comp.eFaturaPrefix || freshData.settings.defaultInvoicePrefix,
-        logoUrl:
-          comp.logoUrl && comp.logoUrl !== "/logo.svg"
+        useCorporateLogo: logoEnabled,
+        logoUrl: logoEnabled
+          ? comp.logoUrl && comp.logoUrl !== "/logo.svg"
             ? comp.logoUrl
-            : freshData.settings.logoUrl || comp.logoUrl || "/logo.svg",
+            : freshData.settings.logoUrl && freshData.settings.logoUrl !== "/logo.svg"
+              ? freshData.settings.logoUrl
+              : ""
+          : "",
         logoScale: comp.logoScale ?? freshData.settings.logoScale ?? 1,
       };
       saveStoredData("SETTINGS", freshData.settings, comp.id);
@@ -311,7 +317,7 @@ export default function App() {
   const handleAddCompany = (newComp: CompanyItem, makeActiveImmediately = true) => {
     const updatedList = addCompanyItem(newComp);
     setCompanies(updatedList);
-    if (newComp.logoUrl && newComp.logoUrl !== "/logo.svg") {
+    if (isCompanyLogoEnabled(newComp) && newComp.logoUrl && newComp.logoUrl !== "/logo.svg") {
       saveCloudLogo(
         newComp.logoUrl,
         { brandName: newComp.companyName, logoScale: newComp.logoScale ?? 1 },
@@ -338,11 +344,15 @@ export default function App() {
       allowModulePermissionChange: canAdminMutateModules,
     });
     setCompanies(updatedList);
-    saveCloudLogo(
-      comp.logoUrl || "/logo.svg",
-      { brandName: comp.companyName, logoScale: comp.logoScale ?? 1 },
-      comp.id
-    ).catch(() => {});
+    const logoEnabled = isCompanyLogoEnabled(comp);
+    const bankEnabled = isCompanyDefaultBankEnabled(comp);
+    if (logoEnabled && comp.logoUrl && comp.logoUrl !== "/logo.svg") {
+      saveCloudLogo(
+        comp.logoUrl,
+        { brandName: comp.companyName, logoScale: comp.logoScale ?? 1 },
+        comp.id
+      ).catch(() => {});
+    }
     const targetSettingsData = getStoredData(comp.id);
     const updatedTargetSettings: CompanySettings = {
       ...targetSettingsData.settings,
@@ -374,9 +384,16 @@ export default function App() {
       doorNo: comp.doorNo ?? targetSettingsData.settings.doorNo,
       postalCode: comp.postalCode ?? targetSettingsData.settings.postalCode,
       addressDetails: comp.addressDetails ?? targetSettingsData.settings.addressDetails,
-      defaultBankAccountName: comp.defaultBankAccountName ?? targetSettingsData.settings.defaultBankAccountName,
-      defaultBankName: comp.defaultBankName ?? targetSettingsData.settings.defaultBankName,
-      defaultBankIban: comp.defaultBankIban ?? targetSettingsData.settings.defaultBankIban,
+      useDefaultBankInfo: bankEnabled,
+      defaultBankAccountName: bankEnabled
+        ? (comp.defaultBankAccountName ?? targetSettingsData.settings.defaultBankAccountName ?? "")
+        : "",
+      defaultBankName: bankEnabled
+        ? (comp.defaultBankName ?? targetSettingsData.settings.defaultBankName ?? "")
+        : "",
+      defaultBankIban: bankEnabled
+        ? (comp.defaultBankIban ?? targetSettingsData.settings.defaultBankIban ?? "")
+        : "",
       mysoftMatchedType: comp.mysoftMatchedType ?? targetSettingsData.settings.mysoftMatchedType,
       tenantIdentifierNumber: comp.tenantIdentifierNumber ?? targetSettingsData.settings.tenantIdentifierNumber,
       mysoftStatus: comp.mysoftStatus ?? targetSettingsData.settings.mysoftStatus,
@@ -388,7 +405,14 @@ export default function App() {
         comp.defaultInvoicePrefix ||
         comp.eFaturaPrefix ||
         targetSettingsData.settings.defaultInvoicePrefix,
-      logoUrl: comp.logoUrl || targetSettingsData.settings.logoUrl || "/logo.svg",
+      useCorporateLogo: logoEnabled,
+      logoUrl: logoEnabled
+        ? (comp.logoUrl && comp.logoUrl !== "/logo.svg"
+            ? comp.logoUrl
+            : targetSettingsData.settings.logoUrl && targetSettingsData.settings.logoUrl !== "/logo.svg"
+              ? targetSettingsData.settings.logoUrl
+              : "")
+        : "",
       logoScale: comp.logoScale ?? targetSettingsData.settings.logoScale ?? 1,
       mysoftCredentials: {
         ...targetSettingsData.settings.mysoftCredentials,
@@ -441,6 +465,13 @@ export default function App() {
   // Tarayıcı Geri / İleri (History API - popstate & pushState) Senkronizasyonu
   const historyInitializedRef = useRef(false);
   const isApplyingPopStateRef = useRef(false);
+  const latestNavAuthRef = useRef<{
+    isAuthorized: (tab: NavItem) => boolean;
+    canOpenQuickAdd: boolean;
+  }>({
+    isAuthorized: (t) => t === "dashboard",
+    canOpenQuickAdd: false,
+  });
 
   useEffect(() => {
     if (!historyInitializedRef.current) {
@@ -453,32 +484,42 @@ export default function App() {
         isQuickAddOpen,
       });
 
-      // URL / History state'te kayıtlı sekme varsa ilk açılışta geri yükle
+      // URL / History state'te kayıtlı sekme varsa ve yetkiliyse ilk açılışta geri yükle
       if (initialHistoryState.tab && initialHistoryState.tab !== currentTab) {
-        isApplyingPopStateRef.current = true;
-        setCurrentTab(initialHistoryState.tab as NavItem);
-        if (initialHistoryState.financeSubTab) {
-          setFinanceSubTab(initialHistoryState.financeSubTab as FinanceSubModule);
+        const candidateTab = initialHistoryState.tab as NavItem;
+        if (latestNavAuthRef.current.isAuthorized(candidateTab)) {
+          isApplyingPopStateRef.current = true;
+          setCurrentTab(candidateTab);
+          if (initialHistoryState.financeSubTab) {
+            setFinanceSubTab(initialHistoryState.financeSubTab as FinanceSubModule);
+          }
+          if (initialHistoryState.selectedConstructionProjectId !== undefined) {
+            setSelectedConstructionProjectId(initialHistoryState.selectedConstructionProjectId);
+          }
+          setTimeout(() => {
+            isApplyingPopStateRef.current = false;
+          }, 0);
+        } else {
+          setCurrentTab("dashboard");
         }
-        if (initialHistoryState.selectedConstructionProjectId !== undefined) {
-          setSelectedConstructionProjectId(initialHistoryState.selectedConstructionProjectId);
-        }
-        setTimeout(() => {
-          isApplyingPopStateRef.current = false;
-        }, 0);
       }
     }
 
     const unsubscribePopState = onBrowserPopState((navState) => {
       isApplyingPopStateRef.current = true;
       if (navState.tab) {
-        setCurrentTab(navState.tab as NavItem);
+        const targetTab = navState.tab as NavItem;
+        setCurrentTab(
+          latestNavAuthRef.current.isAuthorized(targetTab) ? targetTab : "dashboard"
+        );
       }
       if (navState.financeSubTab) {
         setFinanceSubTab(navState.financeSubTab as FinanceSubModule);
       }
       setSelectedConstructionProjectId(navState.selectedConstructionProjectId ?? null);
-      setIsQuickAddOpen(Boolean(navState.isQuickAddOpen));
+      setIsQuickAddOpen(
+        Boolean(navState.isQuickAddOpen) && latestNavAuthRef.current.canOpenQuickAdd
+      );
       setIsMobileMenuOpen(false);
       if (navState.activeCompanyId && navState.activeCompanyId !== getActiveCompanyId()) {
         handleSelectCompany(navState.activeCompanyId);
@@ -528,7 +569,7 @@ export default function App() {
     });
   }, [currentTab, financeSubTab, selectedConstructionProjectId, activeCompanyId, isQuickAddOpen]);
 
-  // Restore GitHub PAT from browser localStorage after container restarts & sync all companies/users
+  // Restore GitHub PAT from central storage after container restarts & sync all companies/users
   const githubAutoSyncedRef = useRef(false);
   const isInitialCloudPullCompleteRef = useRef(false);
   const cloudPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -569,9 +610,7 @@ export default function App() {
       const currentActive = getActiveCompanyId();
       setData(getStoredData(currentActive));
       try {
-        const storedUserRaw =
-          localStorage.getItem("muavin_active_user") ||
-          sessionStorage.getItem("muavin_active_user");
+        const storedUserRaw = safeGetStorageItem("muavin_active_user");
         if (storedUserRaw) {
           const parsedU = JSON.parse(storedUserRaw);
           setCurrentUser((prev) => {
@@ -601,7 +640,7 @@ export default function App() {
     const checkServerUpdates = async () => {
       try {
         const activeId = getActiveCompanyId();
-        const resp = await fetch(`/api/cloud-sync/state?companyId=${encodeURIComponent(activeId)}`);
+        const resp = await fetch(resolveCentralUrl(`/api/cloud-sync/state?companyId=${encodeURIComponent(activeId)}`));
         if (!resp.ok) return;
         const json = await resp.json();
         const incomingVersion = Number(json?.version) || 0;
@@ -615,8 +654,31 @@ export default function App() {
       }
     };
 
+    const syncSavedGitHubConfig = async () => {
+      try {
+        const savedToken = (safeGetStorageItem("muavin_github_pat") || "").trim();
+        const savedRepo = (safeGetStorageItem("muavin_github_repo_url") || "").trim();
+        if (!savedToken) return;
+        if (savedToken.startsWith("ghp_Y2c") && savedToken.endsWith("IzYx")) {
+          safeSetStorageItem("muavin_github_pat", "");
+          return;
+        }
+        await fetch(resolveCentralUrl("/api/github/config"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: savedToken,
+            repoUrl: savedRepo || undefined,
+          }),
+        });
+      } catch {
+        // Ignore background config sync errors
+      }
+    };
+
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === "visible") {
+        void syncSavedGitHubConfig();
         void checkServerUpdates();
         void pullLatestCompanyDataFromCloud(getActiveCompanyId(), true).then(() => {
           handleCentralSync();
@@ -629,24 +691,7 @@ export default function App() {
       void checkServerUpdates();
     }, 15000);
 
-    const savedToken = localStorage.getItem("muavin_github_pat")?.trim();
-    const savedRepo = localStorage.getItem("muavin_github_repo_url")?.trim();
-    if (savedToken) {
-      (async () => {
-        try {
-          await fetch("/api/github/config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: savedToken,
-              repoUrl: savedRepo || undefined,
-            }),
-          });
-        } catch {
-          // Ignore background config sync errors
-        }
-      })();
-    }
+    void syncSavedGitHubConfig();
 
     return () => {
       window.removeEventListener("muavin:central-sync-broadcast", handleCentralSync);
@@ -659,7 +704,7 @@ export default function App() {
 
   // Auth & Profile State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const stored = localStorage.getItem("muavin_active_user") || sessionStorage.getItem("muavin_active_user");
+    const stored = safeGetStorageItem("muavin_active_user");
     if (stored) {
       try {
         return JSON.parse(stored);
@@ -715,11 +760,8 @@ export default function App() {
       if (currentUser.companyId !== targetComp.id) {
         const updatedUser = { ...currentUser, companyId: targetComp.id, companyName: targetComp.companyName };
         setCurrentUser(updatedUser);
-        if (localStorage.getItem("muavin_active_user")) {
-          localStorage.setItem("muavin_active_user", JSON.stringify(updatedUser));
-        }
-        if (sessionStorage.getItem("muavin_active_user")) {
-          sessionStorage.setItem("muavin_active_user", JSON.stringify(updatedUser));
+        if (safeGetStorageItem("muavin_active_user")) {
+          safeSetStorageItem("muavin_active_user", JSON.stringify(updatedUser));
         }
       }
       if (!isSysAdmin && activeCompanyId !== targetComp.id) {
@@ -750,13 +792,14 @@ export default function App() {
         const currentList = getCompaniesList();
         let listChanged = false;
         currentList.forEach((comp) => {
+          if (comp.useCorporateLogo === false) return;
           const entry = companyMap[comp.id];
-          if (entry && entry.logoUrl) {
+          if (entry && entry.logoUrl && entry.logoUrl !== "/logo.svg") {
             const shouldUseCloudLogo =
-              (!comp.logoUrl || comp.logoUrl === "/logo.svg") && entry.logoUrl !== "/logo.svg";
-            const nextLogo = shouldUseCloudLogo ? entry.logoUrl : comp.logoUrl || entry.logoUrl;
+              comp.useCorporateLogo === true && (!comp.logoUrl || comp.logoUrl === "/logo.svg");
+            const nextLogo = shouldUseCloudLogo ? entry.logoUrl : comp.logoUrl;
             const nextScale = comp.logoScale ?? entry.logoScale ?? 1;
-            if (nextLogo !== comp.logoUrl || nextScale !== comp.logoScale) {
+            if (nextLogo && (nextLogo !== comp.logoUrl || nextScale !== comp.logoScale)) {
               updateCompanyItem({ ...comp, logoUrl: nextLogo, logoScale: nextScale });
               listChanged = true;
             }
@@ -768,29 +811,35 @@ export default function App() {
       }
 
       const activeComp = getCompaniesList().find((c) => c.id === activeId);
+      if (!isCompanyLogoEnabled(activeComp)) {
+        return;
+      }
       const cloudEntryForActive = companyMap[activeId];
       const targetLogoUrl =
         (activeComp?.logoUrl && activeComp.logoUrl !== "/logo.svg" ? activeComp.logoUrl : undefined) ||
-        cloudEntryForActive?.logoUrl ||
-        (activeId === "comp_default" ? branding.logoUrl : undefined) ||
-        activeComp?.logoUrl ||
-        "/logo.svg";
+        (cloudEntryForActive?.logoUrl && cloudEntryForActive.logoUrl !== "/logo.svg"
+          ? cloudEntryForActive.logoUrl
+          : undefined) ||
+        (activeId === "comp_default" && branding.logoUrl && branding.logoUrl !== "/logo.svg"
+          ? branding.logoUrl
+          : undefined) ||
+        "";
       const targetScale =
         activeComp?.logoScale ?? cloudEntryForActive?.logoScale ?? branding.logoScale ?? 1;
 
       setData((prev) => {
-        const currentLogo = prev.settings?.logoUrl;
-        const currentScale = prev.settings?.logoScale ?? 1;
-        if (
-          targetLogoUrl === "/logo.svg" &&
-          currentLogo &&
-          currentLogo !== "/logo.svg"
-        ) {
+        if (!isCompanyLogoEnabled(prev.settings)) {
           return prev;
         }
-        if (currentLogo !== targetLogoUrl || currentScale !== targetScale) {
+        const currentLogo = prev.settings?.logoUrl || "";
+        const currentScale = prev.settings?.logoScale ?? 1;
+        if (!targetLogoUrl && currentLogo && currentLogo !== "/logo.svg") {
+          return prev;
+        }
+        if (targetLogoUrl && (currentLogo !== targetLogoUrl || currentScale !== targetScale)) {
           const nextSettings = {
             ...prev.settings,
+            useCorporateLogo: true,
             logoUrl: targetLogoUrl,
             logoScale: targetScale,
           };
@@ -826,14 +875,13 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("muavin_active_user");
-    sessionStorage.removeItem("muavin_active_user");
+    safeRemoveStorageItem("muavin_active_user");
     setCurrentUser(null);
     setAuthModalMode("login");
     setAuthModalOpen(true);
   };
 
-  // Sync state changes with localStorage per slice (scoped to activeCompanyId)
+  // Sync state changes with central storage per slice (scoped to activeCompanyId)
   useEffect(() => { saveStoredData("SETTINGS", data.settings, activeCompanyId); }, [data.settings, activeCompanyId]);
   useEffect(() => { saveStoredData("CONTACTS", data.contacts, activeCompanyId); }, [data.contacts, activeCompanyId]);
   useEffect(() => { saveStoredData("ACCOUNTS", data.accounts, activeCompanyId); }, [data.accounts, activeCompanyId]);
@@ -3489,16 +3537,28 @@ export default function App() {
   const handleSaveSettings = (newSettings: CompanySettings) => {
     const targetCompanyId = getActiveCompanyId();
     const cleanTaxDigits = String(newSettings.taxNumber || "").replace(/\D/g, "");
+    const logoEnabled = isCompanyLogoEnabled(newSettings);
+    const bankEnabled = isCompanyDefaultBankEnabled(newSettings);
     const normalizedSettings: CompanySettings = {
       ...newSettings,
       vkn: cleanTaxDigits.length === 10 ? cleanTaxDigits : newSettings.vkn,
       tckn: cleanTaxDigits.length === 11 ? cleanTaxDigits : newSettings.tckn,
       tradeRegisterNo: (newSettings.tradeRegisterNo ?? "").trim(),
       mersisNo: (newSettings.mersisNo ?? "").trim(),
-      defaultBankAccountName:
-        newSettings.defaultBankAccountName !== undefined && newSettings.defaultBankAccountName !== ""
+      useCorporateLogo: logoEnabled,
+      logoUrl: logoEnabled
+        ? newSettings.logoUrl && newSettings.logoUrl !== "/logo.svg"
+          ? newSettings.logoUrl
+          : ""
+        : "",
+      useDefaultBankInfo: bankEnabled,
+      defaultBankAccountName: bankEnabled
+        ? newSettings.defaultBankAccountName !== undefined && newSettings.defaultBankAccountName !== ""
           ? newSettings.defaultBankAccountName
-          : newSettings.companyTitle || newSettings.companyName || "",
+          : newSettings.companyTitle || newSettings.companyName || ""
+        : "",
+      defaultBankName: bankEnabled ? (newSettings.defaultBankName ?? "") : "",
+      defaultBankIban: bankEnabled ? (newSettings.defaultBankIban ?? "") : "",
     };
 
     // Persist SETTINGS immediately before any synchronous reads
@@ -3531,9 +3591,10 @@ export default function App() {
         doorNo: normalizedSettings.doorNo ?? existingComp.doorNo,
         postalCode: normalizedSettings.postalCode ?? existingComp.postalCode,
         addressDetails: normalizedSettings.addressDetails ?? existingComp.addressDetails,
-        defaultBankAccountName: normalizedSettings.defaultBankAccountName ?? existingComp.defaultBankAccountName,
-        defaultBankName: normalizedSettings.defaultBankName ?? existingComp.defaultBankName,
-        defaultBankIban: normalizedSettings.defaultBankIban ?? existingComp.defaultBankIban,
+        useDefaultBankInfo: bankEnabled,
+        defaultBankAccountName: normalizedSettings.defaultBankAccountName,
+        defaultBankName: normalizedSettings.defaultBankName,
+        defaultBankIban: normalizedSettings.defaultBankIban,
         tenantIdentifierNumber: normalizedSettings.tenantIdentifierNumber ?? existingComp.tenantIdentifierNumber,
         eFaturaPrefix: normalizedSettings.eFaturaPrefix ?? existingComp.eFaturaPrefix,
         eFaturaNextNumber: normalizedSettings.eFaturaNextNumber ?? existingComp.eFaturaNextNumber,
@@ -3541,19 +3602,22 @@ export default function App() {
         eArsivNextNumber: normalizedSettings.eArsivNextNumber ?? existingComp.eArsivNextNumber,
         defaultInvoicePrefix: normalizedSettings.defaultInvoicePrefix ?? existingComp.defaultInvoicePrefix,
         invoiceDesign: normalizedSettings.invoiceDesign ?? existingComp.invoiceDesign,
-        logoUrl: normalizedSettings.logoUrl || "/logo.svg",
+        useCorporateLogo: logoEnabled,
+        logoUrl: normalizedSettings.logoUrl || "",
         logoScale: normalizedSettings.logoScale ?? 1,
       });
       setCompanies(updatedList);
     }
-    saveCloudLogo(
-      normalizedSettings.logoUrl || "/logo.svg",
-      {
-        brandName: normalizedSettings.companyName,
-        logoScale: normalizedSettings.logoScale ?? 1,
-      },
-      targetCompanyId
-    ).catch(() => {});
+    if (logoEnabled && normalizedSettings.logoUrl && normalizedSettings.logoUrl !== "/logo.svg") {
+      saveCloudLogo(
+        normalizedSettings.logoUrl,
+        {
+          brandName: normalizedSettings.companyName,
+          logoScale: normalizedSettings.logoScale ?? 1,
+        },
+        targetCompanyId
+      ).catch(() => {});
+    }
 
     setData((prev) => {
       let updatedEmployees = prev.employees;
@@ -3657,6 +3721,7 @@ export default function App() {
   };
 
   const handleOpenBackupSettings = () => {
+    if (!isAdminOrSysAdmin(currentUser)) return;
     setSettingsInitialTab("backup");
     setCurrentTab("company_settings");
   };
@@ -4081,11 +4146,21 @@ export default function App() {
   const activeCompanyObj =
     companies.find((c) => c.id === activeCompanyId) || companies[0] || null;
 
-  const isCurrentTabAuthorized = (tab: NavItem): boolean => {
+  const isCurrentTabAuthorized = (tab: NavItem | string): boolean => {
     if (tab === "dashboard") return true;
-    if (tab === "admin" || tab === "company_companies" || tab === "company_mysoft") return isAdminOrSysAdmin(currentUser);
+    if (
+      tab === "admin" ||
+      tab === "settings" ||
+      tab === "company_settings" ||
+      tab === "company_companies" ||
+      tab === "company_mysoft"
+    ) {
+      return isAdminOrSysAdmin(currentUser);
+    }
     if (tab === "company_logs" || tab === "e_document_logs") {
-      return isCompanyMysoftMatched(activeCompanyObj, data.settings);
+      if (!isAdminOrSysAdmin(currentUser)) return false;
+      if (!isCompanyMysoftMatched(activeCompanyObj, data.settings)) return false;
+      return true;
     }
 
     const tabPermissionMap: Record<string, { key: string; parent?: string }> = {
@@ -4159,41 +4234,295 @@ export default function App() {
     };
 
     const mapped = tabPermissionMap[tab];
-    if (!mapped) return true;
-    return isModuleOrSubModuleAllowed(
+    if (!mapped) return isAdminOrSysAdmin(currentUser);
+    const baseAllowed = isModuleOrSubModuleAllowed(
       mapped.key,
       mapped.parent,
       currentUser,
       activeCompanyObj
     );
+    if (!baseAllowed) return false;
+
+    if (!isAdminOrSysAdmin(currentUser)) {
+      if (tab === "company") {
+        return ["company_profile", "company_branches", "company_warehouses"].some((k) =>
+          isModuleOrSubModuleAllowed(k, "company", currentUser, activeCompanyObj)
+        );
+      }
+      if (tab === "accounts") {
+        return ["finance_kasa", "finance_banka", "finance_cek", "finance_senet", "finance_virman"].some(
+          (k) => isModuleOrSubModuleAllowed(k, "accounts", currentUser, activeCompanyObj)
+        );
+      }
+      if (tab === "invoices") {
+        return [
+          "invoices_sales",
+          "invoices_purchase",
+          "e_documents_incoming",
+          "e_documents_outgoing",
+          "waybills_receipt",
+          "waybills_dispatch",
+          "waybills",
+        ].some((k) => isModuleOrSubModuleAllowed(k, "invoices", currentUser, activeCompanyObj));
+      }
+      if (tab === "orders_module") {
+        return ["orders", "quotes", "marketplace_trendyol"].some((k) =>
+          isModuleOrSubModuleAllowed(k, "orders_module", currentUser, activeCompanyObj)
+        );
+      }
+      if (tab === "ecommerce") {
+        return [
+          "ecommerce_orders",
+          "ecommerce_stores",
+          "ecommerce_products",
+          "ecommerce_finance",
+        ].some((k) => isModuleOrSubModuleAllowed(k, "ecommerce", currentUser, activeCompanyObj));
+      }
+      if (tab === "products") {
+        return ["products_list", "products_warehouses"].some((k) =>
+          isModuleOrSubModuleAllowed(k, "products", currentUser, activeCompanyObj)
+        );
+      }
+      if (tab === "hr") {
+        return [
+          "hr_employees",
+          "hr_payroll",
+          "hr_leaves",
+          "hr_advances",
+          "hr_sgk",
+          "hr_severance",
+          "hr_zimmet",
+          "hr_allowances",
+        ].some((k) => isModuleOrSubModuleAllowed(k, "hr", currentUser, activeCompanyObj));
+      }
+      if (tab === "reports") {
+        return (
+          isModuleOrSubModuleAllowed("reports_tax", "reports", currentUser, activeCompanyObj) ||
+          isModuleOrSubModuleAllowed("reports_advisor", "reports", currentUser, activeCompanyObj)
+        );
+      }
+    }
+    return true;
   };
 
-  // Eğer kullanıcının veya şirketin yetkileri güncellendiğinde mevcut sekme yetkisiz hale gelirse ana sayfaya yönlendir
+  const allowedFinanceSubTabs: FinanceSubModule[] = (
+    [
+      { id: "kasa" as FinanceSubModule, key: "finance_kasa" },
+      { id: "banka" as FinanceSubModule, key: "finance_banka" },
+      { id: "cek" as FinanceSubModule, key: "finance_cek" },
+      { id: "senet" as FinanceSubModule, key: "finance_senet" },
+      { id: "virman" as FinanceSubModule, key: "finance_virman" },
+    ] as const
+  )
+    .filter((item) =>
+      isModuleOrSubModuleAllowed(item.key, "accounts", currentUser, activeCompanyObj)
+    )
+    .map((item) => item.id);
+
+  const allowedHrSubTabs = (
+    [
+      { id: "employees" as const, nav: "hr_employees" as NavItem },
+      { id: "payroll" as const, nav: "hr_payroll" as NavItem },
+      { id: "leaves" as const, nav: "hr_leaves" as NavItem },
+      { id: "advances" as const, nav: "hr_advances" as NavItem },
+      { id: "sgk" as const, nav: "hr_sgk" as NavItem },
+      { id: "severance" as const, nav: "hr_severance" as NavItem },
+      { id: "zimmet" as const, nav: "hr_zimmet" as NavItem },
+      { id: "allowances" as const, nav: "hr_allowances" as NavItem },
+    ]
+  )
+    .filter((item) => isCurrentTabAuthorized(item.nav))
+    .map((item) => item.id);
+
+  const canQuickInvoice =
+    isCurrentTabAuthorized("invoices_sales") || isCurrentTabAuthorized("invoices_purchase");
+  const canQuickContact = isCurrentTabAuthorized("contacts");
+  const canQuickTransaction = isCurrentTabAuthorized("transactions");
+  const canQuickProduct = isCurrentTabAuthorized("products");
+  const canQuickWarehouse = isCurrentTabAuthorized("company_warehouses");
+  const hasAnyQuickAddPermission =
+    canQuickInvoice ||
+    canQuickContact ||
+    canQuickTransaction ||
+    canQuickProduct ||
+    canQuickWarehouse;
+
+  latestNavAuthRef.current = {
+    isAuthorized: isCurrentTabAuthorized,
+    canOpenQuickAdd: hasAnyQuickAddPermission,
+  };
+
+  const searchableModuleLabels: string[] = [
+    ...(isCurrentTabAuthorized("contacts") ? ["Cari"] : []),
+    ...(isCurrentTabAuthorized("invoices_sales") ||
+    isCurrentTabAuthorized("invoices_purchase") ||
+    isCurrentTabAuthorized("e_documents_incoming") ||
+    isCurrentTabAuthorized("e_documents_outgoing")
+      ? ["Fatura"]
+      : []),
+    ...(isCurrentTabAuthorized("products") ? ["Ürün"] : []),
+    ...(isCurrentTabAuthorized("orders") || isCurrentTabAuthorized("quotes")
+      ? ["Sipariş"]
+      : []),
+    ...(isCurrentTabAuthorized("accounts") || isCurrentTabAuthorized("transactions")
+      ? ["Finans"]
+      : []),
+    ...(isCurrentTabAuthorized("hr") ? ["Personel"] : []),
+  ];
+  const canUseGlobalSearch =
+    isAdminOrSysAdmin(currentUser) || searchableModuleLabels.length > 0;
+  const searchPlaceholder =
+    searchableModuleLabels.length > 0
+      ? `${searchableModuleLabels.slice(0, 3).join(", ")} ara...`
+      : "Ara...";
+  const canManageBackups = isAdminOrSysAdmin(currentUser);
+
+  const authorizedDashboardShortcuts: Array<{
+    id: string;
+    label: string;
+    description: string;
+  }> = [
+    { id: "company", label: "Firma Bilgileri", description: "Firma profili, şube ve depo tanımları" },
+    { id: "e_services", label: "E-İşlemler", description: "Resmi e-dönüşüm ve entegrasyon işlemleri" },
+    { id: "invoices", label: "E-Belgeler & Faturalar", description: "Gelir, gider, e-fatura ve e-irsaliyeler" },
+    { id: "orders_module", label: "Sipariş & Proforma", description: "Sipariş, teklif ve pazaryeri süreçleri" },
+    { id: "ecommerce", label: "E-Ticaret Modülü", description: "Mağaza, ürün ve hakediş yönetimi" },
+    { id: "production", label: "Üretim", description: "Reçete, menü ve üretim emirleri" },
+    { id: "sectors", label: "Sektörler", description: "Sektörel operasyon modülleri" },
+    { id: "auto_service", label: "Oto Servis & Araç Bakım", description: "Servis kabul ve bakım kayıtları" },
+    { id: "it_service", label: "Bilişim & BT Teknik Servis", description: "Cihaz arıza ve teknik servis takibi" },
+    { id: "appliance_service", label: "Ev Aletleri ve Klima", description: "Montaj, bakım ve arıza yönetimi" },
+    { id: "construction_costing", label: "İnşaat Maliyetlendirme", description: "Şantiye, hakediş ve proje maliyetleri" },
+    { id: "contacts", label: "Cari Hesaplar", description: "Müşteri ve tedarikçi hesap kartları" },
+    { id: "accounts", label: "Finans Yönetimi", description: "Kasa, banka, çek, senet ve virman" },
+    { id: "products", label: "Stoklar", description: "Ürün, hizmet ve envanter yönetimi" },
+    { id: "fixed_assets", label: "Demirbaşlar", description: "Sabit kıymet ve VUK amortisman takibi" },
+    { id: "hr", label: "İnsan Kaynakları", description: "Personel, bordro, izin ve özlük yönetimi" },
+    { id: "files", label: "Bulut Dosya Deposu", description: "Kurumsal belge ve arşiv yönetimi" },
+    { id: "reports", label: "Vergilendirme & Müşavir", description: "Vergi beyanname ve mali müşavir raporları" },
+    { id: "whatsapp", label: "WhatsApp Merkezi", description: "Müşteri iletişim ve bildirim merkezi" },
+  ].filter((item) => isCurrentTabAuthorized(item.id as NavItem));
+
+  const resolveAuthorizedTargetTab = (tab: NavItem): NavItem => {
+    if (tab === "company") {
+      const candidates: NavItem[] = isAdminOrSysAdmin(currentUser)
+        ? ["company_profile", "company_branches", "company_warehouses", "company_settings", "company_logs"]
+        : ["company_profile", "company_branches", "company_warehouses"];
+      return candidates.find((c) => isCurrentTabAuthorized(c)) || tab;
+    }
+    if (tab === "invoices") {
+      if (isCurrentTabAuthorized("invoices_sales") && isCurrentTabAuthorized("invoices_purchase")) {
+        return "invoices";
+      }
+      const candidates: NavItem[] = [
+        "invoices_sales",
+        "invoices_purchase",
+        "e_documents_incoming",
+        "e_documents_outgoing",
+        "waybills_receipt",
+        "waybills_dispatch",
+        "waybills",
+      ];
+      return candidates.find((c) => isCurrentTabAuthorized(c)) || tab;
+    }
+    if (tab === "orders_module") {
+      const candidates: NavItem[] = ["orders", "quotes", "marketplace_trendyol"];
+      return candidates.find((c) => isCurrentTabAuthorized(c)) || tab;
+    }
+    if (tab === "ecommerce") {
+      const candidates: NavItem[] = [
+        "ecommerce_orders",
+        "ecommerce_stores",
+        "ecommerce_products",
+        "ecommerce_finance",
+      ];
+      return candidates.find((c) => isCurrentTabAuthorized(c)) || tab;
+    }
+    if (tab === "products") {
+      if (isCurrentTabAuthorized("products_list")) {
+        return "products_list";
+      }
+      return tab;
+    }
+    if (tab === "hr") {
+      const candidates: NavItem[] = [
+        "hr_employees",
+        "hr_payroll",
+        "hr_leaves",
+        "hr_advances",
+        "hr_sgk",
+        "hr_severance",
+        "hr_zimmet",
+        "hr_allowances",
+      ];
+      return candidates.find((c) => isCurrentTabAuthorized(c)) || tab;
+    }
+    if (tab === "reports") {
+      if (!isCurrentTabAuthorized("reports_tax") && isCurrentTabAuthorized("reports_advisor")) {
+        return "reports_advisor";
+      }
+    }
+    return tab;
+  };
+
+  const handleAuthorizedSelectTab = (rawTab: NavItem) => {
+    const resolved = resolveAuthorizedTargetTab(rawTab);
+    if (!isCurrentTabAuthorized(resolved)) {
+      triggerFormErrorNotification(
+        "Bu modül veya alt modül için erişim yetkiniz bulunmamaktadır. Modül ve alt modül tanımlama/yetkilendirme işlemleri sadece Admin ve Sistem Yöneticisi tarafından yapılabilir.",
+        "Yetkisiz Erişim"
+      );
+      return;
+    }
+    if (
+      resolved === "accounts" &&
+      allowedFinanceSubTabs.length > 0 &&
+      !allowedFinanceSubTabs.includes(financeSubTab)
+    ) {
+      setFinanceSubTab(allowedFinanceSubTabs[0]);
+    }
+    setCurrentTab(resolved);
+  };
+
+  // Eğer kullanıcının veya şirketin yetkileri güncellendiğinde mevcut sekme / alt sekme yetkisiz hale gelirse düzelt
   useEffect(() => {
     if (currentTab !== "dashboard" && !isCurrentTabAuthorized(currentTab)) {
       setCurrentTab("dashboard");
+    } else if (
+      currentTab === "reports" &&
+      !isCurrentTabAuthorized("reports_tax") &&
+      isCurrentTabAuthorized("reports_advisor")
+    ) {
+      setCurrentTab("reports_advisor");
     }
-  }, [currentTab, currentUser, activeCompanyId, activeCompanyObj]);
+    if (
+      allowedFinanceSubTabs.length > 0 &&
+      !allowedFinanceSubTabs.includes(financeSubTab)
+    ) {
+      setFinanceSubTab(allowedFinanceSubTabs[0]);
+    }
+    if (isQuickAddOpen && !hasAnyQuickAddPermission) {
+      setIsQuickAddOpen(false);
+    }
+  }, [currentTab, currentUser, activeCompanyId, activeCompanyObj, financeSubTab, isQuickAddOpen]);
 
   return (
     <div className="flex min-h-screen bg-theme-page text-slate-900 font-sans antialiased md:gap-x-4 lg:gap-x-5">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
-        onSelectTab={(tab) => {
-          if (!isCurrentTabAuthorized(tab)) {
-            triggerFormErrorNotification(
-              "Bu modül veya alt modül için erişim yetkiniz bulunmamaktadır. Modül ve alt modül tanımlama/yetkilendirme işlemleri sadece Admin ve Sistem Yöneticisi tarafından yapılabilir.",
-              "Yetkisiz Erişim"
-            );
-            return;
-          }
-          setCurrentTab(tab);
-        }}
+        onSelectTab={handleAuthorizedSelectTab}
         activeFinanceSubTab={financeSubTab}
-        onSelectFinanceSubTab={setFinanceSubTab}
+        onSelectFinanceSubTab={(sub) => {
+          if (allowedFinanceSubTabs.includes(sub)) {
+            setFinanceSubTab(sub);
+          }
+        }}
         settings={data.settings}
-        onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+        onOpenQuickAdd={() => {
+          if (hasAnyQuickAddPermission) setIsQuickAddOpen(true);
+        }}
+        canUseQuickAdd={hasAnyQuickAddPermission}
         currentUser={currentUser}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
@@ -4202,8 +4531,10 @@ export default function App() {
         constructionProjects={data.constructionProjects || []}
         selectedConstructionProjectId={selectedConstructionProjectId}
         onSelectConstructionProject={(projId) => {
-          setSelectedConstructionProjectId(projId);
-          setCurrentTab("construction_costing");
+          if (isCurrentTabAuthorized("construction_costing")) {
+            setSelectedConstructionProjectId(projId);
+            setCurrentTab("construction_costing");
+          }
         }}
         onOpenGitHubPublish={() => setIsGitHubPublishOpen(true)}
         activeCompany={companies.find((c) => c.id === activeCompanyId) || companies[0]}
@@ -4217,13 +4548,19 @@ export default function App() {
           accounts={data.accounts}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
-          onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-          onSelectTab={setCurrentTab}
+          onOpenQuickAdd={() => {
+            if (hasAnyQuickAddPermission) setIsQuickAddOpen(true);
+          }}
+          onSelectTab={handleAuthorizedSelectTab}
           currentUser={currentUser}
           onOpenAuthModal={handleOpenAuthModal}
           onLogout={handleLogout}
           onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
-          logoUrl={data.settings?.logoUrl || "/logo.svg"}
+          logoUrl={
+            isCompanyLogoEnabled(data.settings) && data.settings?.logoUrl
+              ? data.settings.logoUrl
+              : "./logo.svg"
+          }
           onOpenGitHubPublish={() => setIsGitHubPublishOpen(true)}
           companies={companies}
           activeCompanyId={activeCompanyId}
@@ -4235,10 +4572,14 @@ export default function App() {
           onTriggerManualBackup={handleExportBackup}
           onSnoozeBackupReminder={handleSnoozeBackupReminder}
           onOpenBackupSettings={handleOpenBackupSettings}
+          canUseGlobalSearch={canUseGlobalSearch}
+          searchPlaceholder={searchPlaceholder}
+          canManageBackups={canManageBackups}
         />
 
         {/* Automated 7-Day Manual Data Backup Alert Banner */}
-        {backupStatus.isOverdue &&
+        {canManageBackups &&
+          backupStatus.isOverdue &&
           !backupStatus.isSnoozed &&
           data.settings?.manualBackupReminderEnabled !== false && (
             <div
@@ -4306,12 +4647,19 @@ export default function App() {
               waybills={data.waybills || []}
               settings={data.settings}
               globalSearchTerm={searchTerm}
-              onSelectTab={setCurrentTab}
-              onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+              onSelectTab={handleAuthorizedSelectTab}
+              onOpenQuickAdd={() => {
+                if (hasAnyQuickAddPermission) setIsQuickAddOpen(true);
+              }}
+              canAccessTab={(t) => isCurrentTabAuthorized(t)}
+              canUseQuickAdd={hasAnyQuickAddPermission}
+              authorizedShortcuts={authorizedDashboardShortcuts}
             />
           )}
 
-          {currentTab === "contacts" && (
+          {(currentTab === "contacts" ||
+            currentTab === "contacts_debtors" ||
+            currentTab === "contacts_risky") && (
             <Contacts
               currentUser={currentUser}
               contacts={data.contacts}
@@ -4337,11 +4685,17 @@ export default function App() {
               onDeleteCheque={handleDeleteCheque}
               onDeletePromissoryNote={handleDeletePromissoryNote}
               onTransferBetweenAccounts={handleTransferBetweenAccounts}
-              onOpenNewInvoiceForContact={(cid) => {
-                setInitialContactIdForInvoice(cid);
-                setCurrentTab("invoices");
-              }}
-              onOpenPaymentModal={() => setCurrentTab("transactions")}
+              onOpenNewInvoiceForContact={
+                canQuickInvoice
+                  ? (cid) => {
+                      setInitialContactIdForInvoice(cid);
+                      handleAuthorizedSelectTab("invoices");
+                    }
+                  : undefined
+              }
+              onOpenPaymentModal={
+                canQuickTransaction ? () => handleAuthorizedSelectTab("transactions") : undefined
+              }
             />
           )}
 
@@ -4361,6 +4715,12 @@ export default function App() {
                   ? "sales"
                   : currentTab === "invoices_purchase"
                   ? "purchase"
+                  : !isCurrentTabAuthorized("invoices_sales") &&
+                    isCurrentTabAuthorized("invoices_purchase")
+                  ? "purchase"
+                  : isCurrentTabAuthorized("invoices_sales") &&
+                    !isCurrentTabAuthorized("invoices_purchase")
+                  ? "sales"
                   : undefined
               }
               onAddInvoice={handleAddInvoice}
@@ -4370,7 +4730,7 @@ export default function App() {
               onAddTransactionFromInvoice={handleAddTransactionFromInvoice}
               onCollectAllInvoices={handleCollectAllInvoices}
               initialContactIdForNewInvoice={initialContactIdForInvoice}
-              onSelectTab={setCurrentTab}
+              onSelectTab={handleAuthorizedSelectTab}
               onAddContact={handleAddContact}
               onSaveCompanySettings={handleSaveSettings}
               onAddBranch={handleAddBranch}
@@ -4424,8 +4784,13 @@ export default function App() {
               promissoryNotes={data.promissoryNotes || []}
               companySettings={data.settings}
               activeFinanceSubTab={financeSubTab}
+              allowedFinanceSubTabs={allowedFinanceSubTabs}
               globalSearchTerm={searchTerm}
-              onSelectFinanceSubTab={setFinanceSubTab}
+              onSelectFinanceSubTab={(sub) => {
+                if (allowedFinanceSubTabs.includes(sub)) {
+                  setFinanceSubTab(sub);
+                }
+              }}
               onAddAccount={(acc) => {
                 void saveAccountToDatabase(acc, activeCompanyId);
                 setData((p) => {
@@ -4569,7 +4934,8 @@ export default function App() {
             currentTab === "ecommerce_finance") && (
             <ECommerceModule
               activeSubTab={currentTab}
-              onSelectSubTab={(subTab) => setCurrentTab(subTab)}
+              onSelectSubTab={(subTab) => handleAuthorizedSelectTab(subTab)}
+              canAccessSubTab={isCurrentTabAuthorized}
               orders={data.orders || []}
               products={data.products || []}
               contacts={data.contacts || []}
@@ -4597,7 +4963,7 @@ export default function App() {
               products={data.products || []}
               contacts={data.contacts || []}
               settings={data.settings}
-              onNavigateToSectors={() => setCurrentTab("sectors")}
+              onNavigateToSectors={() => handleAuthorizedSelectTab("sectors")}
               onUpdateSectors={(updatedSectors, activeId) => {
                 setData((prev) => ({
                   ...prev,
@@ -4632,7 +4998,7 @@ export default function App() {
                     activeSectorId: secId,
                   }));
                 }}
-                onNavigateToProduction={() => setCurrentTab("production")}
+                onNavigateToProduction={() => handleAuthorizedSelectTab("production")}
                 onUpdateSectors={(updatedSectors, activeId) => {
                   setData((prev) => ({
                     ...prev,
@@ -4780,15 +5146,16 @@ export default function App() {
                   ? "allowances"
                   : "employees"
               }
+              allowedSubTabs={allowedHrSubTabs}
               onSelectSubTab={(subTab) => {
-                if (subTab === "payroll") setCurrentTab("hr_payroll");
-                else if (subTab === "leaves") setCurrentTab("hr_leaves");
-                else if (subTab === "advances") setCurrentTab("hr_advances");
-                else if (subTab === "sgk") setCurrentTab("hr_sgk");
-                else if (subTab === "severance") setCurrentTab("hr_severance");
-                else if (subTab === "zimmet") setCurrentTab("hr_zimmet");
-                else if (subTab === "allowances") setCurrentTab("hr_allowances");
-                else setCurrentTab("hr_employees");
+                if (subTab === "payroll") handleAuthorizedSelectTab("hr_payroll");
+                else if (subTab === "leaves") handleAuthorizedSelectTab("hr_leaves");
+                else if (subTab === "advances") handleAuthorizedSelectTab("hr_advances");
+                else if (subTab === "sgk") handleAuthorizedSelectTab("hr_sgk");
+                else if (subTab === "severance") handleAuthorizedSelectTab("hr_severance");
+                else if (subTab === "zimmet") handleAuthorizedSelectTab("hr_zimmet");
+                else if (subTab === "allowances") handleAuthorizedSelectTab("hr_allowances");
+                else handleAuthorizedSelectTab("hr_employees");
               }}
             />
           )}
@@ -4843,9 +5210,11 @@ export default function App() {
             <Reports
               activeCompanyId={activeCompanyId}
               currentUser={currentUser}
-              onSelectTab={(tab) => setCurrentTab(tab as any)}
+              onSelectTab={(tab) => handleAuthorizedSelectTab(tab as NavItem)}
               activeSubTab={currentTab === "reports_advisor" ? "reports_advisor" : "reports"}
-              onSelectSubTab={(subTab) => setCurrentTab(subTab)}
+              onSelectSubTab={(subTab) => handleAuthorizedSelectTab(subTab)}
+              canAccessTaxReports={isCurrentTabAuthorized("reports_tax")}
+              canAccessAdvisor={isCurrentTabAuthorized("reports_advisor")}
               contacts={data.contacts}
               invoices={data.invoices}
               transactions={data.transactions}
@@ -4884,28 +5253,28 @@ export default function App() {
               currentUser={currentUser}
               settingsInitialTab={settingsInitialTab}
               activeSubTab={
-                currentTab === "company_companies"
+                isAdminOrSysAdmin(currentUser) && currentTab === "company_companies"
                   ? "companies"
-                  : currentTab === "company_mysoft"
+                  : isAdminOrSysAdmin(currentUser) && currentTab === "company_mysoft"
                   ? "mysoft"
-                  : currentTab === "company_logs" || currentTab === "e_document_logs"
+                  : isAdminOrSysAdmin(currentUser) && (currentTab === "company_logs" || currentTab === "e_document_logs")
                   ? "logs"
                   : currentTab === "company_branches"
                   ? "branches"
                   : currentTab === "company_warehouses"
                   ? "warehouses"
-                  : currentTab === "company_settings" || currentTab === "settings"
+                  : isAdminOrSysAdmin(currentUser) && (currentTab === "company_settings" || currentTab === "settings")
                   ? "settings"
                   : "profile"
               }
               onSelectSubTab={(tab) => {
-                if (tab === "companies") setCurrentTab("company_companies");
-                else if (tab === "mysoft") setCurrentTab("company_mysoft");
-                else if (tab === "logs") setCurrentTab("company_logs");
-                else if (tab === "branches") setCurrentTab("company_branches");
-                else if (tab === "warehouses") setCurrentTab("company_warehouses");
-                else if (tab === "settings") setCurrentTab("company_settings");
-                else setCurrentTab("company_profile");
+                if (tab === "companies") handleAuthorizedSelectTab("company_companies");
+                else if (tab === "mysoft") handleAuthorizedSelectTab("company_mysoft");
+                else if (tab === "logs") handleAuthorizedSelectTab("company_logs");
+                else if (tab === "branches") handleAuthorizedSelectTab("company_branches");
+                else if (tab === "warehouses") handleAuthorizedSelectTab("company_warehouses");
+                else if (tab === "settings") handleAuthorizedSelectTab("company_settings");
+                else handleAuthorizedSelectTab("company_profile");
               }}
             />
           )}
@@ -4928,7 +5297,7 @@ export default function App() {
       </div>
 
       {/* FULL-PAGE DETAIL VIEW: QUICK ADD ACTION */}
-      {isQuickAddOpen && (
+      {isQuickAddOpen && hasAnyQuickAddPermission && (
         <div className="fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
         <DetailPageLayout
           title="Hızlı İşlem Menüsü"
@@ -4958,105 +5327,115 @@ export default function App() {
         >
           <div className="bg-white border border-slate-200 text-slate-900 rounded-3xl max-w-xl mx-auto p-6 sm:p-8 shadow-sm space-y-4">
             <div className="space-y-3">
-              <button
-                onClick={() => {
-                  setIsQuickAddOpen(false);
-                  setCurrentTab("invoices");
-                }}
-                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-indigo-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
-              >
-                <div className="w-11 h-11 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">
-                    Yeni Fatura Kes / Kaydet
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Satış veya Alış e-Faturası hazırlayın
-                  </p>
-                </div>
-              </button>
+              {canQuickInvoice && (
+                <button
+                  onClick={() => {
+                    setIsQuickAddOpen(false);
+                    handleAuthorizedSelectTab("invoices");
+                  }}
+                  className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-indigo-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      Yeni Fatura Kes / Kaydet
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Satış veya Alış e-Faturası hazırlayın
+                    </p>
+                  </div>
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setIsQuickAddOpen(false);
-                  setCurrentTab("contacts");
-                }}
-                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-blue-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
-              >
-                <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                  <Users className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">
-                    Yeni Cari Kart Ekle
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Müşteri veya Tedarikçi tanımı yapın
-                  </p>
-                </div>
-              </button>
+              {canQuickContact && (
+                <button
+                  onClick={() => {
+                    setIsQuickAddOpen(false);
+                    handleAuthorizedSelectTab("contacts");
+                  }}
+                  className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-blue-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      Yeni Cari Kart Ekle
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Müşteri veya Tedarikçi tanımı yapın
+                    </p>
+                  </div>
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setIsQuickAddOpen(false);
-                  setCurrentTab("transactions");
-                }}
-                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-emerald-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
-              >
-                <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <ArrowUpRight className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">
-                    Hızlı Gelir / Gider Kaydı
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Kira, Maaş, Fiş veya Fatura dışı ödemeler
-                  </p>
-                </div>
-              </button>
+              {canQuickTransaction && (
+                <button
+                  onClick={() => {
+                    setIsQuickAddOpen(false);
+                    handleAuthorizedSelectTab("transactions");
+                  }}
+                  className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-emerald-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <ArrowUpRight className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      Hızlı Gelir / Gider Kaydı
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Kira, Maaş, Fiş veya Fatura dışı ödemeler
+                    </p>
+                  </div>
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setIsQuickAddOpen(false);
-                  setCurrentTab("products");
-                }}
-                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-purple-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
-              >
-                <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                  <Plus className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">
-                    Stok Kartı & Depo Ekle
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Test, şirket ve şahıs işletmelerine yeni ürün veya depo tanımlayın
-                  </p>
-                </div>
-              </button>
+              {canQuickProduct && (
+                <button
+                  onClick={() => {
+                    setIsQuickAddOpen(false);
+                    handleAuthorizedSelectTab("products");
+                  }}
+                  className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-purple-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                    <Plus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      Stok Kartı & Depo Ekle
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Test, şirket ve şahıs işletmelerine yeni ürün veya depo tanımlayın
+                    </p>
+                  </div>
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setIsQuickAddOpen(false);
-                  setCurrentTab("company_warehouses");
-                }}
-                className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-amber-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
-              >
-                <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                  <Plus className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">
-                    Şube & Depo Yönetimi
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Firma bilgileri üzerinden yeni depo ve şube ekleyin
-                  </p>
-                </div>
-              </button>
+              {canQuickWarehouse && (
+                <button
+                  onClick={() => {
+                    setIsQuickAddOpen(false);
+                    handleAuthorizedSelectTab("company_warehouses");
+                  }}
+                  className="w-full p-4 bg-slate-50 hover:bg-slate-100 hover:border-amber-500/50 border border-slate-200 rounded-2xl flex items-center gap-4 text-left transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <Plus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      Şube & Depo Yönetimi
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Firma bilgileri üzerinden yeni depo ve şube ekleyin
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </DetailPageLayout>

@@ -15,6 +15,7 @@ import {
   getContactAccountCode,
   EXPENSE_CATEGORIES,
   ExpenseCategory,
+  isCompanyDefaultBankEnabled,
 } from "../types";
 import { InvoicePrintModal } from "./InvoicePrintModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
@@ -331,13 +332,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
   });
   const [paymentIban, setPaymentIban] = useState<string>(() => {
     const bankAcc = accounts.find((a) => a.type === "bank");
-    return bankAcc?.iban || companySettings.defaultBankIban || companySettings.iban || "";
+    return (
+      bankAcc?.iban ||
+      (isCompanyDefaultBankEnabled(companySettings)
+        ? companySettings.defaultBankIban || companySettings.iban || ""
+        : "")
+    );
   });
   const [paymentAccountHolderName, setPaymentAccountHolderName] = useState<string>(() => {
     const bankAcc = accounts.find((a) => a.type === "bank");
     return (
       bankAcc?.accountHolderName ||
-      companySettings.defaultBankAccountName ||
+      (isCompanyDefaultBankEnabled(companySettings)
+        ? companySettings.defaultBankAccountName || ""
+        : "") ||
       companySettings.companyTitle ||
       companySettings.companyName ||
       ""
@@ -355,6 +363,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
       if (onSaveCompanySettings) {
         onSaveCompanySettings({
           ...companySettings,
+          useCorporateLogo: true,
           logoUrl: optimizedDataUrl,
         });
       }
@@ -2607,7 +2616,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     const defaultBankAcc = accounts.find((a) => a.type === "bank") || accounts[0];
     setPaymentAccountHolderName(
       defaultBankAcc?.accountHolderName ||
-        companySettings.defaultBankAccountName ||
+        (isCompanyDefaultBankEnabled(companySettings)
+          ? companySettings.defaultBankAccountName || ""
+          : "") ||
         companySettings.companyTitle ||
         companySettings.companyName ||
         ""
@@ -2723,13 +2734,20 @@ export const Invoices: React.FC<InvoicesProps> = ({
       setPaymentIban(inv.paymentIban);
     } else {
       const acc = accounts.find((a) => a.id === inv.paymentAccountId) || accounts.find((a) => a.type === "bank");
-      setPaymentIban(acc?.iban || companySettings.defaultBankIban || companySettings.iban || "");
+      setPaymentIban(
+        acc?.iban ||
+          (isCompanyDefaultBankEnabled(companySettings)
+            ? companySettings.defaultBankIban || companySettings.iban || ""
+            : "")
+      );
     }
     const editAcc = accounts.find((a) => a.id === inv.paymentAccountId) || accounts.find((a) => a.type === "bank");
     setPaymentAccountHolderName(
       inv.paymentAccountHolderName ||
         editAcc?.accountHolderName ||
-        companySettings.defaultBankAccountName ||
+        (isCompanyDefaultBankEnabled(companySettings)
+          ? companySettings.defaultBankAccountName || ""
+          : "") ||
         companySettings.companyTitle ||
         companySettings.companyName ||
         ""
@@ -3043,9 +3061,14 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentMethod === "nakit" ||
       paymentMethod === "kredi_karti" ||
       paymentMethod === "eft_havale";
+    const companyDefaultBankEnabled = isCompanyDefaultBankEnabled(companySettings);
     const effectiveIban =
       paymentMethod === "eft_havale"
-        ? (paymentIban.trim() || selectedPaymentAccount?.iban || companySettings.defaultBankIban || companySettings.iban || "")
+        ? paymentIban.trim() ||
+          selectedPaymentAccount?.iban ||
+          (companyDefaultBankEnabled
+            ? companySettings.defaultBankIban || companySettings.iban || ""
+            : "")
         : undefined;
     let draftNotes = finalNotes;
     if (paymentMethod === "eft_havale" && includeIbanInNotes && effectiveIban && !draftNotes.includes(effectiveIban)) {
@@ -3066,21 +3089,24 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentAccountId: isImmediatePayment ? paymentAccountId : undefined,
       paymentAccountName:
         (isImmediatePayment ? selectedPaymentAccount?.name : undefined) ||
-        companySettings.defaultBankName ||
-        companySettings.bankName ||
-        undefined,
+        (companyDefaultBankEnabled
+          ? companySettings.defaultBankName || companySettings.bankName || undefined
+          : undefined),
       paymentAccountHolderName:
-        paymentAccountHolderName.trim() ||
-        selectedPaymentAccount?.accountHolderName ||
-        companySettings.defaultBankAccountName ||
-        companySettings.companyTitle ||
-        companySettings.companyName ||
-        undefined,
+        (paymentMethod === "eft_havale"
+          ? paymentAccountHolderName.trim() || selectedPaymentAccount?.accountHolderName
+          : undefined) ||
+        (companyDefaultBankEnabled
+          ? companySettings.defaultBankAccountName ||
+            companySettings.companyTitle ||
+            companySettings.companyName ||
+            undefined
+          : undefined),
       paymentIban:
         effectiveIban ||
-        companySettings.defaultBankIban ||
-        companySettings.iban ||
-        undefined,
+        (companyDefaultBankEnabled
+          ? companySettings.defaultBankIban || companySettings.iban || undefined
+          : undefined),
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       branchId: invType === "sales" ? (mainCompanyBranch?.id || "br_1") : selectedCompanyBranch?.id,
       branchName: invType === "sales" ? "Merkez" : selectedCompanyBranch?.name,
@@ -3664,18 +3690,23 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentMethod === "nakit" ||
       paymentMethod === "kredi_karti" ||
       paymentMethod === "eft_havale";
+    const companyDefaultBankEnabled = isCompanyDefaultBankEnabled(companySettings);
     const effectiveIban =
       paymentMethod === "eft_havale"
-        ? (paymentIban.trim() || selectedPaymentAccount?.iban || companySettings.defaultBankIban || companySettings.iban || "")
+        ? paymentIban.trim() ||
+          selectedPaymentAccount?.iban ||
+          (companyDefaultBankEnabled
+            ? companySettings.defaultBankIban || companySettings.iban || ""
+            : "")
         : undefined;
     const effectiveAccountHolder =
       paymentMethod === "eft_havale"
-        ? (paymentAccountHolderName.trim() ||
-            selectedPaymentAccount?.accountHolderName ||
-            companySettings.defaultBankAccountName ||
-            companySettings.companyTitle ||
-            companySettings.companyName ||
-            "")
+        ? paymentAccountHolderName.trim() ||
+          selectedPaymentAccount?.accountHolderName ||
+          (companyDefaultBankEnabled ? companySettings.defaultBankAccountName || "" : "") ||
+          companySettings.companyTitle ||
+          companySettings.companyName ||
+          ""
         : undefined;
     if (paymentMethod === "eft_havale" && includeIbanInNotes && effectiveIban && !finalNotes.includes(effectiveIban)) {
       const holderPart = effectiveAccountHolder ? `Hesap Adı: ${effectiveAccountHolder} - ` : "";
@@ -3698,20 +3729,22 @@ export const Invoices: React.FC<InvoicesProps> = ({
       paymentAccountId: isImmediatePayment ? selectedPaymentAccount?.id : undefined,
       paymentAccountName:
         (isImmediatePayment ? selectedPaymentAccount?.name : undefined) ||
-        companySettings.defaultBankName ||
-        companySettings.bankName ||
-        undefined,
+        (companyDefaultBankEnabled
+          ? companySettings.defaultBankName || companySettings.bankName || undefined
+          : undefined),
       paymentAccountHolderName:
         effectiveAccountHolder ||
-        companySettings.defaultBankAccountName ||
-        companySettings.companyTitle ||
-        companySettings.companyName ||
-        undefined,
+        (companyDefaultBankEnabled
+          ? companySettings.defaultBankAccountName ||
+            companySettings.companyTitle ||
+            companySettings.companyName ||
+            undefined
+          : undefined),
       paymentIban:
         effectiveIban ||
-        companySettings.defaultBankIban ||
-        companySettings.iban ||
-        undefined,
+        (companyDefaultBankEnabled
+          ? companySettings.defaultBankIban || companySettings.iban || undefined
+          : undefined),
       expenseCategory: invType === "purchase" ? primaryExpenseCategory : undefined,
       branchId: invType === "sales" ? (mainCompanyBranch?.id || "br_1") : selectedCompanyBranch?.id,
       branchName: invType === "sales" ? "Merkez" : selectedCompanyBranch?.name,
@@ -6239,7 +6272,7 @@ export const Invoices: React.FC<InvoicesProps> = ({
                       setPaymentAccountId(bankAcc.id);
                       if (bankAcc.iban) {
                         setPaymentIban(bankAcc.iban);
-                      } else if (!paymentIban) {
+                      } else if (!paymentIban && isCompanyDefaultBankEnabled(companySettings)) {
                         setPaymentIban(companySettings.defaultBankIban || companySettings.iban || "");
                       }
                     }
@@ -6415,7 +6448,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                         if (selectedAcc?.accountHolderName || selectedAcc?.name) {
                           setPaymentAccountHolderName(
                             selectedAcc.accountHolderName ||
-                              companySettings.defaultBankAccountName ||
+                              (isCompanyDefaultBankEnabled(companySettings)
+                                ? companySettings.defaultBankAccountName || ""
+                                : "") ||
                               companySettings.companyTitle ||
                               companySettings.companyName ||
                               selectedAcc.name
@@ -6452,7 +6487,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
                     value={paymentAccountHolderName}
                     onChange={(e) => setPaymentAccountHolderName(e.target.value)}
                     placeholder={
-                      companySettings.defaultBankAccountName ||
+                      (isCompanyDefaultBankEnabled(companySettings)
+                        ? companySettings.defaultBankAccountName
+                        : "") ||
                       companySettings.companyTitle ||
                       companySettings.companyName ||
                       "Ticari Ünvan / Ad Soyad"

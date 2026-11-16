@@ -23,7 +23,7 @@ import {
   PDF_TEMPLATE_METADATA,
 } from "../../data/pdfDiscoveryTemplateData";
 import { formatCurrency } from "../../utils/exportUtils";
-import { safeSetStorageItem } from "../../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem } from "../../utils/storage";
 import { useTheme } from "../../context/ThemeContext";
 
 export interface CostPackageRow {
@@ -82,13 +82,11 @@ export const ManufacturingCostPackagesAnalysis: React.FC<
 
   const [rows, setRows] = useState<CostPackageRow[]>(() => {
     try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = window.localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
+      const saved = safeGetStorageItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
       }
     } catch (e) {
@@ -99,21 +97,19 @@ export const ManufacturingCostPackagesAnalysis: React.FC<
 
   useEffect(() => {
     try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = window.localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setRows(parsed);
-            return;
-          }
+      const saved = safeGetStorageItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setRows(parsed);
+          return;
         }
       }
     } catch (e) {
       console.warn("Cost packages storage read error:", e);
     }
     setRows(generateDefaultCostRows(totalArea));
-  }, [currentProject?.id, totalArea]);
+  }, [currentProject?.id, totalArea, storageKey]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedGroupFilter, setSelectedGroupFilter] = useState("all");

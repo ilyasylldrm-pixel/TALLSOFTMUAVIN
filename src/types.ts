@@ -1,4 +1,5 @@
 import { getProvincePlateCode } from "./data/locationAndTaxData";
+import { centralStorageService } from "./services/centralStorageService";
 
 export type ContactType = "customer" | "vendor" | "supplier" | "both";
 
@@ -286,15 +287,11 @@ export const SYSTEM_COMPANY_MODULES: AvailableCompanyModule[] = [
   // Ana Modül: Ana Sayfa
   { id: "dashboard", name: "Ana Sayfa & Özet Paneli", description: "Finansal özet, hızlı göstergeler ve nakit akışı", category: "core" },
 
-  // Ana Modül: Firma Bilgileri & Alt Modülleri
-  { id: "company", name: "Firma Bilgileri & Kurumsal Yönetim", description: "Şirket profili, şubeler, depolar ve sistem ayarları ana modülü", category: "core" },
+  // Ana Modül: Firma Bilgileri & Alt Modülleri (Sistem Ayarları yalnızca Admin ve Sistem Yöneticisi içindir)
+  { id: "company", name: "Firma Bilgileri & Kurumsal Yönetim", description: "Şirket profili, şubeler ve depolar ana modülü", category: "core" },
   { id: "company_profile", name: "↳ Firma Profili & Adres", description: "Resmi ticari unvan, vergi dairesi, merkez adres ve logo", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_branches", name: "↳ Şubeler Yönetimi", description: "Şirket şubeleri açılış ve adres tanımlama", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
   { id: "company_warehouses", name: "↳ Depolar Yönetimi", description: "Merkez ve şube depoları tanımlama ve kapasite takibi", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_settings", name: "↳ Sistem Ayarları", description: "Genel sistem ayarları, çoklu şirket ve Mysoft VKN/TCKN eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_companies", name: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Çoklu şirket tanımlama ve şirketler arası geçiş", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_mysoft", name: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef VKN/TCKN ve seri eşleştirme", category: "core", parentId: "company", isSubModule: true, badge: "Alt Modül" },
-  { id: "company_logs", name: "↳ Sistem Ayarları: Log İzleme Ekranı", description: "Sistem denetim günlüğü, kullanıcı/yetki hareketleri ve e-Belge/API işlem ve hata tanılama konsolu", category: "core", parentId: "company", isSubModule: true, badge: "Canlı Log" },
 
   // Ana Modül: E-İşlemler
   { id: "e_services", name: "E-İşlemler (GİB / Portal)", description: "GİB portalı, e-Arşiv, SGK ve e-Devlet sorgulama", category: "commercial", badge: "Resmi" },
@@ -416,12 +413,14 @@ export interface CompanyItem {
   eArsivPrefix?: string;
   eArsivNextNumber?: string;
   defaultInvoicePrefix?: string;
+  useDefaultBankInfo?: boolean;
   defaultBankAccountName?: string;
   defaultBankName?: string;
   defaultBankIban?: string;
   // Mysoft Entegrasyon & Portal Giriş Bilgileri
   mysoftUsername?: string;
   mysoftPassword?: string;
+  useCorporateLogo?: boolean;
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
   invoiceDesign?: InvoiceDesignSettings;
@@ -444,6 +443,39 @@ export interface MysoftCredentials {
   clientId?: string;
   clientSecret?: string;
   connectorGuid?: string;
+}
+
+export function isCompanyLogoEnabled(
+  target?: { useCorporateLogo?: boolean; logoUrl?: string } | null
+): boolean {
+  if (!target) return false;
+  if (typeof target.useCorporateLogo === "boolean") {
+    return target.useCorporateLogo;
+  }
+  const url = String(target.logoUrl || "").trim();
+  return Boolean(url && url !== "/logo.svg");
+}
+
+export function isCompanyDefaultBankEnabled(
+  target?: {
+    useDefaultBankInfo?: boolean;
+    defaultBankName?: string;
+    bankName?: string;
+    defaultBankIban?: string;
+    iban?: string;
+  } | null
+): boolean {
+  if (!target) return false;
+  if (typeof target.useDefaultBankInfo === "boolean") {
+    return target.useDefaultBankInfo;
+  }
+  const rawBank = String(target.defaultBankName || target.bankName || "").trim();
+  const rawIban = String(target.defaultBankIban || target.iban || "").trim();
+  const isLegacyDemoBank =
+    rawBank === "Garanti BBVA - Levent Ticari Şubesi" &&
+    rawIban === "TR33 0006 2000 0000 0012 3456 78";
+  if (isLegacyDemoBank) return false;
+  return Boolean(rawBank || rawIban);
 }
 
 /**
@@ -957,8 +989,10 @@ export interface CompanySettings {
   phone: string;
   email: string;
   website: string;
+  useCorporateLogo?: boolean;
   logoUrl?: string;
   logoScale?: number; // Muavin logosuna göre ölçek (1 = %100 standart Muavin logo boyutu, 0.5 - 2.0)
+  useDefaultBankInfo?: boolean;
   defaultBankAccountName?: string;
   bankName?: string;
   defaultBankIban?: string;
@@ -2088,15 +2122,11 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
   // Ana Sayfa
   { key: "dashboard", label: "Ana Sayfa / Özet", description: "Genel finansal durum ve grafikler", category: "Genel" },
 
-  // Firma Bilgileri & Alt Modülleri
-  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo, kurumsal unvan ve sistem ayarları yönetimi (Ana Modül)", category: "Yönetim" },
+  // Firma Bilgileri & Alt Modülleri (Sistem Ayarları yalnızca Admin ve Sistem Yöneticisi içindir)
+  { key: "company", label: "Firma Bilgileri & Şubeler", description: "Şube, depo ve kurumsal unvan yönetimi (Ana Modül)", category: "Yönetim" },
   { key: "company_profile", label: "↳ Firma Profili & Adres", description: "Resmi şirket kimlik bilgileri, adres ve logo ayarları", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_branches", label: "↳ Şubeler", description: "Şirket şubeleri tanımlama ve yönetim", category: "Yönetim", parentKey: "company", isSubModule: true },
   { key: "company_warehouses", label: "↳ Depolar", description: "Şirket ve şahıs işletmesi depoları tanımlama", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_settings", label: "↳ Sistem Ayarları", description: "Firma bazlı parametreler, çoklu şirket, Mysoft eşleştirme ve yedekleme", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_companies", label: "↳ Sistem Ayarları: Şirketler & Çoklu Şirket", description: "Kurumsal şirket, şahıs işletmesi ve test şirketleri yönetimi", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_mysoft", label: "↳ Sistem Ayarları: Mysoft VKN/TCKN Eşleştirme", description: "Mysoft e-Belge mükellef ve ön ek (prefix) eşleştirme", category: "Yönetim", parentKey: "company", isSubModule: true },
-  { key: "company_logs", label: "↳ Sistem Ayarları: Log İzleme Ekranı", description: "Sistem denetim günlüğü, kullanıcı/yetki hareketleri ve teknik işlem log konsolu", category: "Yönetim", parentKey: "company", isSubModule: true },
 
   // E-İşlemler
   { key: "e_services", label: "E-İşlemler (GİB / E-Devlet)", description: "Vergi dairesi, SGK ve e-Tebligat sorgulama", category: "Yönetim" },
@@ -2171,22 +2201,29 @@ export const ALL_APP_MODULES: AppModuleDefinition[] = [
 
 export const CUSTOM_MODULES_STORAGE_KEY = "muavin_custom_app_modules_v1";
 
+export const ADMIN_ONLY_MODULE_KEYS = new Set<string>([
+  "admin",
+  "settings",
+  "company_settings",
+  "company_companies",
+  "company_mysoft",
+  "company_logs",
+  "e_document_logs",
+]);
+
 /**
  * Admin ve Sistem Yöneticisi tarafından tanımlanan ek modül/alt modülleri de dahil ederek tüm modül listesini döndürür.
  */
 export function getAllAppModulesWithCustom(): AppModuleDefinition[] {
-  if (typeof window === "undefined") return ALL_APP_MODULES;
   try {
-    const raw =
-      window.localStorage?.getItem(CUSTOM_MODULES_STORAGE_KEY) ||
-      window.sessionStorage?.getItem(CUSTOM_MODULES_STORAGE_KEY);
+    const raw = centralStorageService.getItem(CUSTOM_MODULES_STORAGE_KEY);
     if (!raw) return ALL_APP_MODULES;
     const customList: AppModuleDefinition[] = JSON.parse(raw);
     if (!Array.isArray(customList) || customList.length === 0) return ALL_APP_MODULES;
     const existingKeys = new Set(ALL_APP_MODULES.map((m) => m.key));
     const merged = [...ALL_APP_MODULES];
     for (const c of customList) {
-      if (c && c.key && !existingKeys.has(c.key)) {
+      if (c && c.key && !ADMIN_ONLY_MODULE_KEYS.has(c.key) && !existingKeys.has(c.key)) {
         merged.push(c);
         existingKeys.add(c.key);
       }
@@ -2221,7 +2258,8 @@ export function isAdminOrSysAdmin(
     role === "süper admin" ||
     email === "ilyasyildirim@outlook.com.tr" ||
     email === "ilyasylldrm@gmail.com" ||
-    email.includes("admin") ||
+    email === "admin@muavin.com" ||
+    email === "admin@tallsoft.com.tr" ||
     username === "admin" ||
     username === "sistem_yoneticisi" ||
     username === "sistem_kullanicisi"
@@ -2245,6 +2283,7 @@ export function isKeyAllowedInList(
   parentKey: string | undefined,
   allowedList: string[]
 ): boolean {
+  if (ADMIN_ONLY_MODULE_KEYS.has(key)) return false;
   if (!Array.isArray(allowedList)) return true;
   if (allowedList.includes(key)) return true;
 
@@ -2272,7 +2311,8 @@ export function isKeyAllowedInList(
 /**
  * Hem Şirket hem Kullanıcı düzeyinde modül ve alt modül erişim yetkisini kontrol eder.
  * Admin ve Sistem Yöneticisi her zaman tam yetkilidir (şirketleri ve kullanıcıları yönetebilir, tüm modülleri görebilir).
- * Şirketlere ve kullanıcılara hangi modüller aktif edildiyse SADECE onlar görülebilir.
+ * Sistem Ayarları ve alt modülleri (company_settings, settings, company_companies, company_mysoft, company_logs)
+ * Admin ve Sistem Yöneticisi dışındaki HİÇBİR kullanıcıya kesinlikle gösterilmez.
  */
 export function isModuleOrSubModuleAllowed(
   moduleKey: string,
@@ -2292,33 +2332,39 @@ export function isModuleOrSubModuleAllowed(
   if (moduleKey === "dashboard") return true;
 
   if (moduleKey === "company_logs" || moduleKey === "e_document_logs") {
+    if (!isAdminOrSysAdmin(currentUser)) return false;
     return isCompanyMysoftMatched(activeCompany);
+  }
+
+  // Sistem Ayarları ve yönetici modülleri Admin ve Sistem Yöneticisi dışındaki hiçbir kullanıcıya açık değildir
+  if (ADMIN_ONLY_MODULE_KEYS.has(moduleKey)) {
+    return isAdminOrSysAdmin(currentUser);
   }
 
   // 1. Admin veya Sistem Yöneticisi: Şirketler ve kullanıcılar üzerinde tam yetkilidir, tüm modülleri görebilir
   if (isAdminOrSysAdmin(currentUser)) return true;
 
-  // Yönetici paneli ve sistem şirket eşleştirmesi admin harici kullanıcılara kesinlikle kapalıdır
-  if (moduleKey === "admin" || moduleKey === "company_companies" || moduleKey === "company_mysoft") return false;
+  // Giriş yapmamış oturumlar kapalıdır
+  if (!currentUser) return false;
 
-  // 2. Şirket bazlı modül kısıtlaması:
-  // Şirkete hangi modüller aktif edildiyse o şirkette sadece o modüller görülebilir
-  const isCompanyRestricted =
-    Boolean(activeCompany?.moduleRestrictionEnabled) ||
-    (Array.isArray(activeCompany?.allowedModules) && activeCompany.allowedModules.length > 0 && activeCompany.moduleRestrictionEnabled !== false);
-
-  if (isCompanyRestricted && Array.isArray(activeCompany?.allowedModules)) {
+  // 2. Şirket bazlı zorunlu modül kısıtlaması (Her zaman aktif):
+  // Şirkette tanımlı izin listesi varsa yalnızca listedeki modül ve alt modüller erişilebilirdir
+  if (Array.isArray(activeCompany?.allowedModules)) {
     if (!isKeyAllowedInList(moduleKey, parentKey, activeCompany.allowedModules)) {
       return false;
     }
   }
 
-  // 3. Kullanıcı bazlı modül yetkilendirmesi:
-  // Kullanıcıya hangi modüller aktif edildiyse kullanıcı sadece o modülleri görebilir
-  if (currentUser && Array.isArray(currentUser.allowedModules)) {
-    if (!isKeyAllowedInList(moduleKey, parentKey, currentUser.allowedModules)) {
-      return false;
-    }
+  // 3. Kullanıcı bazlı zorunlu modül kısıtlaması (Her zaman aktif - Zero-Trust):
+  // Kullanıcıya açıkça seçilen modüller dışındaki hiçbir modül görünmez; tanımsız ise şirket listesi, o da yoksa yalnızca Ana Sayfa açılır
+  const effectiveUserModules = Array.isArray(currentUser.allowedModules)
+    ? currentUser.allowedModules
+    : Array.isArray(activeCompany?.allowedModules)
+    ? activeCompany.allowedModules
+    : ["dashboard"];
+
+  if (!isKeyAllowedInList(moduleKey, parentKey, effectiveUserModules)) {
+    return false;
   }
 
   return true;

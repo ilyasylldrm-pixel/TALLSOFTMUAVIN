@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { MoveVertical, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import { applyGlobalRowHeight } from "../../hooks/useDataGridRowResizing";
+import { safeGetStorageItem } from "../../utils/storage";
 
 interface RowResizingControlProps {
   className?: string;
@@ -37,7 +38,7 @@ export const RowResizingControl: React.FC<RowResizingControlProps> = ({
         }
       } else {
         setHasSelectedRow(false);
-        const saved = sessionStorage.getItem("muavin_table_row_height");
+        const saved = safeGetStorageItem("muavin_table_row_height");
         setSelectedRowHeight(saved ? parseInt(saved, 10) : null);
       }
     };

@@ -49,7 +49,11 @@ import type {
   InvoiceTemplateStyle,
   IssuerSignatureCssZone,
 } from "../types";
-import { getContactAccountCode } from "../types";
+import {
+  getContactAccountCode,
+  isCompanyLogoEnabled,
+  isCompanyDefaultBankEnabled,
+} from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { formatDate, getCurrencySymbol } from "../utils/exportUtils";
 import {
@@ -67,6 +71,9 @@ import {
   resolveBranchAddressFromBranches,
   saveStoredData,
   updateCompanyItem,
+  safeGetStorageItem,
+  safeSetStorageItem,
+  safeRemoveStorageItem,
 } from "../utils/storage";
 import { readAndOptimizeLogoFile } from "../utils/logoUpload";
 import { saveCloudLogo } from "../services/cloudBrandingService";
@@ -287,8 +294,8 @@ export function getIndependentInvoiceCssConfig(
     try {
       const companyKey = getCompanyCssStorageKey(companyId);
       const raw =
-        window.localStorage.getItem(companyKey) ||
-        window.localStorage.getItem(INDEPENDENT_INVOICE_CSS_STORAGE_KEY);
+        safeGetStorageItem(companyKey) ||
+        safeGetStorageItem(INDEPENDENT_INVOICE_CSS_STORAGE_KEY);
       if (raw) {
         stored = JSON.parse(raw);
       }
@@ -302,7 +309,7 @@ export function getIndependentInvoiceCssConfig(
 }
 
 /**
- * Persists the invoice preview CSS configuration locally (company-scoped)
+ * Persists the invoice preview CSS configuration centrally (company-scoped)
  * and notifies all open preview/print components immediately.
  */
 export function saveIndependentInvoiceCssConfig(
@@ -317,8 +324,8 @@ export function saveIndependentInvoiceCssConfig(
   };
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(getCompanyCssStorageKey(cid), JSON.stringify(next));
-      window.localStorage.setItem(INDEPENDENT_INVOICE_CSS_STORAGE_KEY, JSON.stringify(next));
+      safeSetStorageItem(getCompanyCssStorageKey(cid), JSON.stringify(next));
+      safeSetStorageItem(INDEPENDENT_INVOICE_CSS_STORAGE_KEY, JSON.stringify(next));
       window.dispatchEvent(
         new CustomEvent("muavin:invoice-css-config-changed", {
           detail: { companyId: cid, cssConfig: next },
@@ -333,8 +340,8 @@ export function resetIndependentInvoiceCssConfig(companyId?: string): InvoicePre
   const cid = resolveTargetCompanyId(companyId);
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.removeItem(getCompanyCssStorageKey(cid));
-      window.localStorage.removeItem(INDEPENDENT_INVOICE_CSS_STORAGE_KEY);
+      safeRemoveStorageItem(getCompanyCssStorageKey(cid));
+      safeRemoveStorageItem(INDEPENDENT_INVOICE_CSS_STORAGE_KEY);
       window.dispatchEvent(
         new CustomEvent("muavin:invoice-css-config-changed", {
           detail: { companyId: cid, cssConfig: DEFAULT_INVOICE_PREVIEW_CSS_CONFIG },
@@ -491,8 +498,8 @@ export function subscribeToCompanyInvoiceCssFromFirestore(
       };
       if (typeof window !== "undefined") {
         try {
-          window.localStorage.setItem(getCompanyCssStorageKey(cid), JSON.stringify(nextCss));
-          window.localStorage.setItem(
+          safeSetStorageItem(getCompanyCssStorageKey(cid), JSON.stringify(nextCss));
+          safeSetStorageItem(
             INDEPENDENT_INVOICE_CSS_STORAGE_KEY,
             JSON.stringify(nextCss)
           );
@@ -1269,17 +1276,19 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
       iban: string;
     }> = [];
 
+    const bankEnabled = isCompanyDefaultBankEnabled(companySettings);
     const primaryIban =
-      invoice.paymentIban || companySettings?.defaultBankIban || companySettings?.iban || "";
+      invoice.paymentIban ||
+      (bankEnabled ? companySettings?.defaultBankIban || companySettings?.iban : "") ||
+      "";
     const primaryBank =
       invoice.paymentBankName ||
       invoice.paymentAccountName ||
-      companySettings?.defaultBankName ||
-      companySettings?.bankName ||
+      (bankEnabled ? companySettings?.defaultBankName || companySettings?.bankName : "") ||
       "";
     const primaryHolder =
       invoice.paymentAccountHolderName ||
-      companySettings?.defaultBankAccountName ||
+      (bankEnabled ? companySettings?.defaultBankAccountName : "") ||
       companySettings?.companyTitle ||
       companySettings?.companyName ||
       "";
@@ -1511,10 +1520,12 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
         {/* LEFT COLUMN (5 cols): SOL ÜST LOGO (QR KODLA AYNI HİZADA) + SATICI / DÜZENLEYEN BİLGİLERİ (ABDURRAHMAN ŞİMŞEK) + ALICI CARİ (SAYIN) */}
         <div className="col-span-12 sm:col-span-5 flex flex-col justify-between h-full">
           <div className="space-y-2">
-            {/* SOL ÜST KÖŞE: FİRMA LOGOSU (SAĞDAKİ KAREKOD İLE AYNI YATAY HİZADA) */}
-            {design.showCompanyLogo !== false && (
-              <div className="flex items-center justify-start shrink-0">
-                {companySettings?.logoUrl ? (
+            {/* SOL ÜST KÖŞE: FİRMA LOGOSU (SADECE SEÇİLİ VE YÜKLÜ İSE GÖSTERİLİR) */}
+            {design.showCompanyLogo !== false &&
+              isCompanyLogoEnabled(companySettings) &&
+              companySettings?.logoUrl &&
+              companySettings.logoUrl !== "/logo.svg" && (
+                <div className="flex items-center justify-start shrink-0">
                   <img
                     src={companySettings.logoUrl}
                     alt={companySettings.companyName || "Firma Logosu"}
@@ -1525,19 +1536,8 @@ export const OfficialGIBInvoicePaper: React.FC<OfficialGIBInvoicePaperProps> = (
                     }}
                     className="max-w-full"
                   />
-                ) : (
-                  <Logo
-                    size={design.logoSize || "md"}
-                    className="justify-start"
-                    imageStyle={{
-                      width: `${resolvedLogoDims.widthPx}px`,
-                      height: `${resolvedLogoDims.heightPx}px`,
-                      objectFit: resolvedLogoDims.objectFit,
-                    }}
-                  />
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
             {/* SATICI / DÜZENLEYEN BİLGİLERİ (ABDURRAHMAN ŞİMŞEK) */}
             <div
@@ -2619,14 +2619,19 @@ export function generateOfficialGibXsltStylesheet(
   const sellerTicaretSicil = escapeXmlText(companySettings.tradeRegisterNo || "");
   const sellerEsnafSicil = escapeXmlText(companySettings.esnafSicilNo || "");
 
+  const xsltBankEnabled = isCompanyDefaultBankEnabled(companySettings);
   const bankHolder = escapeXmlText(
-    companySettings.defaultBankAccountName ||
-      companySettings.companyTitle ||
-      companySettings.companyName ||
-      ""
+    xsltBankEnabled
+      ? companySettings.defaultBankAccountName ||
+          companySettings.companyTitle ||
+          companySettings.companyName ||
+          ""
+      : ""
   );
-  const bankName = escapeXmlText(companySettings.defaultBankName || "");
-  const bankIban = escapeXmlText(companySettings.defaultBankIban || companySettings.iban || "");
+  const bankName = escapeXmlText(xsltBankEnabled ? companySettings.defaultBankName || "" : "");
+  const bankIban = escapeXmlText(
+    xsltBankEnabled ? companySettings.defaultBankIban || companySettings.iban || "" : ""
+  );
 
   const footerNote = escapeXmlText(
     isEArsiv
@@ -2635,7 +2640,10 @@ export function generateOfficialGibXsltStylesheet(
   );
 
   const logoUrl =
-    design.showCompanyLogo !== false && companySettings.logoUrl
+    design.showCompanyLogo !== false &&
+    isCompanyLogoEnabled(companySettings) &&
+    companySettings.logoUrl &&
+    companySettings.logoUrl !== "/logo.svg"
       ? escapeXmlText(companySettings.logoUrl)
       : "";
   const stampUrl =

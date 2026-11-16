@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { triggerFormErrorNotification } from "../../context/FormErrorContext";
+import { centralStorageService } from "../../services/centralStorageService";
 
 interface Props {
   children: ReactNode;
@@ -39,20 +40,11 @@ export class ErrorBoundary extends (React.Component as any) {
       error?.message?.includes("MIME type");
 
     if (isHookOrChunkMismatch && typeof window !== "undefined") {
-      let reloadLock = null;
-      try {
-        reloadLock = sessionStorage.getItem("hook_mismatch_reload_lock");
-      } catch {
-        // ignore
-      }
+      const reloadLock = centralStorageService.getItem("hook_mismatch_reload_lock");
       const now = Date.now();
       const lastReloadTime = reloadLock ? parseInt(reloadLock, 10) : 0;
-      if (!reloadLock || (now - lastReloadTime > 6000)) {
-        try {
-          sessionStorage.setItem("hook_mismatch_reload_lock", now.toString());
-        } catch {
-          // ignore
-        }
+      if (!reloadLock || now - lastReloadTime > 6000) {
+        centralStorageService.setItem("hook_mismatch_reload_lock", now.toString());
         window.location.reload();
         return;
       }
@@ -69,12 +61,8 @@ export class ErrorBoundary extends (React.Component as any) {
   }
 
   private handleRetry = () => {
-    try {
-      sessionStorage.removeItem("chunk_reload_lock");
-      sessionStorage.removeItem("hook_mismatch_reload_lock");
-    } catch {
-      // ignore
-    }
+    centralStorageService.removeItem("chunk_reload_lock");
+    centralStorageService.removeItem("hook_mismatch_reload_lock");
     this.setState({ hasError: false, error: null });
     if (this.props.onReset) {
       this.props.onReset();
@@ -82,12 +70,8 @@ export class ErrorBoundary extends (React.Component as any) {
   };
 
   private handleReload = () => {
-    try {
-      sessionStorage.removeItem("chunk_reload_lock");
-      sessionStorage.removeItem("hook_mismatch_reload_lock");
-    } catch {
-      // ignore
-    }
+    centralStorageService.removeItem("chunk_reload_lock");
+    centralStorageService.removeItem("hook_mismatch_reload_lock");
     window.location.reload();
   };
 

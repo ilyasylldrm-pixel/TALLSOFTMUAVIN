@@ -58,6 +58,7 @@ import {
   CompanyItem,
   isAdminOrSysAdmin,
   isModuleOrSubModuleAllowed,
+  isCompanyLogoEnabled,
 } from "../types";
 import { Logo } from "./Logo";
 import { FinanceSubModule } from "./Accounts";
@@ -144,6 +145,7 @@ interface SidebarProps {
   onSelectConstructionProject?: (projectId: string) => void;
   onOpenGitHubPublish?: () => void;
   activeCompany?: CompanyItem;
+  canUseQuickAdd?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -165,6 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectConstructionProject,
   onOpenGitHubPublish,
   activeCompany,
+  canUseQuickAdd,
 }) => {
   const { theme } = useTheme();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -227,18 +230,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "whatsapp" as NavItem, label: "WhatsApp Merkezi", icon: MessageSquare, badge: "Canlı" },
   ];
 
-  // Modül ve Alt Modül Kısıtlaması Kontrolü (Sadece Admin ve Sistem Yöneticisi Tarafından Yetkilendirilir)
-  const navItems = allNavItems.filter((item) => {
-    if (item.id === "admin") return isAdmin;
-    if (item.id === "dashboard") return true;
-    return isModuleOrSubModuleAllowed(item.id, undefined, currentUser, activeCompany);
-  });
-
   const allCompanySubModules: { id: NavItem; label: string; icon: React.ElementType }[] = [
     { id: "company_profile", label: "Firma Profili & Adres", icon: Building },
     { id: "company_branches", label: "Şubeler", icon: Store },
     { id: "company_warehouses", label: "Depolar", icon: WarehouseIcon },
-    { id: "company_settings", label: "Sistem Ayarları", icon: Settings },
+    ...(isAdmin ? [{ id: "company_settings" as NavItem, label: "Sistem Ayarları", icon: Settings }] : []),
   ];
   const companySubModules = allCompanySubModules.filter((sub) =>
     isModuleOrSubModuleAllowed(sub.id, "company", currentUser, activeCompany)
@@ -309,6 +305,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isModuleOrSubModuleAllowed(sub.moduleKey, "reports", currentUser, activeCompany)
   );
 
+  // Modül ve Alt Modül Kısıtlaması Kontrolü (Her zaman aktif; sadece Admin ve Sistem Yöneticisi tanımlayabilir)
+  const navItems = allNavItems.filter((item) => {
+    if (item.id === "admin") return isAdmin;
+    if (item.id === "dashboard") return true;
+    if (!isModuleOrSubModuleAllowed(item.id, undefined, currentUser, activeCompany)) return false;
+    if (!isAdmin) {
+      if (item.id === "company" && companySubModules.length === 0) return false;
+      if (item.id === "invoices" && invoiceSubModules.length === 0) return false;
+      if (item.id === "orders_module" && orderSubModules.length === 0) return false;
+      if (item.id === "ecommerce" && ecommerceSubModules.length === 0) return false;
+      if (item.id === "accounts" && financeSubModules.length === 0) return false;
+      if (item.id === "hr" && hrSubModules.length === 0) return false;
+      if (item.id === "reports" && reportSubModules.length === 0) return false;
+    }
+    return true;
+  });
+
+  const effectiveCanUseQuickAdd =
+    canUseQuickAdd !== undefined
+      ? canUseQuickAdd
+      : isAdmin ||
+        isModuleOrSubModuleAllowed("invoices", undefined, currentUser, activeCompany) ||
+        isModuleOrSubModuleAllowed("contacts", undefined, currentUser, activeCompany) ||
+        isModuleOrSubModuleAllowed("transactions", "accounts", currentUser, activeCompany) ||
+        isModuleOrSubModuleAllowed("products", undefined, currentUser, activeCompany) ||
+        isModuleOrSubModuleAllowed("company_warehouses", "company", currentUser, activeCompany);
+
+  const canAccessCompanyProfile = isModuleOrSubModuleAllowed(
+    "company_profile",
+    "company",
+    currentUser,
+    activeCompany
+  );
+
   const handleSelectTabWithMobileClose = (tab: NavItem) => {
     onSelectTab(tab);
     if (onCloseMobile) {
@@ -326,8 +356,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="min-w-0 flex-1 flex flex-col items-center justify-center text-center">
           <Logo
             size="lg"
-            src={activeCompany?.logoUrl || settings.logoUrl || "/logo.svg"}
-            scale={activeCompany?.logoScale ?? settings.logoScale ?? 1}
+            src={
+              isCompanyLogoEnabled(activeCompany ?? settings) &&
+              (activeCompany?.logoUrl || settings.logoUrl)
+                ? activeCompany?.logoUrl || settings.logoUrl
+                : "/logo.svg"
+            }
+            scale={
+              isCompanyLogoEnabled(activeCompany ?? settings)
+                ? (activeCompany?.logoScale ?? settings.logoScale ?? 1)
+                : 1
+            }
             variant={theme.sidebarBg !== "#ffffff" ? "light" : "default"}
             className="w-fit h-fit max-w-[200px] max-h-[50px] object-contain mx-auto justify-center"
             imageClassName="mx-auto"
@@ -340,12 +379,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {settings.companyName}
             </p>
           )}
-          {activeCompany?.moduleRestrictionEnabled && (
-            <div className="mt-1 inline-flex items-center justify-center gap-1 mx-auto">
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30">
-                🔒 Modül Kısıtlaması ({activeCompany.allowedModules?.length || 0})
-              </span>
-            </div>
+          {!isAdmin && (
+            <p
+              className="mt-1 text-[10px] font-medium tabular-nums opacity-65"
+              style={{ color: theme.sidebarText }}
+            >
+              Yetkili Modül: {navItems.length}
+            </p>
           )}
         </div>
         {onCloseMobile && (
@@ -361,19 +401,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Quick Add Button */}
-      <div className="w-full px-3 py-3 box-border shrink-0">
-        <button
-          onClick={() => {
-            onOpenQuickAdd();
-            if (onCloseMobile) onCloseMobile();
-          }}
-          className="w-full active:scale-[0.98] text-white font-medium text-sm py-2.5 px-3.5 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer hover:opacity-90 box-border"
-          style={{ backgroundColor: theme.primaryColor }}
-        >
-          <Plus className="w-4 h-4 text-white shrink-0" />
-          <span className="truncate">Hızlı İşlem Ekle</span>
-        </button>
-      </div>
+      {effectiveCanUseQuickAdd && (
+        <div className="w-full px-3 py-3 box-border shrink-0">
+          <button
+            onClick={() => {
+              onOpenQuickAdd();
+              if (onCloseMobile) onCloseMobile();
+            }}
+            className="w-full active:scale-[0.98] text-white font-medium text-sm py-2.5 px-3.5 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer hover:opacity-90 box-border"
+            style={{ backgroundColor: theme.primaryColor }}
+          >
+            <Plus className="w-4 h-4 text-white shrink-0" />
+            <span className="truncate">Hızlı İşlem Ekle</span>
+          </button>
+        </div>
+      )}
 
       {/* Navigation Links */}
       <nav
@@ -410,18 +452,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : isFinanceItem
             ? currentTab === "accounts"
             : isCompanyItem
-            ? [
-                "company",
-                "company_profile",
-                "company_companies",
-                "company_mysoft",
-                "company_branches",
-                "company_warehouses",
-                "company_settings",
-                "company_logs",
-                "settings",
-                "company_e_services",
-              ].includes(currentTab)
+            ? (
+                isAdmin
+                  ? [
+                      "company",
+                      "company_profile",
+                      "company_companies",
+                      "company_mysoft",
+                      "company_branches",
+                      "company_warehouses",
+                      "company_settings",
+                      "company_logs",
+                      "settings",
+                      "company_e_services",
+                    ]
+                  : [
+                      "company",
+                      "company_profile",
+                      "company_branches",
+                      "company_warehouses",
+                      "company_e_services",
+                    ]
+              ).includes(currentTab)
             : isHrItem
             ? [
                 "hr",
@@ -473,24 +525,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }
                   } else if (isFinanceItem) {
                     setIsFinanceExpanded((prev) => !prev);
+                    if (
+                      financeSubModules.length > 0 &&
+                      !financeSubModules.some((f) => f.id === activeFinanceSubTab)
+                    ) {
+                      onSelectFinanceSubTab?.(financeSubModules[0].id);
+                    }
                     if (currentTab !== "accounts") {
                       handleSelectTabWithMobileClose("accounts");
                     }
                   } else if (isCompanyItem) {
                     setIsCompanyExpanded((prev) => !prev);
-                    if (
-                      ![
-                        "company",
-                        "company_profile",
-                        "company_companies",
-                        "company_mysoft",
-                        "company_branches",
-                        "company_warehouses",
-                        "company_settings",
-                        "company_logs",
-                        "settings",
-                      ].includes(currentTab)
-                    ) {
+                    const allowedCurrentTabs = isAdmin
+                      ? [
+                          "company",
+                          "company_profile",
+                          "company_companies",
+                          "company_mysoft",
+                          "company_branches",
+                          "company_warehouses",
+                          "company_settings",
+                          "company_logs",
+                          "settings",
+                        ]
+                      : [
+                          "company",
+                          "company_profile",
+                          "company_branches",
+                          "company_warehouses",
+                        ];
+                    if (!allowedCurrentTabs.includes(currentTab)) {
                       handleSelectTabWithMobileClose((companySubModules[0]?.id as NavItem) || "company_profile");
                     }
                   } else if (isHrItem) {
@@ -957,22 +1021,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Quick Add Button (Collapsed) */}
-      <div className="p-2.5 flex justify-center">
-        <button
-          type="button"
-          onClick={() => onOpenQuickAdd()}
-          className="w-11 h-11 active:scale-95 text-white rounded-xl flex items-center justify-center shadow-xs transition-all cursor-pointer relative group"
-          style={{ backgroundColor: theme.primaryColor }}
-          title="Hızlı İşlem Ekle"
-          aria-label="Hızlı İşlem Ekle"
-        >
-          <Plus className="w-5 h-5 text-white" />
-          {/* Floating Tooltip */}
-          <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-lg shadow-xl pointer-events-none whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50">
-            Hızlı İşlem Ekle
-          </div>
-        </button>
-      </div>
+      {effectiveCanUseQuickAdd && (
+        <div className="p-2.5 flex justify-center">
+          <button
+            type="button"
+            onClick={() => onOpenQuickAdd()}
+            className="w-11 h-11 active:scale-95 text-white rounded-xl flex items-center justify-center shadow-xs transition-all cursor-pointer relative group"
+            style={{ backgroundColor: theme.primaryColor }}
+            title="Hızlı İşlem Ekle"
+            aria-label="Hızlı İşlem Ekle"
+          >
+            <Plus className="w-5 h-5 text-white" />
+            {/* Floating Tooltip */}
+            <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-lg shadow-xl pointer-events-none whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50">
+              Hızlı İşlem Ekle
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Navigation Links (Collapsed) */}
       <nav className="flex-1 px-2 py-2 space-y-1.5 overflow-y-auto custom-scrollbar">
@@ -1007,18 +1073,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : isFinanceItem
             ? currentTab === "accounts"
             : isCompanyItem
-            ? [
-                "company",
-                "company_profile",
-                "company_companies",
-                "company_mysoft",
-                "company_branches",
-                "company_warehouses",
-                "company_settings",
-                "company_logs",
-                "settings",
-                "company_e_services",
-              ].includes(currentTab)
+            ? (
+                isAdmin
+                  ? [
+                      "company",
+                      "company_profile",
+                      "company_companies",
+                      "company_mysoft",
+                      "company_branches",
+                      "company_warehouses",
+                      "company_settings",
+                      "company_logs",
+                      "settings",
+                      "company_e_services",
+                    ]
+                  : [
+                      "company",
+                      "company_profile",
+                      "company_branches",
+                      "company_warehouses",
+                      "company_e_services",
+                    ]
+              ).includes(currentTab)
             : isHrItem
             ? [
                 "hr",
@@ -1045,6 +1121,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             } else if (isInvoiceItem) {
               onSelectTab((invoiceSubModules[0]?.id as NavItem) || "invoices_sales");
             } else if (isFinanceItem) {
+              if (
+                financeSubModules.length > 0 &&
+                !financeSubModules.some((f) => f.id === activeFinanceSubTab)
+              ) {
+                onSelectFinanceSubTab?.(financeSubModules[0].id);
+              }
               onSelectTab("accounts");
             } else if (isCompanyItem) {
               onSelectTab((companySubModules[0]?.id as NavItem) || "company_profile");
@@ -1194,8 +1276,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <button
           type="button"
-          onClick={() => onSelectTab("company_profile")}
-          className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+          onClick={() => {
+            if (canAccessCompanyProfile) {
+              onSelectTab("company_profile");
+            }
+          }}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shadow-2xs ${
+            canAccessCompanyProfile ? "cursor-pointer" : "cursor-default"
+          }`}
           style={{ backgroundColor: `${theme.primaryColor}15`, color: theme.primaryColor }}
           title={`${settings.companyName} (VKN: ${settings.taxNumber})`}
         >

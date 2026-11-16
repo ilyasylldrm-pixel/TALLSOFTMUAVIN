@@ -1,3 +1,5 @@
+import { resolveCentralUrl } from "../config/env";
+
 export interface WhatsAppClientStatus {
   status: "disconnected" | "connecting" | "qr_ready" | "connected";
   qrCodeDataUrl: string | null;
@@ -36,7 +38,7 @@ export interface WhatsAppTemplates {
 
 export const fetchWhatsAppStatus = async (): Promise<WhatsAppClientStatus> => {
   try {
-    const res = await fetch("/api/whatsapp/status");
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/status"));
     const json = await res.json();
     if (json.success && json.data) {
       return json.data;
@@ -63,7 +65,7 @@ export const fetchWhatsAppStatus = async (): Promise<WhatsAppClientStatus> => {
 
 export const connectWhatsAppApi = async (force = false): Promise<WhatsAppClientStatus> => {
   try {
-    const res = await fetch("/api/whatsapp/connect", {
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/connect"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ force }),
@@ -80,7 +82,7 @@ export const connectWhatsAppApi = async (force = false): Promise<WhatsAppClientS
 
 export const logoutWhatsAppApi = async (): Promise<WhatsAppClientStatus> => {
   try {
-    const res = await fetch("/api/whatsapp/logout", { method: "POST" });
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/logout"), { method: "POST" });
     const json = await res.json();
     if (json.success && json.data) {
       return json.data;
@@ -97,7 +99,7 @@ export const sendWhatsAppTextApi = async (
   contactName?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
   try {
-    const res = await fetch("/api/whatsapp/send-message", {
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/send-message"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, message, contactName }),
@@ -117,7 +119,7 @@ export const sendWhatsAppDocumentApi = async (params: {
   contactName?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> => {
   try {
-    const res = await fetch("/api/whatsapp/send-document", {
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/send-document"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
@@ -130,7 +132,7 @@ export const sendWhatsAppDocumentApi = async (params: {
 
 export const fetchWhatsAppLogs = async (): Promise<WhatsAppLogItem[]> => {
   try {
-    const res = await fetch("/api/whatsapp/logs");
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/logs"));
     const json = await res.json();
     return json.success ? json.data : [];
   } catch {
@@ -140,7 +142,7 @@ export const fetchWhatsAppLogs = async (): Promise<WhatsAppLogItem[]> => {
 
 export const fetchWhatsAppTemplates = async (): Promise<WhatsAppTemplates> => {
   try {
-    const res = await fetch("/api/whatsapp/templates");
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/templates"));
     const json = await res.json();
     return json.success ? json.data : {
       statementTemplate: "",
@@ -158,7 +160,7 @@ export const fetchWhatsAppTemplates = async (): Promise<WhatsAppTemplates> => {
 
 export const saveWhatsAppTemplatesApi = async (templates: Partial<WhatsAppTemplates>): Promise<WhatsAppTemplates> => {
   try {
-    const res = await fetch("/api/whatsapp/templates", {
+    const res = await fetch(resolveCentralUrl("/api/whatsapp/templates"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(templates),

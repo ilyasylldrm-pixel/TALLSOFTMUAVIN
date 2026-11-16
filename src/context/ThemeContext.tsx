@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { safeSetStorageItem } from "../utils/storage";
+import { safeGetStorageItem, safeSetStorageItem } from "../utils/storage";
 
 export interface ThemeConfig {
   id: string;
@@ -254,7 +254,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [theme, setThemeState] = useState<ThemeConfig>(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = safeGetStorageItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
           if (parsed && parsed.id === "haze-financial") {

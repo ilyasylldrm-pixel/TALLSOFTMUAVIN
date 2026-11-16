@@ -1,4 +1,5 @@
-import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, CompanyItem, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, ConstructionProject, getContactAccountCode, FixedAsset, AssetMaintenanceRecord, AssetDisposalRecord, ManualBackupLogEntry } from "../types";
+import { Contact, Invoice, Account, Transaction, Product, Quote, Order, Waybill, CompanySettings, CompanyItem, Cheque, PromissoryNote, Branch, Warehouse, Employee, LeaveRequest, AdvanceRequest, LegalDeduction, CostProject, AssetCustody, BillOfMaterials, Workstation, Routing, WorkOrder, SubcontractOrder, AutoServiceRecord, ItServiceRecord, ApplianceServiceRecord, IndustrySector, FoodRecipe, FoodMenuPlan, FoodProductionOrder, FoodDispatchDelivery, FoodWitnessSample, ConstructionProject, getContactAccountCode, FixedAsset, AssetMaintenanceRecord, AssetDisposalRecord, ManualBackupLogEntry, isAdminOrSysAdmin } from "../types";
+import { centralStorageService } from "../services/centralStorageService";
 import {
   initialCompanySettings,
   initialContacts,
@@ -380,6 +381,11 @@ function ensureCompanyCredentials(comp: CompanyItem): { comp: CompanyItem; chang
   let changed = false;
   const copy = { ...comp };
 
+  if (copy.moduleRestrictionEnabled !== true) {
+    copy.moduleRestrictionEnabled = true;
+    changed = true;
+  }
+
   if (PROTECTED_COMPANY_IDS.has(copy.id) && copy.loginUserDeleted) {
     copy.loginUserDeleted = false;
     changed = true;
@@ -522,15 +528,15 @@ export function saveCompaniesList(list: CompanyItem[], allowRemoval = false): vo
         ? {
             ...existing,
             ...c,
-            moduleRestrictionEnabled:
-              typeof c.moduleRestrictionEnabled === "boolean"
-                ? c.moduleRestrictionEnabled
-                : existing.moduleRestrictionEnabled,
+            moduleRestrictionEnabled: true,
             allowedModules: Array.isArray(c.allowedModules)
               ? c.allowedModules
               : existing.allowedModules,
           }
-        : c;
+        : {
+            ...c,
+            moduleRestrictionEnabled: true,
+          };
       const { _allowModulePermissionChange, ...cleanComp } = mergedComp as CompanyItem & {
         _allowModulePermissionChange?: boolean;
       };
@@ -588,6 +594,7 @@ export function addCompanyItem(comp: CompanyItem): CompanyItem[] {
   void _allowModulePermissionChange;
   const normalizedComp: CompanyItem = {
     ...cleanComp,
+    moduleRestrictionEnabled: true,
     loginUserDeleted: false,
   };
   const exists = current.some((c) => c.id === normalizedComp.id);
@@ -622,9 +629,7 @@ export function updateCompanyItem(
   const normalizedComp: CompanyItem = {
     ...(existing || {}),
     ...cleanComp,
-    moduleRestrictionEnabled: canMutateModules
-      ? cleanComp.moduleRestrictionEnabled
-      : existing?.moduleRestrictionEnabled,
+    moduleRestrictionEnabled: true,
     allowedModules: canMutateModules
       ? cleanComp.allowedModules
       : existing?.allowedModules,
@@ -806,8 +811,6 @@ export function loadPayrollCustomizationsStorage(): Record<string, any> {
   }
 }
 
-const memoryStorageFallback = new Map<string, string>();
-
 export function compactEDocumentsForStorage(docs: any[], maxCount = 200): any[] {
   if (!Array.isArray(docs)) return [];
   return docs.slice(0, maxCount).map((doc) => {
@@ -818,61 +821,41 @@ export function compactEDocumentsForStorage(docs: any[], maxCount = 200): any[] 
 }
 
 export function cleanupOversizedStorage(aggressive = false) {
-  if (typeof window === "undefined") return;
   try {
     const keysToRemove: string[] = [];
-    const activeCompId = (() => {
-      try {
-        return window.localStorage?.getItem(STORAGE_KEYS.ACTIVE_COMPANY_ID) || DEFAULT_COMPANY.id;
-      } catch {
-        return DEFAULT_COMPANY.id;
-      }
-    })();
+    const allKeys = centralStorageService.keys();
 
-    const len = window.localStorage?.length || 0;
-    for (let i = 0; i < len; i++) {
-      const key = window.localStorage.key(i);
+    for (const key of allKeys) {
       if (!key) continue;
 
-      // 1. Purge massive fonts (3-5MB alone) that exceed quota
       if (key.startsWith("muavin_font_") || key.startsWith("muavin_pdf_")) {
         keysToRemove.push(key);
-      }
-      // 2. Purge TrAdres address caches (districts, quarters, provinces) which take megabytes
-      else if (key.startsWith("muavinn_tradres_") || key.startsWith("muavin_tradres_")) {
+      } else if (key.startsWith("muavinn_tradres_") || key.startsWith("muavin_tradres_")) {
         keysToRemove.push(key);
-      }
-      // 3. Purge oversized branding cache if exceeding reasonable size
-      else if (key === "muavin_cloud_branding" || key === "muavin_cloud_logo_url") {
+      } else if (key === "muavin_cloud_branding" || key === "muavin_cloud_logo_url") {
+        const val = centralStorageService.getItem(key);
+        if (val && (val.length > 40000 || aggressive)) {
+          keysToRemove.push(key);
+        }
+      } else if (key.startsWith("muavin_company_settings")) {
         try {
-          const val = window.localStorage.getItem(key);
-          if (val && (val.length > 40000 || aggressive)) {
-            keysToRemove.push(key);
-          }
-        } catch (_) {}
-      }
-      // 3.1. Compact oversized company settings if base64 logoUrl bloated them
-      else if (key.startsWith("muavin_company_settings")) {
-        try {
-          const raw = window.localStorage.getItem(key);
+          const raw = centralStorageService.getItem(key);
           if (raw && raw.length > 400000) {
             const parsed = JSON.parse(raw);
             if (parsed && typeof parsed === "object" && typeof parsed.logoUrl === "string" && parsed.logoUrl.length > 350000) {
               parsed.logoUrl = "/logo.svg";
-              window.localStorage.setItem(key, JSON.stringify(parsed));
+              centralStorageService.setItem(key, JSON.stringify(parsed));
             }
           }
         } catch (_) {}
-      }
-      // 3.2. Compact oversized e-documents snapshot
-      else if (key.startsWith("muavin_e_documents")) {
+      } else if (key.startsWith("muavin_e_documents")) {
         try {
-          const raw = window.localStorage.getItem(key);
+          const raw = centralStorageService.getItem(key);
           if (raw && (raw.length > 150000 || aggressive)) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
               const compacted = compactEDocumentsForStorage(parsed, aggressive ? 60 : 180);
-              window.localStorage.setItem(key, JSON.stringify(compacted));
+              centralStorageService.setItem(key, JSON.stringify(compacted));
             } else {
               keysToRemove.push(key);
             }
@@ -880,162 +863,56 @@ export function cleanupOversizedStorage(aggressive = false) {
         } catch (_) {
           keysToRemove.push(key);
         }
-      }
-      // 3.3. Compact oversized payroll customizations if bloated
-      else if (key === "muavin_payroll_customizations") {
+      } else if (key === "muavin_payroll_customizations") {
         try {
-          const raw = window.localStorage.getItem("muavin_payroll_customizations");
+          const raw = centralStorageService.getItem("muavin_payroll_customizations");
           if (raw && (raw.length > 60000 || aggressive)) {
             const parsed = JSON.parse(raw);
             const sanitized = sanitizePayrollCustomizations(parsed);
-            window.localStorage.setItem("muavin_payroll_customizations", JSON.stringify(sanitized));
+            centralStorageService.setItem("muavin_payroll_customizations", JSON.stringify(sanitized));
           }
         } catch (_) {
           keysToRemove.push(key);
         }
-      }
-      // 4. In aggressive mode or when storage quota is exceeded, only purge non-essential UI layout/cache keys
-      // NEVER delete any company data slices (_comp_*) so company historical data is always preserved across updates
-      else if (aggressive) {
-        if (
-          key.startsWith("muavin_col_widths_") ||
-          key.startsWith("muavin_col_vis_") ||
-          key.startsWith("muavin_table_row_height") ||
-          key.startsWith("tradres_")
-        ) {
+      } else if (aggressive) {
+        if (key.startsWith("tradres_")) {
           keysToRemove.push(key);
         }
       }
     }
 
     keysToRemove.forEach((k) => {
-      try {
-        window.localStorage.removeItem(k);
-      } catch (_) {}
+      centralStorageService.removeItem(k);
     });
-
-    try {
-      window.sessionStorage?.removeItem("muavin_font_roboto_reg_v2");
-      window.sessionStorage?.removeItem("muavin_font_roboto_bold_v2");
-    } catch (_) {}
   } catch (e) {
     console.warn("Storage cleanup error:", e);
   }
 }
 
 /**
- * Emergency eviction when localStorage is still full after standard aggressive cleanup:
- * evicts only transient UI/font/address caches and NEVER evicts any company's business data slices.
+ * Persists a key-value entry in the centralized storage repository.
  */
-function evictLargestNonCriticalKeys(protectedKey: string) {
-  if (typeof window === "undefined" || !window.localStorage) return;
-  try {
-    const entries: { key: string; size: number; priority: number }[] = [];
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const k = window.localStorage.key(i);
-      if (!k || k === protectedKey) continue;
-      const isTransientCache =
-        k.startsWith("tradres_") ||
-        k.startsWith("muavin_font_") ||
-        k.startsWith("muavin_col_widths_") ||
-        k.startsWith("muavin_col_vis_") ||
-        k.startsWith("muavin_table_row_height");
-      if (!isTransientCache) continue;
-      const val = window.localStorage.getItem(k) || "";
-      entries.push({
-        key: k,
-        size: val.length,
-        priority: 1,
-      });
-    }
-    entries.sort((a, b) => a.priority - b.priority || b.size - a.size);
-    let freed = 0;
-    for (const item of entries) {
-      try {
-        const existingVal = window.localStorage.getItem(item.key);
-        if (existingVal) {
-          memoryStorageFallback.set(item.key, existingVal);
-        }
-        window.localStorage.removeItem(item.key);
-        freed += item.size;
-        if (freed > 1200000) break;
-      } catch (_) {}
-    }
-  } catch (_) {}
-}
-
-// Immediately run cleanup when module loads
-if (typeof window !== "undefined") {
-  cleanupOversizedStorage();
+export function safeSetStorageItem(key: string, valueString: string, _preferSession = false): boolean {
+  void _preferSession;
+  return centralStorageService.setItem(key, valueString);
 }
 
 /**
- * Safely sets an item in localStorage or sessionStorage.
- * On QuotaExceededError, aggressively purges transient caches, retries,
- * and falls back to memory/sessionStorage without crashing the application.
- */
-export function safeSetStorageItem(key: string, valueString: string, preferSession = false): boolean {
-  memoryStorageFallback.set(key, valueString);
-  if (typeof window === "undefined") return false;
-
-  const targetStorage = preferSession ? window.sessionStorage : window.localStorage;
-  const fallbackStorage = preferSession ? window.localStorage : window.sessionStorage;
-
-  try {
-    targetStorage?.setItem(key, valueString);
-    return true;
-  } catch (e) {
-    console.warn(`Storage quota exceeded setting ${key}, running aggressive cache cleanup:`, e);
-    cleanupOversizedStorage(true);
-
-    try {
-      targetStorage?.setItem(key, valueString);
-      return true;
-    } catch (_retryErr) {
-      evictLargestNonCriticalKeys(key);
-      try {
-        targetStorage?.setItem(key, valueString);
-        return true;
-      } catch (_secondRetryErr) {
-        try {
-          fallbackStorage?.setItem(key, valueString);
-          return true;
-        } catch (_fallbackErr) {
-          console.warn(`Could not persist ${key} in local/session storage due to browser quota limits (kept in memory):`, _fallbackErr);
-          return false;
-        }
-      }
-    }
-  }
-}
-
-/**
- * Safely gets an item checking localStorage first, then sessionStorage, then in-memory fallback
+ * Reads a key-value entry from the centralized storage repository.
  */
 export function safeGetStorageItem(key: string): string | null {
-  if (typeof window === "undefined") return memoryStorageFallback.get(key) ?? null;
-  try {
-    return (
-      window.localStorage?.getItem(key) ??
-      window.sessionStorage?.getItem(key) ??
-      memoryStorageFallback.get(key) ??
-      null
-    );
-  } catch (_) {
-    return memoryStorageFallback.get(key) ?? null;
-  }
+  return centralStorageService.getItem(key);
 }
 
 /**
- * Safely removes an item from both localStorage, sessionStorage, and memory fallback
+ * Removes a key-value entry from the centralized storage repository.
  */
 export function safeRemoveStorageItem(key: string): void {
-  memoryStorageFallback.delete(key);
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage?.removeItem(key);
-    window.sessionStorage?.removeItem(key);
-  } catch (_) {}
+  centralStorageService.removeItem(key);
+}
+
+export function getStoredStorageKeys(): string[] {
+  return centralStorageService.keys();
 }
 
 const safeSet = (key: string, val: any) => {
@@ -1218,9 +1095,10 @@ export function getStoredData(targetCompanyId?: string) {
       eArsivPrefix: compMeta.eArsivPrefix || "EAR",
       eArsivNextNumber: compMeta.eArsivNextNumber || undefined,
       defaultInvoicePrefix: compMeta.eFaturaPrefix || "GIB",
-      defaultBankAccountName: compMeta.defaultBankAccountName || compMeta.companyTitle || compMeta.companyName || "",
-      defaultBankName: compMeta.defaultBankName ?? initialCompanySettings.defaultBankName,
-      defaultBankIban: compMeta.defaultBankIban ?? initialCompanySettings.defaultBankIban,
+      useDefaultBankInfo: compMeta.useDefaultBankInfo ?? false,
+      defaultBankAccountName: compMeta.useDefaultBankInfo ? (compMeta.defaultBankAccountName || compMeta.companyTitle || compMeta.companyName || "") : "",
+      defaultBankName: compMeta.useDefaultBankInfo ? (compMeta.defaultBankName ?? "") : "",
+      defaultBankIban: compMeta.useDefaultBankInfo ? (compMeta.defaultBankIban ?? "") : "",
       phone: compMeta.phone || "",
       email: compMeta.email || "",
       website: compMeta.website || "",
@@ -1233,7 +1111,8 @@ export function getStoredData(targetCompanyId?: string) {
       doorNo: compMeta.doorNo || "",
       postalCode: compMeta.postalCode || "",
       addressDetails: compMeta.addressDetails,
-      logoUrl: compMeta.logoUrl || "/logo.svg",
+      useCorporateLogo: compMeta.useCorporateLogo ?? Boolean(compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"),
+      logoUrl: compMeta.useCorporateLogo === false ? "" : (compMeta.logoUrl || ""),
       logoScale: compMeta.logoScale ?? 1,
       mysoftCredentials: {
         tenantIdentifierNumber: compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
@@ -1286,24 +1165,40 @@ export function getStoredData(targetCompanyId?: string) {
       doorNo: loadedSettings.doorNo || compMeta.doorNo || loadedSettings.addressDetails?.doorNo || "",
       postalCode: loadedSettings.postalCode || compMeta.postalCode || loadedSettings.addressDetails?.postalCode || "",
       address: loadedSettings.address || compMeta.address || loadedSettings.addressDetails?.fullAddress || "",
+      useDefaultBankInfo:
+        loadedSettings.useDefaultBankInfo !== undefined
+          ? loadedSettings.useDefaultBankInfo
+          : compMeta.useDefaultBankInfo,
       defaultBankAccountName:
-        loadedSettings.defaultBankAccountName ||
-        compMeta.defaultBankAccountName ||
-        loadedSettings.companyTitle ||
-        loadedSettings.companyName ||
-        "",
+        (loadedSettings.useDefaultBankInfo ?? compMeta.useDefaultBankInfo) === false
+          ? ""
+          : (loadedSettings.defaultBankAccountName ?? compMeta.defaultBankAccountName ?? ""),
       defaultBankName:
-        loadedSettings.defaultBankName !== undefined
-          ? loadedSettings.defaultBankName
-          : compMeta.defaultBankName || initialCompanySettings.defaultBankName || "",
+        (loadedSettings.useDefaultBankInfo ?? compMeta.useDefaultBankInfo) === false
+          ? ""
+          : loadedSettings.defaultBankName === "Garanti BBVA - Levent Ticari Şubesi" &&
+              loadedSettings.defaultBankIban === "TR33 0006 2000 0000 0012 3456 78"
+            ? ""
+            : (loadedSettings.defaultBankName !== undefined ? loadedSettings.defaultBankName : (compMeta.defaultBankName ?? "")),
       defaultBankIban:
-        loadedSettings.defaultBankIban !== undefined
-          ? loadedSettings.defaultBankIban
-          : compMeta.defaultBankIban || initialCompanySettings.defaultBankIban || "",
+        (loadedSettings.useDefaultBankInfo ?? compMeta.useDefaultBankInfo) === false
+          ? ""
+          : loadedSettings.defaultBankName === "Garanti BBVA - Levent Ticari Şubesi" &&
+              loadedSettings.defaultBankIban === "TR33 0006 2000 0000 0012 3456 78"
+            ? ""
+            : (loadedSettings.defaultBankIban !== undefined ? loadedSettings.defaultBankIban : (compMeta.defaultBankIban ?? "")),
+      useCorporateLogo:
+        loadedSettings.useCorporateLogo !== undefined
+          ? loadedSettings.useCorporateLogo
+          : compMeta.useCorporateLogo,
       logoUrl:
-        compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"
-          ? compMeta.logoUrl
-          : loadedSettings.logoUrl || compMeta.logoUrl || "/logo.svg",
+        (loadedSettings.useCorporateLogo ?? compMeta.useCorporateLogo) === false
+          ? ""
+          : compMeta.logoUrl && compMeta.logoUrl !== "/logo.svg"
+            ? compMeta.logoUrl
+            : loadedSettings.logoUrl && loadedSettings.logoUrl !== "/logo.svg"
+              ? loadedSettings.logoUrl
+              : "",
       logoScale: compMeta.logoScale ?? loadedSettings.logoScale ?? 1,
       tenantIdentifierNumber:
         loadedSettings.tenantIdentifierNumber || compMeta.tenantIdentifierNumber || compMeta.vkn || compMeta.tckn || "",
@@ -1599,6 +1494,20 @@ export function syncContactBalances(
 export function saveStoredData(key: keyof typeof STORAGE_KEYS, data: any, targetCompanyId?: string) {
   const activeCompId = targetCompanyId || getActiveCompanyId();
   const isDefault = activeCompId === DEFAULT_COMPANY.id;
+  if (key === "ECOMMERCE_STORES") {
+    if (Array.isArray(data)) {
+      saveCompanyEcommerceStores(activeCompId, data);
+    }
+    return;
+  }
+  if (key === "ECOMMERCE_ORDERS") {
+    safeSetStorageItem(`muavin_ecommerce_v2_${activeCompId}_orders`, JSON.stringify(Array.isArray(data) ? data : []));
+    return;
+  }
+  if (key === "ECOMMERCE_MARKUPS") {
+    safeSetStorageItem(`muavin_ecommerce_v2_${activeCompId}_markups`, JSON.stringify(data && typeof data === "object" ? data : {}));
+    return;
+  }
   const storageKey = isDefault ? STORAGE_KEYS[key] : `${STORAGE_KEYS[key]}_${activeCompId}`;
 
   let payloadToSave = data;
@@ -2696,19 +2605,30 @@ export function syncAllCompaniesAndUsersData(): {
         normalizedComp.phone = companyData.settings.phone ?? normalizedComp.phone;
         normalizedComp.email = companyData.settings.email ?? normalizedComp.email;
         normalizedComp.website = companyData.settings.website ?? normalizedComp.website;
+        normalizedComp.useDefaultBankInfo =
+          companyData.settings.useDefaultBankInfo !== undefined
+            ? companyData.settings.useDefaultBankInfo
+            : normalizedComp.useDefaultBankInfo;
         normalizedComp.defaultBankAccountName =
-          companyData.settings.defaultBankAccountName ||
-          normalizedComp.defaultBankAccountName ||
-          companyData.settings.companyTitle ||
-          normalizedComp.companyTitle;
+          normalizedComp.useDefaultBankInfo === false
+            ? ""
+            : (companyData.settings.defaultBankAccountName ?? normalizedComp.defaultBankAccountName ?? "");
         normalizedComp.defaultBankName =
-          companyData.settings.defaultBankName !== undefined
-            ? companyData.settings.defaultBankName
-            : normalizedComp.defaultBankName;
+          normalizedComp.useDefaultBankInfo === false
+            ? ""
+            : companyData.settings.defaultBankName !== undefined
+              ? companyData.settings.defaultBankName
+              : normalizedComp.defaultBankName;
         normalizedComp.defaultBankIban =
-          companyData.settings.defaultBankIban !== undefined
-            ? companyData.settings.defaultBankIban
-            : normalizedComp.defaultBankIban;
+          normalizedComp.useDefaultBankInfo === false
+            ? ""
+            : companyData.settings.defaultBankIban !== undefined
+              ? companyData.settings.defaultBankIban
+              : normalizedComp.defaultBankIban;
+        normalizedComp.useCorporateLogo =
+          companyData.settings.useCorporateLogo !== undefined
+            ? companyData.settings.useCorporateLogo
+            : normalizedComp.useCorporateLogo;
 
         const mergedSettings: CompanySettings = {
           ...companyData.settings,
@@ -2733,21 +2653,12 @@ export function syncAllCompaniesAndUsersData(): {
           eArsivPrefix: companyData.settings.eArsivPrefix || normalizedComp.eArsivPrefix || "EAR",
           eArsivNextNumber: companyData.settings.eArsivNextNumber || normalizedComp.eArsivNextNumber,
           defaultInvoicePrefix: companyData.settings.defaultInvoicePrefix || normalizedComp.eFaturaPrefix || "GIB",
-          defaultBankAccountName:
-            companyData.settings.defaultBankAccountName ||
-            normalizedComp.defaultBankAccountName ||
-            companyData.settings.companyTitle ||
-            normalizedComp.companyTitle ||
-            "",
-          defaultBankName:
-            companyData.settings.defaultBankName !== undefined
-              ? companyData.settings.defaultBankName
-              : normalizedComp.defaultBankName,
-          defaultBankIban:
-            companyData.settings.defaultBankIban !== undefined
-              ? companyData.settings.defaultBankIban
-              : normalizedComp.defaultBankIban,
-          logoUrl: resolvedLogoUrl,
+          useDefaultBankInfo: normalizedComp.useDefaultBankInfo,
+          defaultBankAccountName: normalizedComp.defaultBankAccountName ?? "",
+          defaultBankName: normalizedComp.defaultBankName,
+          defaultBankIban: normalizedComp.defaultBankIban,
+          useCorporateLogo: normalizedComp.useCorporateLogo,
+          logoUrl: normalizedComp.useCorporateLogo === false ? "" : resolvedLogoUrl,
           logoScale: resolvedLogoScale,
         };
         saveStoredData("SETTINGS", mergedSettings, normalizedComp.id);
@@ -2825,4 +2736,226 @@ export function syncAllCompaniesAndUsersData(): {
     };
   }
 }
+
+export interface DeletedEcommerceStoreMeta {
+  deletedAt: string;
+  deletedBy?: string;
+}
+
+/**
+ * Yalnızca geçmişte otomatik üretilmiş sahte/test mağaza şablonlarını tespit eder.
+ * Kullanıcı, Admin veya Sistem Yöneticisi tarafından oluşturulan gerçek mağazaları asla etkilemez.
+ */
+export function isSyntheticMockEcommerceStore(store: any): boolean {
+  if (!store || typeof store !== "object" || !store.id) return true;
+  if (store.id === "trendyol_second_branch" || store.supplierId === "30918099999") return true;
+  const key = String(store.apiKey || "").trim();
+  if (/^(TGO-KEY-20818054|TY-KEY-20818054|TY-KEY-30918099)$/i.test(key)) return true;
+  if (
+    store.apiSecret === "••••••••" &&
+    (store.name === "Trendyol Go (TGO Yemek - Kadıköy)" ||
+      store.name === "Trendyol Pazaryeri - 1. Mağaza (Ana)" ||
+      store.name === "Trendyol Pazaryeri - 2. Mağaza (Butik Şube)")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function getEcommerceStoresStorageKey(companyId: string): string {
+  const cleanId = String(companyId || DEFAULT_COMPANY.id).trim() || DEFAULT_COMPANY.id;
+  return `muavin_ecommerce_v2_${cleanId}_stores`;
+}
+
+export function getEcommerceDeletedMapStorageKey(companyId: string): string {
+  const cleanId = String(companyId || DEFAULT_COMPANY.id).trim() || DEFAULT_COMPANY.id;
+  return `muavin_ecommerce_v2_${cleanId}_deleted_stores`;
+}
+
+export function getDeletedEcommerceStoresMap(
+  companyId: string
+): Record<string, DeletedEcommerceStoreMeta> {
+  try {
+    const raw = safeGetStorageItem(getEcommerceDeletedMapStorageKey(companyId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, DeletedEcommerceStoreMeta>;
+  } catch {
+    return {};
+  }
+}
+
+export function saveDeletedEcommerceStoresMap(
+  companyId: string,
+  map: Record<string, DeletedEcommerceStoreMeta>
+): void {
+  safeSetStorageItem(getEcommerceDeletedMapStorageKey(companyId), JSON.stringify(map || {}));
+}
+
+export function markEcommerceStoreDeleted(
+  companyId: string,
+  storeId: string,
+  deletedBy?: string
+): Record<string, DeletedEcommerceStoreMeta> {
+  const current = getDeletedEcommerceStoresMap(companyId);
+  const next: Record<string, DeletedEcommerceStoreMeta> = {
+    ...current,
+    [storeId]: {
+      deletedAt: new Date().toISOString(),
+      deletedBy: deletedBy || "user",
+    },
+  };
+  saveDeletedEcommerceStoresMap(companyId, next);
+  return next;
+}
+
+export function clearEcommerceStoreDeletedMark(
+  companyId: string,
+  storeId: string
+): Record<string, DeletedEcommerceStoreMeta> {
+  const current = getDeletedEcommerceStoresMap(companyId);
+  if (!(storeId in current)) return current;
+  const next = { ...current };
+  delete next[storeId];
+  saveDeletedEcommerceStoresMap(companyId, next);
+  return next;
+}
+
+export function mergeDeletedEcommerceStoresMaps(
+  a?: Record<string, DeletedEcommerceStoreMeta> | null,
+  b?: Record<string, DeletedEcommerceStoreMeta> | null
+): Record<string, DeletedEcommerceStoreMeta> {
+  const merged: Record<string, DeletedEcommerceStoreMeta> = {};
+  const apply = (src?: Record<string, DeletedEcommerceStoreMeta> | null) => {
+    if (!src || typeof src !== "object" || Array.isArray(src)) return;
+    for (const [storeId, meta] of Object.entries(src)) {
+      if (!storeId || !meta || typeof meta !== "object" || !meta.deletedAt) continue;
+      const existing = merged[storeId];
+      const nextTime = new Date(meta.deletedAt).getTime() || 0;
+      const prevTime = existing ? new Date(existing.deletedAt).getTime() || 0 : 0;
+      if (!existing || nextTime >= prevTime) {
+        merged[storeId] = {
+          deletedAt: meta.deletedAt,
+          deletedBy: meta.deletedBy || existing?.deletedBy,
+        };
+      }
+    }
+  };
+  apply(a);
+  apply(b);
+  return merged;
+}
+
+export function mergeEcommerceStoresPreservingUserSaves<T extends Record<string, any>>(
+  localStores?: T[] | null,
+  remoteStores?: T[] | null,
+  localDeletedMap?: Record<string, DeletedEcommerceStoreMeta> | null,
+  remoteDeletedMap?: Record<string, DeletedEcommerceStoreMeta> | null
+): { stores: T[]; deletedMap: Record<string, DeletedEcommerceStoreMeta> } {
+  const deletedMap = mergeDeletedEcommerceStoresMaps(localDeletedMap, remoteDeletedMap);
+  const byId = new Map<string, T>();
+
+  const parseStoreTs = (st: any): number => {
+    const raw = st?.updatedAt || st?.createdAt;
+    if (!raw || typeof raw !== "string") return 0;
+    const t = new Date(raw).getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
+
+  const considerList = (list?: T[] | null, preferOnTie = false) => {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      if (isSyntheticMockEcommerceStore(item)) continue;
+      const id = String(item.id || "").trim();
+      if (!id) continue;
+
+      const delMeta = deletedMap[id];
+      if (delMeta?.deletedAt) {
+        const delTs = new Date(delMeta.deletedAt).getTime() || 0;
+        const itemTs = parseStoreTs(item);
+        if (delTs > 0 && delTs >= itemTs) {
+          continue;
+        }
+      }
+
+      const existing = byId.get(id);
+      if (!existing) {
+        byId.set(id, item);
+      } else {
+        const existingTs = parseStoreTs(existing);
+        const incomingTs = parseStoreTs(item);
+        if (incomingTs > existingTs || (preferOnTie && incomingTs === existingTs)) {
+          byId.set(id, { ...existing, ...item });
+        }
+      }
+    }
+  };
+
+  considerList(localStores, false);
+  considerList(remoteStores, true);
+
+  return {
+    stores: Array.from(byId.values()),
+    deletedMap,
+  };
+}
+
+export function getCompanyEcommerceStores<T extends Record<string, any> = any>(
+  companyId: string
+): T[] {
+  try {
+    const raw = safeGetStorageItem(getEcommerceStoresStorageKey(companyId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const deletedMap = getDeletedEcommerceStoresMap(companyId);
+    const { stores } = mergeEcommerceStoresPreservingUserSaves<T>(parsed, [], deletedMap, {});
+    if (stores.length !== parsed.length) {
+      safeSetStorageItem(getEcommerceStoresStorageKey(companyId), JSON.stringify(stores));
+    }
+    return stores;
+  } catch {
+    return [];
+  }
+}
+
+export function saveCompanyEcommerceStores<T extends Record<string, any> = any>(
+  companyId: string,
+  stores: T[]
+): T[] {
+  const deletedMap = getDeletedEcommerceStoresMap(companyId);
+  const { stores: cleanStores } = mergeEcommerceStoresPreservingUserSaves<T>(
+    stores,
+    [],
+    deletedMap,
+    {}
+  );
+  safeSetStorageItem(getEcommerceStoresStorageKey(companyId), JSON.stringify(cleanStores));
+  return cleanStores;
+}
+
+export function getActiveEcommerceActorInfo(): {
+  actorLabel: string;
+  actorRole: "admin" | "sysadmin" | "user";
+} {
+  try {
+    const raw = centralStorageService.getActiveUserRaw();
+    if (!raw) return { actorLabel: "user", actorRole: "user" };
+    const parsed = JSON.parse(raw);
+    const roleLower = String(parsed?.role || "").toLowerCase();
+    const actorRole: "admin" | "sysadmin" | "user" = roleLower.includes("sistem")
+      ? "sysadmin"
+      : isAdminOrSysAdmin(parsed)
+      ? "admin"
+      : "user";
+    const actorLabel = String(
+      parsed?.email || parsed?.username || parsed?.name || parsed?.id || "user"
+    ).trim();
+    return { actorLabel, actorRole };
+  } catch {
+    return { actorLabel: "user", actorRole: "user" };
+  }
+}
+
 

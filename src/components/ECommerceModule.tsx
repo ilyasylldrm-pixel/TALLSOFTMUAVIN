@@ -11,6 +11,21 @@ import { NavItem } from "./Sidebar";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { syncCompanyEcommerceToCloud } from "../services/systemSyncService";
+import {
+  getCompanyEcommerceStores,
+  saveCompanyEcommerceStores,
+  getDeletedEcommerceStoresMap,
+  saveDeletedEcommerceStoresMap,
+  markEcommerceStoreDeleted,
+  clearEcommerceStoreDeletedMark,
+  mergeEcommerceStoresPreservingUserSaves,
+  getActiveEcommerceActorInfo,
+  DeletedEcommerceStoreMeta,
+  safeGetStorageItem,
+  safeSetStorageItem,
+  safeRemoveStorageItem,
+} from "../utils/storage";
+import { resolveCentralUrl } from "../config/env";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
 import { mapTgoPackage, notifyTgoInvoice, requestTgoPackages } from "../services/tgoMealClient";
@@ -99,6 +114,11 @@ export interface MarketplaceStoreConfig {
   isConnected: boolean;
   lastSyncAt: string;
   status?: "active" | "error" | "paused";
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  createdByRole?: "admin" | "sysadmin" | "user";
 }
 
 export function getStoreMarketplaceId(
@@ -174,6 +194,7 @@ export interface ECommerceOrder {
 interface ECommerceModuleProps {
   activeSubTab?: NavItem;
   onSelectSubTab?: (tab: NavItem) => void;
+  canAccessSubTab?: (tab: NavItem) => boolean;
   orders: Order[];
   products: Product[];
   contacts: Contact[];
@@ -466,6 +487,15 @@ async function buildTrendyolBackendHeaders(companyId: string): Promise<Record<st
     "Content-Type": "application/json",
     "x-company-id": companyId,
   };
+  let localParsed: any = null;
+  try {
+    const raw = safeGetStorageItem("muavin_active_user");
+    localParsed = raw ? JSON.parse(raw) : null;
+    if (localParsed?.email) headers["x-user-email"] = String(localParsed.email);
+    if (localParsed?.role) headers["x-user-role"] = String(localParsed.role);
+  } catch {
+    // ignore
+  }
   try {
     let user = auth.currentUser;
     if (!user && typeof auth.authStateReady === "function") {
@@ -474,20 +504,16 @@ async function buildTrendyolBackendHeaders(companyId: string): Promise<Record<st
     }
     if (user) {
       headers.Authorization = `Bearer ${await user.getIdToken()}`;
+      if (user.email && !headers["x-user-email"]) headers["x-user-email"] = user.email;
       return headers;
     }
   } catch {
     // fallback to local session
   }
   try {
-    const raw =
-      window.localStorage.getItem("muavin_active_user") ||
-      window.sessionStorage.getItem("muavin_active_user");
-    const parsed = raw ? JSON.parse(raw) : null;
-    const uid = String(parsed?.id || parsed?.userId || parsed?.companyId || companyId).trim();
+    const uid = String(localParsed?.id || localParsed?.userId || localParsed?.companyId || companyId).trim();
     headers.Authorization = `Bearer ${uid}`;
     headers["x-user-id"] = uid;
-    if (parsed?.email) headers["x-user-email"] = String(parsed.email);
   } catch {
     headers["x-user-id"] = companyId;
   }
@@ -725,6 +751,10 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       ? `${selectedMarketplace}_${Date.now()}`
       : selectedMarketplace;
 
+    const nowIso = new Date().toISOString();
+    const actor = getActiveEcommerceActorInfo();
+    clearEcommerceStoreDeletedMark(activeCompanyId, storeId);
+
     const newStore: MarketplaceStoreConfig = {
       id: storeId,
       marketplace: selectedMarketplace,
@@ -753,6 +783,11 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
       isConnected: isTgoPlatform ? testState === "success" : true,
       lastSyncAt: initialStore?.lastSyncAt || "Yeni Bağlandı",
       status: isTgoPlatform ? (testState === "success" ? "active" as const : "paused" as const) : "active" as const,
+      createdAt: initialStore?.createdAt || nowIso,
+      updatedAt: nowIso,
+      createdBy: initialStore?.createdBy || actor.actorLabel,
+      updatedBy: actor.actorLabel,
+      createdByRole: initialStore?.createdByRole || actor.actorRole,
     };
 
     onSave(newStore);
@@ -1178,6 +1213,7 @@ const MarketplaceConnectionModal: React.FC<MarketplaceConnectionModalProps> = ({
 export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
   activeSubTab = "ecommerce_orders",
   onSelectSubTab,
+  canAccessSubTab,
   products = [],
   contacts = [],
   invoices = [],
@@ -1191,76 +1227,122 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 }) => {
   const { theme } = useTheme();
 
+  const allowedSubTabIds = useMemo<NavItem[]>(() => {
+    const allIds: NavItem[] = [
+      "ecommerce_orders",
+      "ecommerce_stores",
+      "ecommerce_products",
+      "ecommerce_finance",
+    ];
+    if (!canAccessSubTab) return allIds;
+    return allIds.filter((id) => canAccessSubTab(id));
+  }, [canAccessSubTab]);
+
   const currentSection = useMemo(() => {
-    if (
+    const candidate: NavItem =
       activeSubTab === "ecommerce_stores" ||
       activeSubTab === "ecommerce_products" ||
       activeSubTab === "ecommerce_finance"
-    ) {
-      return activeSubTab;
+        ? activeSubTab
+        : "ecommerce_orders";
+    if (allowedSubTabIds.length > 0 && !allowedSubTabIds.includes(candidate)) {
+      return allowedSubTabIds[0];
     }
-    return "ecommerce_orders";
-  }, [activeSubTab]);
+    return candidate;
+  }, [activeSubTab, allowedSubTabIds]);
+
+  useEffect(() => {
+    if (
+      onSelectSubTab &&
+      allowedSubTabIds.length > 0 &&
+      activeSubTab !== "ecommerce" &&
+      !allowedSubTabIds.includes(activeSubTab)
+    ) {
+      onSelectSubTab(allowedSubTabIds[0]);
+    }
+  }, [activeSubTab, allowedSubTabIds, onSelectSubTab]);
 
   const storagePrefix = `muavin_ecommerce_v2_${activeCompanyId}_`;
 
-  const [stores, setStores] = useState<MarketplaceStoreConfig[]>(() => {
-    try {
-      const raw = localStorage.getItem(`${storagePrefix}stores`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-      }
-    } catch {
-      // ignore
-    }
-    return [];
-  });
+  const [stores, setStores] = useState<MarketplaceStoreConfig[]>(() =>
+    getCompanyEcommerceStores<MarketplaceStoreConfig>(activeCompanyId)
+  );
+  const [storePendingDelete, setStorePendingDelete] = useState<MarketplaceStoreConfig | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`${storagePrefix}stores`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setStores(Array.isArray(parsed) ? parsed : []);
-      } else {
-        setStores([]);
-      }
-    } catch {
-      setStores([]);
-    }
+    setStores(getCompanyEcommerceStores<MarketplaceStoreConfig>(activeCompanyId));
 
     // Diğer cihazlarda yapılan mağaza güncellemelerini hem sunucudan hem Firestore'dan anında çek
+    // Kullanıcı, Admin veya Sistem Yöneticisi silmediği sürece kayıtlı mağazalar asla silinmez / ezilmez
     let isMounted = true;
     const loadRemoteStores = async () => {
-      let remoteStores: MarketplaceStoreConfig[] | null = null;
+      let serverStores: MarketplaceStoreConfig[] = [];
+      let serverDeleted: Record<string, DeletedEcommerceStoreMeta> = {};
+      let firestoreStores: MarketplaceStoreConfig[] = [];
+      let firestoreDeleted: Record<string, DeletedEcommerceStoreMeta> = {};
+
       try {
         const resp = await fetch(`/api/ecommerce/stores?companyId=${encodeURIComponent(activeCompanyId)}`);
         if (resp.ok) {
           const json = await resp.json();
-          if (Array.isArray(json.stores) && json.stores.length > 0) {
-            remoteStores = json.stores;
+          if (Array.isArray(json.stores)) {
+            serverStores = json.stores;
+          }
+          if (json.deletedEcommerceStores && typeof json.deletedEcommerceStores === "object") {
+            serverDeleted = json.deletedEcommerceStores;
           }
         }
       } catch {}
 
-      if (!remoteStores) {
-        try {
-          const snap = await getDoc(doc(db, "system_settings", `company_data_${activeCompanyId}`));
-          if (snap.exists()) {
-            const data = snap.data();
-            if (Array.isArray(data.ecommerceStores) && data.ecommerceStores.length > 0) {
-              remoteStores = data.ecommerceStores;
-            }
+      try {
+        const snap = await getDoc(doc(db, "system_settings", `company_data_${activeCompanyId}`));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.ecommerceStores)) {
+            firestoreStores = data.ecommerceStores;
           }
-        } catch {}
-      }
+          if (data.deletedEcommerceStores && typeof data.deletedEcommerceStores === "object") {
+            firestoreDeleted = data.deletedEcommerceStores;
+          }
+        }
+      } catch {}
 
-      if (isMounted && remoteStores && Array.isArray(remoteStores)) {
-        setStores(remoteStores);
-        try {
-          localStorage.setItem(`${storagePrefix}stores`, JSON.stringify(remoteStores));
-        } catch {}
+      if (!isMounted) return;
+
+      const localCurrent = getCompanyEcommerceStores<MarketplaceStoreConfig>(activeCompanyId);
+      const localDeleted = getDeletedEcommerceStoresMap(activeCompanyId);
+
+      const step1 = mergeEcommerceStoresPreservingUserSaves<MarketplaceStoreConfig>(
+        localCurrent,
+        serverStores,
+        localDeleted,
+        serverDeleted
+      );
+      const finalMerged = mergeEcommerceStoresPreservingUserSaves<MarketplaceStoreConfig>(
+        step1.stores,
+        firestoreStores,
+        step1.deletedMap,
+        firestoreDeleted
+      );
+
+      saveDeletedEcommerceStoresMap(activeCompanyId, finalMerged.deletedMap);
+      const savedClean = saveCompanyEcommerceStores<MarketplaceStoreConfig>(
+        activeCompanyId,
+        finalMerged.stores
+      );
+      setStores(savedClean);
+
+      if (
+        savedClean.length !== serverStores.length ||
+        savedClean.length !== firestoreStores.length
+      ) {
+        void syncCompanyEcommerceToCloud(
+          activeCompanyId,
+          savedClean,
+          undefined,
+          undefined,
+          finalMerged.deletedMap
+        );
       }
     };
 
@@ -1295,16 +1377,28 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     setTimeout(() => setStoreToast(null), 3500);
   };
 
-  const saveStores = (updated: MarketplaceStoreConfig[]) => {
-    setStores(updated);
+  const saveStores = (
+    updated: MarketplaceStoreConfig[],
+    explicitDeletedMap?: Record<string, DeletedEcommerceStoreMeta>
+  ) => {
     try {
-      localStorage.setItem(`${storagePrefix}stores`, JSON.stringify(updated));
+      const savedClean = saveCompanyEcommerceStores<MarketplaceStoreConfig>(
+        activeCompanyId,
+        updated
+      );
+      setStores(savedClean);
       window.dispatchEvent(
         new CustomEvent("muavin:ecommerce-stores-updated", {
-          detail: { companyId: activeCompanyId, stores: updated },
+          detail: { companyId: activeCompanyId, stores: savedClean },
         })
       );
-      void syncCompanyEcommerceToCloud(activeCompanyId, updated, ecoOrders, productMarkups);
+      void syncCompanyEcommerceToCloud(
+        activeCompanyId,
+        savedClean,
+        ecoOrders,
+        productMarkups,
+        explicitDeletedMap || getDeletedEcommerceStoresMap(activeCompanyId)
+      );
     } catch (e) {
       console.error("Storage error", e);
     }
@@ -1328,7 +1422,14 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     if (marketplace === "trendyol_go") {
       void requestTgoPackages(storeConfig, "test")
         .then(() => {
-          saveStores(stores.map((store) => store.id === storeConfig.id ? { ...store, isConnected: true, status: "active" as const } : store));
+          const nowIso = new Date().toISOString();
+          saveStores(
+            stores.map((store) =>
+              store.id === storeConfig.id
+                ? { ...store, isConnected: true, status: "active" as const, updatedAt: nowIso }
+                : store
+            )
+          );
           showStoreToast(`${storeConfig.name} TGO API bağlantısı doğrulandı.`, "success");
         })
         .catch((error) => showStoreToast(error instanceof Error ? error.message : "TGO bağlantısı başarısız.", "error"))
@@ -1360,9 +1461,13 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           }),
         ];
         const now = new Date().toISOString();
-        const updatedStores = stores.map((store) => store.id === storeConfig.id ? { ...store, lastSyncAt: now, isConnected: true, status: "active" as const } : store);
+        const updatedStores = stores.map((store) =>
+          store.id === storeConfig.id
+            ? { ...store, lastSyncAt: now, updatedAt: now, isConnected: true, status: "active" as const }
+            : store
+        );
         saveStores(updatedStores);
-        localStorage.setItem(`${storagePrefix}orders`, JSON.stringify(mergedOrders));
+        safeSetStorageItem(`${storagePrefix}orders`, JSON.stringify(mergedOrders));
         setEcoOrders(mergedOrders);
         void syncCompanyEcommerceToCloud(activeCompanyId, updatedStores, mergedOrders, productMarkups);
         showStoreToast(`${packages.length} TGO paketi alındı, ${incoming.filter((order) => !existingIds.has(order.id)).length} yeni sipariş eklendi.`, "success");
@@ -1374,11 +1479,12 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
       return;
     }
     setTimeout(() => {
+      const nowIso = new Date().toISOString();
       const now =
         new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) +
         " (Şimdi)";
       const updated = stores.map((s) =>
-        s.id === storeConfig.id ? { ...s, lastSyncAt: now } : s
+        s.id === storeConfig.id ? { ...s, lastSyncAt: now, updatedAt: nowIso } : s
       );
       saveStores(updated);
       setSyncingStoreId(null);
@@ -1391,33 +1497,40 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 
   const handleDeleteStoreConfig = (storeId: string) => {
     const store = stores.find((s) => s.id === storeId);
-    if (
-      window.confirm(
-        `${store?.name || "Bu mağaza"} entegrasyonunu ve API bağlantısını kaldırmak istediğinize emin misiniz?`
-      )
-    ) {
-      const updated = stores.filter((s) => s.id !== storeId);
-      saveStores(updated);
-      if (storeId === "trendyol") {
-        void (async () => {
-          try {
-            await fetch(
-              `/api/marketplace/trendyol/connection?companyId=${encodeURIComponent(activeCompanyId)}`,
-              {
-                method: "DELETE",
-                headers: await buildTrendyolBackendHeaders(activeCompanyId),
-              }
-            );
-          } catch {
-            // ignore network error on local cleanup
-          }
-        })();
-      }
-      showStoreToast("Mağaza bağlantısı kaldırıldı.", "info");
+    if (!store) return;
+    setStorePendingDelete(store);
+  };
+
+  const confirmDeleteStoreConfig = () => {
+    if (!storePendingDelete) return;
+    const storeId = storePendingDelete.id;
+    const storeName = storePendingDelete.name;
+    const actor = getActiveEcommerceActorInfo();
+    const deletedMap = markEcommerceStoreDeleted(activeCompanyId, storeId, actor.actorLabel);
+    const updated = stores.filter((s) => s.id !== storeId);
+    setStorePendingDelete(null);
+    saveStores(updated, deletedMap);
+    if (storeId === "trendyol" || getStoreMarketplaceId(storePendingDelete) === "trendyol") {
+      void (async () => {
+        try {
+          await fetch(
+            resolveCentralUrl(`/api/marketplace/trendyol/connection?companyId=${encodeURIComponent(activeCompanyId)}`),
+            {
+              method: "DELETE",
+              headers: await buildTrendyolBackendHeaders(activeCompanyId),
+            }
+          );
+        } catch {
+          // ignore network error on local cleanup
+        }
+      })();
     }
+    showStoreToast(`${storeName} mağaza entegrasyonu silindi.`, "info");
   };
 
   const handleToggleStoreActive = (storeId: string) => {
+    const nowIso = new Date().toISOString();
+    const actor = getActiveEcommerceActorInfo();
     const updated = stores.map((s) => {
       if (s.id === storeId) {
         const nextConnected = !s.isConnected;
@@ -1425,6 +1538,8 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           ...s,
           isConnected: nextConnected,
           status: (nextConnected ? "active" : "paused") as "active" | "error" | "paused",
+          updatedAt: nowIso,
+          updatedBy: actor.actorLabel,
         };
       }
       return s;
@@ -1443,9 +1558,9 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
   const [ecoOrders, setEcoOrders] = useState<ECommerceOrder[]>(() => {
     try {
       // Clear legacy v1 demo keys if present
-      localStorage.removeItem(`muavin_ecommerce_${activeCompanyId}_stores`);
-      localStorage.removeItem(`muavin_ecommerce_${activeCompanyId}_orders`);
-      const raw = localStorage.getItem(`${storagePrefix}orders`);
+      safeRemoveStorageItem(`muavin_ecommerce_${activeCompanyId}_stores`);
+      safeRemoveStorageItem(`muavin_ecommerce_${activeCompanyId}_orders`);
+      const raw = safeGetStorageItem(`${storagePrefix}orders`);
       if (raw) return JSON.parse(raw);
     } catch {
       // ignore
@@ -1457,7 +1572,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     Record<string, { trendyolMarkup: number; hbMarkup: number; bufferStock: number; syncEnabled: boolean }>
   >(() => {
     try {
-      const raw = localStorage.getItem(`${storagePrefix}markups`);
+      const raw = safeGetStorageItem(`${storagePrefix}markups`);
       if (raw) return JSON.parse(raw);
     } catch {
       // ignore
@@ -1471,7 +1586,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     const loadRemoteOrders = async () => {
       let remoteOrders: ECommerceOrder[] | null = null;
       try {
-        const resp = await fetch(`/api/ecommerce/orders?companyId=${encodeURIComponent(activeCompanyId)}`);
+        const resp = await fetch(resolveCentralUrl(`/api/ecommerce/orders?companyId=${encodeURIComponent(activeCompanyId)}`));
         if (resp.ok) {
           const json = await resp.json();
           if (Array.isArray(json.orders) && json.orders.length > 0) {
@@ -1494,9 +1609,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 
       if (isMounted && remoteOrders && Array.isArray(remoteOrders)) {
         setEcoOrders(remoteOrders);
-        try {
-          localStorage.setItem(`${storagePrefix}orders`, JSON.stringify(remoteOrders));
-        } catch {}
+        safeSetStorageItem(`${storagePrefix}orders`, JSON.stringify(remoteOrders));
       }
     };
 
@@ -1517,7 +1630,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
 
   useEffect(() => {
     try {
-      localStorage.setItem(`${storagePrefix}orders`, JSON.stringify(ecoOrders));
+      safeSetStorageItem(`${storagePrefix}orders`, JSON.stringify(ecoOrders));
       if (ecoOrders.length > 0) {
         void syncCompanyEcommerceToCloud(activeCompanyId, stores, ecoOrders, productMarkups);
       }
@@ -1527,11 +1640,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
   }, [ecoOrders, storagePrefix, activeCompanyId]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(`${storagePrefix}markups`, JSON.stringify(productMarkups));
-    } catch {
-      // ignore
-    }
+    safeSetStorageItem(`${storagePrefix}markups`, JSON.stringify(productMarkups));
   }, [productMarkups, storagePrefix]);
 
   // Filters & UI states
@@ -1839,37 +1948,42 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     }
   };
 
+  const [tgoVatPromptOrder, setTgoVatPromptOrder] = useState<ECommerceOrder | null>(null);
+  const [tgoVatRateInput, setTgoVatRateInput] = useState<string>("10");
+
   // Convert E-Commerce Order to Official e-Arşiv / e-Fatura in Accounting
   const handleCreateInvoiceFromOrder = (ecoOrder: ECommerceOrder) => {
-    if (ecoOrder.marketplace === "trendyol_go") {
-      const kdvInput = window.prompt(
-        "TGO API yanıtı KDV oranı bilgisi içermiyor. Bu sipariş için uygulanacak KDV oranını (%) doğrulayarak girin:",
-        "10"
-      );
-      if (kdvInput === null) return;
-      const tgoVatRate = Number(kdvInput.replace(",", "."));
-      if (!Number.isFinite(tgoVatRate) || tgoVatRate < 0 || tgoVatRate > 100) {
-        showToast("Geçersiz KDV oranı girildi; fatura kesilmedi.");
-        return;
-      }
-      handleCreateTgoInvoiceFromOrder(ecoOrder, tgoVatRate);
-      return;
-    }
     if (ecoOrder.invoiced) {
       showToast(`Bu sipariş için zaten fatura (${ecoOrder.invoiceNumber}) oluşturulmuş.`);
       return;
     }
+    if (ecoOrder.marketplace === "trendyol_go") {
+      setTgoVatRateInput("10");
+      setTgoVatPromptOrder(ecoOrder);
+      return;
+    }
     handleCreateTgoInvoiceFromOrder(ecoOrder, null);
+  };
+
+  const confirmTgoVatAndCreateInvoice = () => {
+    if (!tgoVatPromptOrder) return;
+    const tgoVatRate = Number(tgoVatRateInput.trim().replace(",", "."));
+    if (!Number.isFinite(tgoVatRate) || tgoVatRate < 0 || tgoVatRate > 100) {
+      showToast("Geçersiz KDV oranı girildi; fatura kesilmedi.");
+      return;
+    }
+    const targetOrder = tgoVatPromptOrder;
+    setTgoVatPromptOrder(null);
+    handleCreateTgoInvoiceFromOrder(targetOrder, tgoVatRate);
   };
 
   const handleCreateTgoInvoiceFromOrder = (
     ecoOrder: ECommerceOrder,
     tgoVatRate: number | null
   ) => {
-
     const stMeta = MARKETPLACE_META[ecoOrder.marketplace];
     const subtotal = ecoOrder.items.reduce(
-      (sum, item) => sum + item.totalWithVat / (1 + item.vatRate / 100),
+      (sum, item) => sum + item.totalWithVat / (1 + (tgoVatRate ?? item.vatRate) / 100),
       0
     );
     const totalVat = ecoOrder.grossTotal - subtotal;
@@ -2231,7 +2345,9 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
               icon: TrendingUp,
               badge: formatCurrency(metrics.totalNetPayout),
             },
-          ].map((tab) => {
+          ]
+            .filter((tab) => allowedSubTabIds.includes(tab.id))
+            .map((tab) => {
             const TabIcon = tab.icon;
             const active = currentSection === tab.id;
             return (
@@ -3846,6 +3962,107 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           }
         }}
       />
+
+      {/* Mağaza Silme Onay Penceresi (Yalnızca Kullanıcı, Admin veya Sistem Yöneticisi Onayıyla Silinir) */}
+      {storePendingDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Mağaza Entegrasyonunu Sil
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                  <strong>{storePendingDelete.name}</strong> entegrasyonunu ve kayıtlı API bağlantısını kalıcı olarak silmek istediğinize emin misiniz?
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setStorePendingDelete(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteStoreConfig}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Evet, Entegrasyonu Sil</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TGO KDV Oranı Doğrulama Penceresi (iFrame uyumlu) */}
+      {tgoVatPromptOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                TGO Siparişi KDV Oranı Doğrulaması
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                TGO API yanıtı KDV oranı bilgisi içermiyor.{" "}
+                <strong className="font-mono">{tgoVatPromptOrder.marketplaceOrderNo}</strong>{" "}
+                siparişi için uygulanacak KDV oranını (%) seçin veya girin:
+              </p>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                {["1", "10", "20"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setTgoVatRateInput(preset)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors ${
+                      tgoVatRateInput === preset
+                        ? "bg-orange-500 text-white border-orange-500"
+                        : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    %{preset}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={tgoVatRateInput}
+                onChange={(e) => setTgoVatRateInput(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono"
+                placeholder="10"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTgoVatPromptOrder(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={confirmTgoVatAndCreateInvoice}
+                className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>Faturayı Kes ve TGO'ya Bildir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Store Notification Toast */}
       {storeToast && (

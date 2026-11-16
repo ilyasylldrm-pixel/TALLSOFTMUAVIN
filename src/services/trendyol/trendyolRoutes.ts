@@ -63,12 +63,31 @@ export function createTrendyolModule(options: {
     return value;
   };
 
-  /** Bağlantıyı yalnızca kuran kullanıcı (veya admin) yönetebilir. */
+  /** Bağlantıyı yalnızca ilgili firmanın kullanıcısı, Admin veya Sistem Yöneticisi yönetebilir. */
   const authorizeConnection = (req: AuthRequest, conn: TrendyolConnectionRecord | null) => {
     if (!conn) return;
-    const uid = req.user?.uid;
-    const isAdmin = (req.user as { role?: string } | undefined)?.role === "admin";
-    if (conn.ownerUid && uid !== conn.ownerUid && !isAdmin) {
+    const uid = String(req.user?.uid || "").trim();
+    const email = String(req.user?.email || req.headers["x-user-email"] || "").toLowerCase().trim();
+    const roleHeader = String(
+      (req.user as { role?: string } | undefined)?.role || req.headers["x-user-role"] || ""
+    )
+      .toLowerCase()
+      .trim();
+    const isAdminOrSys =
+      uid === "nuT309AyQxQKddnAp1ZJjlSgBXt2" ||
+      uid === "usr_admin_001" ||
+      email === "ilyasyildirim@outlook.com.tr" ||
+      email === "ilyasylldrm@gmail.com" ||
+      email === "admin@muavin.com" ||
+      email === "admin@tallsoft.com.tr" ||
+      roleHeader.includes("admin") ||
+      roleHeader.includes("sistem yöneticisi") ||
+      roleHeader.includes("sistem yoneticisi");
+    const isCompanyMember =
+      uid === conn.ownerUid ||
+      uid === conn.companyId ||
+      uid === `usr_comp_${conn.companyId}`;
+    if (conn.ownerUid && !isCompanyMember && !isAdminOrSys) {
       throw new TrendyolApiError("Bu firmanın Trendyol bağlantısına erişim yetkiniz yok.", 403, "FORBIDDEN");
     }
   };

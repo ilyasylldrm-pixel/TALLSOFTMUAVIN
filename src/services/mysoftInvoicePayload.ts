@@ -1,5 +1,7 @@
 import type { Branch, CompanySettings, Contact, EDocumentType, Invoice, InvoiceItem } from "../types.ts";
+import { isCompanyDefaultBankEnabled } from "../types.ts";
 import { normalizeMysoftTenantIdentifier } from "./mysoftTenant.ts";
+import { centralStorageService } from "./centralStorageService.ts";
 
 function compileStructuredAddressLocal(
   neighborhood?: string,
@@ -78,12 +80,12 @@ function resolveBranchAddressFromBranches(options: {
   branchDistrict: string;
 } {
   let list = options.branches;
-  if ((!Array.isArray(list) || list.length === 0) && typeof window !== "undefined") {
+  if (!Array.isArray(list) || list.length === 0) {
     try {
-      const activeCompId = window.localStorage.getItem("muavin_active_company_id") || "comp_default";
+      const activeCompId = centralStorageService.getItem("muavin_active_company_id") || "comp_default";
       const isDefault = !activeCompId || activeCompId === "comp_default";
       const key = isDefault ? "muavin_branches" : `muavin_branches_${activeCompId}`;
-      const raw = window.localStorage.getItem(key);
+      const raw = centralStorageService.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) list = parsed;
@@ -558,19 +560,17 @@ export function buildMysoftInvoiceOutboxPayload(
       }
       if (!rawNoteText.includes("Şube Adresi")) {
         let storedBranches: Branch[] = [];
-        if (typeof window !== "undefined") {
-          try {
-            const activeCompId = window.localStorage.getItem("muavin_active_company_id") || "comp_default";
-            const isDefault = !activeCompId || activeCompId === "comp_default";
-            const key = isDefault ? "muavin_branches" : `muavin_branches_${activeCompId}`;
-            const raw = window.localStorage.getItem(key);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) storedBranches = parsed;
-            }
-          } catch {
-            storedBranches = [];
+        try {
+          const activeCompId = centralStorageService.getItem("muavin_active_company_id") || "comp_default";
+          const isDefault = !activeCompId || activeCompId === "comp_default";
+          const key = isDefault ? "muavin_branches" : `muavin_branches_${activeCompId}`;
+          const raw = centralStorageService.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) storedBranches = parsed;
           }
+        } catch {
+          storedBranches = [];
         }
         const subBranches = storedBranches.filter((b) => {
           if (b.status === "passive") return false;
@@ -612,15 +612,24 @@ export function buildMysoftInvoiceOutboxPayload(
           note: `Ticaret Sicil No: ${company.tradeRegisterNo}`,
         });
       }
-      const effBankName = (invoice.paymentAccountName || company.defaultBankName || company.bankName || "").trim();
+      const bankEnabled = isCompanyDefaultBankEnabled(company);
+      const effBankName = (
+        invoice.paymentAccountName ||
+        (bankEnabled ? company.defaultBankName || company.bankName : "") ||
+        ""
+      ).trim();
       const effBankHolder = (
         invoice.paymentAccountHolderName ||
-        company.defaultBankAccountName ||
+        (bankEnabled ? company.defaultBankAccountName : "") ||
         company.companyTitle ||
         company.companyName ||
         ""
       ).trim();
-      const effBankIban = (invoice.paymentIban || company.defaultBankIban || company.iban || "").trim();
+      const effBankIban = (
+        invoice.paymentIban ||
+        (bankEnabled ? company.defaultBankIban || company.iban : "") ||
+        ""
+      ).trim();
       if ((effBankName || effBankIban) && !rawNoteText.includes(effBankIban || "IBAN:")) {
         const bankParts = [
           effBankName ? `Banka Adı: ${effBankName}` : "",
@@ -1164,13 +1173,11 @@ function createInitialDiagnosticLogs(): MysoftDiagnosticLogEntry[] {
 
 const diagnosticLogBuffer: MysoftDiagnosticLogEntry[] = (() => {
   try {
-    if (typeof localStorage !== "undefined") {
-      const raw = localStorage.getItem(DIAGNOSTIC_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as MysoftDiagnosticLogEntry[];
-        }
+    const raw = centralStorageService.getItem(DIAGNOSTIC_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed as MysoftDiagnosticLogEntry[];
       }
     }
   } catch {
@@ -1181,12 +1188,10 @@ const diagnosticLogBuffer: MysoftDiagnosticLogEntry[] = (() => {
 
 function persistDiagnosticLogsToStorage(): void {
   try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(
-        DIAGNOSTIC_STORAGE_KEY,
-        JSON.stringify(diagnosticLogBuffer.slice(0, MAX_DIAGNOSTIC_LOGS)),
-      );
-    }
+    centralStorageService.setItem(
+      DIAGNOSTIC_STORAGE_KEY,
+      JSON.stringify(diagnosticLogBuffer.slice(0, MAX_DIAGNOSTIC_LOGS)),
+    );
   } catch {
     // ignore storage errors
   }
@@ -1249,9 +1254,7 @@ export function getRecentMysoftDiagnosticLogs(limit = 50): MysoftDiagnosticLogEn
 export function clearMysoftDiagnosticLogs(): void {
   diagnosticLogBuffer.length = 0;
   try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(DIAGNOSTIC_STORAGE_KEY, JSON.stringify([]));
-    }
+    centralStorageService.setItem(DIAGNOSTIC_STORAGE_KEY, JSON.stringify([]));
   } catch {
     // ignore
   }

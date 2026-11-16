@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { safeGetStorageItem, safeSetStorageItem, safeRemoveStorageItem } from "../utils/storage";
 
 /**
  * useDataGridRowResizing
@@ -56,9 +57,9 @@ export function applyGlobalRowHeight(heightPx: number | null) {
   });
 
   if (heightPx === null) {
-    sessionStorage.removeItem("muavin_table_row_height");
+    safeRemoveStorageItem("muavin_table_row_height");
   } else {
-    sessionStorage.setItem("muavin_table_row_height", String(heightPx));
+    safeSetStorageItem("muavin_table_row_height", String(heightPx));
   }
 
   window.dispatchEvent(new CustomEvent("muavin:row-height-change", { detail: { height: heightPx } }));
@@ -108,7 +109,7 @@ export function useDataGridRowResizing() {
 
     // Apply remembered row height to any newly mounted table rows
     const applySavedRowHeight = () => {
-      const saved = sessionStorage.getItem("muavin_table_row_height");
+      const saved = safeGetStorageItem("muavin_table_row_height");
       if (saved) {
         const heightNum = parseInt(saved, 10);
         if (!isNaN(heightNum) && heightNum >= 26 && heightNum <= 350) {
@@ -311,11 +312,11 @@ export function useDataGridRowResizing() {
         if (hudBadge) hudBadge.style.display = "none";
         if (activeRow) activeRow.classList.remove("row-resize-hover");
 
-        // If Shift was pressed, persist this height to sessionStorage as preferred row height
+        // If Shift was pressed, persist this height to central storage as preferred row height
         if (e.shiftKey && activeRow) {
           const finalHeight = parseInt(activeRow.dataset.customHeight || "", 10);
           if (!isNaN(finalHeight)) {
-            sessionStorage.setItem("muavin_table_row_height", String(finalHeight));
+            safeSetStorageItem("muavin_table_row_height", String(finalHeight));
             window.dispatchEvent(new CustomEvent("muavin:row-height-change", { detail: { height: finalHeight } }));
             showToast(`Tüm satırlar ${finalHeight}px olarak ayarlandı.`);
           }
@@ -357,7 +358,7 @@ export function useDataGridRowResizing() {
               td.style.height = "";
             });
           });
-          sessionStorage.removeItem("muavin_table_row_height");
+          safeRemoveStorageItem("muavin_table_row_height");
           window.dispatchEvent(new CustomEvent("muavin:row-height-change", { detail: { height: null } }));
           showToast("Tablodaki tüm satır yükseklikleri varsayılana sıfırlandı.");
         } else {
@@ -434,7 +435,7 @@ export function useDataGridRowResizing() {
           });
         });
 
-        sessionStorage.setItem("muavin_table_row_height", String(newHeight));
+        safeSetStorageItem("muavin_table_row_height", String(newHeight));
         window.dispatchEvent(new CustomEvent("muavin:row-height-change", { detail: { height: newHeight } }));
 
         if (hudBadge) {

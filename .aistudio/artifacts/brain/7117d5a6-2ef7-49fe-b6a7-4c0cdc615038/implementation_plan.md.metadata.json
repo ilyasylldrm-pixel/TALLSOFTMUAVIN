@@ -1,6 +1,0 @@
-{
-  "summary":  "Mali Müşavir modülünde 'Müşavire Dönem İcmali Gönder' butonunun 'Bilanço İndir' olarak yeniden adlandırılması; Bilanço, Gelirler ve Giderler listelerinin VKN/TCKN bilgileriyle birlikte hem Excel hem PDF olarak dışa aktarılması; ve GİB Defter Beyan Sistemi (DBS) formatında Gelir ve Gider kayıtlarının ayrı ayrı indirilebilmesi için detaylı uygulama ve mimari planı.",
-  "updatedAt":  "2026-11-11T18:11:14.501829173Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}

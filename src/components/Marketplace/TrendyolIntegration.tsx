@@ -16,6 +16,8 @@ import {
 import { auth } from "../../lib/firebase";
 import type { CompanySettings } from "../../types";
 import { ModuleEntranceHeader } from "../common/ModuleEntranceHeader";
+import { safeGetStorageItem } from "../../utils/storage";
+import { resolveCentralUrl } from "../../config/env";
 
 /**
  * Trendyol entegrasyon ekranı: firma kendi Trendyol API bilgilerini girer,
@@ -101,7 +103,7 @@ async function apiHeaders(companyId: string): Promise<Record<string, string>> {
     /* yerel oturuma düş */
   }
   try {
-    const raw = window.localStorage.getItem("muavin_active_user") || window.sessionStorage.getItem("muavin_active_user");
+    const raw = safeGetStorageItem("muavin_active_user");
     const parsed = raw ? JSON.parse(raw) : null;
     const uid = String(parsed?.id || parsed?.userId || parsed?.companyId || companyId).trim();
     headers.Authorization = `Bearer ${uid}`;
@@ -114,7 +116,7 @@ async function apiHeaders(companyId: string): Promise<Record<string, string>> {
 }
 
 async function api<T>(companyId: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  const url = `/api/marketplace/trendyol${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
+  const url = resolveCentralUrl(`/api/marketplace/trendyol${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`);
   const response = await fetch(url, {
     method: init.method || "GET",
     headers: await apiHeaders(companyId),

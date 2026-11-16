@@ -3,6 +3,7 @@ import { Building2, Loader2, RefreshCw } from "lucide-react";
 import { useMysoftTenants } from "../hooks/useMysoftTenants";
 import { isAdminOrSysAdmin } from "../types";
 import { normalizeMysoftTenantIdentifier } from "../services/mysoftEDocumentService";
+import { safeGetStorageItem } from "../utils/storage";
 
 export interface MysoftTenantPickerProps {
   value?: string;
@@ -27,9 +28,7 @@ export const MysoftTenantPicker: React.FC<MysoftTenantPickerProps> = ({
   const effectiveUser = React.useMemo(() => {
     if (currentUser !== undefined) return currentUser;
     try {
-      const raw =
-        localStorage.getItem("muavin_active_user") ||
-        sessionStorage.getItem("muavin_active_user");
+      const raw = safeGetStorageItem("muavin_active_user");
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;

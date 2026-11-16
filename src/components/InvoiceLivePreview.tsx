@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react";
 import type { CompanySettings, Contact, Invoice, InvoiceItem, InvoicePreviewCssConfig } from "../types";
-import { getContactAccountCode } from "../types";
+import {
+  getContactAccountCode,
+  isCompanyLogoEnabled,
+  isCompanyDefaultBankEnabled,
+} from "../types";
 import { numberToTurkishWords } from "../utils/numberToTurkishWords";
 import { getCurrencySymbol, formatDate } from "../utils/exportUtils";
 import { computeInvoiceTotals, formatWithholdingBadge } from "../utils/taxCalculationService";
@@ -103,13 +107,15 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
     companySettings?.taxNumber ||
     "-";
 
+  const bankEnabled = isCompanyDefaultBankEnabled(companySettings);
   const bankIban =
-    invoice.paymentIban || companySettings?.defaultBankIban || companySettings?.iban || "";
+    invoice.paymentIban ||
+    (bankEnabled ? companySettings?.defaultBankIban || companySettings?.iban : "") ||
+    "";
   const bankName =
     invoice.paymentBankName ||
     invoice.paymentAccountName ||
-    companySettings?.defaultBankName ||
-    companySettings?.bankName ||
+    (bankEnabled ? companySettings?.defaultBankName || companySettings?.bankName : "") ||
     "";
 
   const signatureNode =
@@ -199,11 +205,14 @@ export const InvoiceLivePreview: React.FC<InvoiceLivePreviewProps> = ({
 
         {/* Right: Logo & Metadata Table */}
         <div className="col-span-4 flex flex-col items-end space-y-1">
-          {design.showCompanyLogo !== false && (
-            <div className="max-h-7 overflow-hidden flex justify-end">
-              <Logo size="sm" src={companySettings?.logoUrl || "/logo.svg"} />
-            </div>
-          )}
+          {design.showCompanyLogo !== false &&
+            isCompanyLogoEnabled(companySettings) &&
+            companySettings?.logoUrl &&
+            companySettings.logoUrl !== "/logo.svg" && (
+              <div className="max-h-7 overflow-hidden flex justify-end">
+                <Logo size="sm" src={companySettings.logoUrl} />
+              </div>
+            )}
           <div className="w-full border border-slate-700 text-[8.5px]">
             <div className="flex justify-between px-1.5 py-0.5 bg-slate-100 border-b border-slate-300">
               <span className="font-bold">Özelleştirme:</span>

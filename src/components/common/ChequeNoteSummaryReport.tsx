@@ -34,6 +34,9 @@ interface ChequeNoteSummaryReportProps {
   promissoryNotes: PromissoryNote[];
   contacts?: Contact[];
   compact?: boolean;
+  allowCheques?: boolean;
+  allowNotes?: boolean;
+  allowContacts?: boolean;
   onNavigateToPortfolio?: () => void;
 }
 
@@ -44,11 +47,24 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
   cheques = [],
   promissoryNotes = [],
   contacts = [],
-  compact = false,
+  allowCheques = true,
+  allowNotes = true,
+  allowContacts = true,
   onNavigateToPortfolio,
 }) => {
   const [groupBy, setGroupBy] = useState<GroupMode>("status");
   const [instrumentFilter, setInstrumentFilter] = useState<InstrumentFilter>("all");
+
+  const effectiveInstrumentFilter: InstrumentFilter = useMemo(() => {
+    if (allowCheques && !allowNotes) return "cheque";
+    if (!allowCheques && allowNotes) return "note";
+    return instrumentFilter;
+  }, [allowCheques, allowNotes, instrumentFilter]);
+
+  const effectiveGroupBy: GroupMode = useMemo(() => {
+    if (!allowContacts && groupBy === "contact") return "status";
+    return groupBy;
+  }, [allowContacts, groupBy]);
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -67,21 +83,24 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
       rawStatus: string;
     }> = [];
 
-    if (instrumentFilter === "all" || instrumentFilter === "cheque") {
+    if (allowCheques && (effectiveInstrumentFilter === "all" || effectiveInstrumentFilter === "cheque")) {
       cheques.forEach((c) => {
         let normalizedStatus: "portfolio" | "collected" | "endorsed" | "bounced" = "portfolio";
         if (c.status === "collected" || c.status === "paid") normalizedStatus = "collected";
         else if (c.status === "endorsed") normalizedStatus = "endorsed";
         else if (c.status === "bounced" || c.status === "returned") normalizedStatus = "bounced";
 
-        const matchedContact = c.contactId ? contacts.find((cnt) => cnt.id === c.contactId) : undefined;
+        const matchedContact =
+          allowContacts && c.contactId ? contacts.find((cnt) => cnt.id === c.contactId) : undefined;
 
         items.push({
           id: c.id,
           instrumentType: "cheque",
           direction: c.type,
           number: c.chequeNumber || "-",
-          contactName: c.contactName || matchedContact?.name || c.drawerName || "Genel Cari",
+          contactName: allowContacts
+            ? c.contactName || matchedContact?.name || c.drawerName || "Genel Cari"
+            : `Çek #${c.chequeNumber || "-"}`,
           dueDate: c.dueDate || todayStr,
           amount: Number(c.amount) || 0,
           currency: c.currency || "TRY",
@@ -91,21 +110,24 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
       });
     }
 
-    if (instrumentFilter === "all" || instrumentFilter === "note") {
+    if (allowNotes && (effectiveInstrumentFilter === "all" || effectiveInstrumentFilter === "note")) {
       promissoryNotes.forEach((n) => {
         let normalizedStatus: "portfolio" | "collected" | "endorsed" | "bounced" = "portfolio";
         if (n.status === "collected" || n.status === "paid") normalizedStatus = "collected";
         else if (n.status === "endorsed") normalizedStatus = "endorsed";
         else if (n.status === "protested" || n.status === "returned") normalizedStatus = "bounced";
 
-        const matchedContact = n.contactId ? contacts.find((cnt) => cnt.id === n.contactId) : undefined;
+        const matchedContact =
+          allowContacts && n.contactId ? contacts.find((cnt) => cnt.id === n.contactId) : undefined;
 
         items.push({
           id: n.id,
           instrumentType: "note",
           direction: n.type,
           number: n.noteNumber || "-",
-          contactName: n.contactName || matchedContact?.name || n.debtorName || "Genel Cari",
+          contactName: allowContacts
+            ? n.contactName || matchedContact?.name || n.debtorName || "Genel Cari"
+            : `Senet #${n.noteNumber || "-"}`,
           dueDate: n.dueDate || todayStr,
           amount: Number(n.amount) || 0,
           currency: n.currency || "TRY",
@@ -116,7 +138,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
     }
 
     return items;
-  }, [cheques, promissoryNotes, contacts, instrumentFilter, todayStr]);
+  }, [cheques, promissoryNotes, contacts, allowCheques, allowNotes, allowContacts, effectiveInstrumentFilter, todayStr]);
 
   // 1. Duruma Göre Gruplandırma (Bekleyen / Portföyde, Tahsil Edilmiş / Ödenmiş, Ciro Edilmiş, Karşılıksız / Protestolu)
   const statusSummary = useMemo(() => {
@@ -184,6 +206,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
 
   // 3. Cari Hesaba Göre Gruplandırma
   const contactSummary = useMemo(() => {
+    if (!allowContacts) return [];
     const map = new Map<
       string,
       {
@@ -225,9 +248,28 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
         amount: Math.round(c.totalAmount),
         color: ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"][idx % 8],
       }));
-  }, [unifiedItems]);
+  }, [unifiedItems, allowContacts]);
+
+  if (!allowCheques && !allowNotes) {
+    return null;
+  }
 
   const totalPortfolioSum = unifiedItems.reduce((s, i) => s + i.amount, 0);
+  const reportTitle =
+    allowCheques && allowNotes
+      ? "Çek / Senet Durum Özet Raporu"
+      : allowCheques
+      ? "Çek Durum Özet Raporu"
+      : "Senet Durum Özet Raporu";
+  const reportSubtitle = allowContacts
+    ? "Durumuna (bekleyen, tahsil edilmiş, ciro edilmiş), vade tarihine veya cari hesaba göre grafiksel analiz"
+    : "Durumuna (bekleyen, tahsil edilmiş, ciro edilmiş) veya vade tarihine göre grafiksel analiz";
+  const emptyStateLabel =
+    allowCheques && allowNotes
+      ? "Gösterilecek çek veya senet kaydı bulunmuyor."
+      : allowCheques
+      ? "Gösterilecek çek kaydı bulunmuyor."
+      : "Gösterilecek senet kaydı bulunmuyor.";
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-5">
@@ -239,56 +281,56 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
               <FileCheck2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Çek / Senet Durum Özet Raporu</span>
-                <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                <span>{reportTitle}</span>
+                <span className="text-[11px] font-mono tabular-nums font-bold px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800">
                   {unifiedItems.length} Evrak • {formatCurrency(totalPortfolioSum, "TRY")}
                 </span>
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Durumuna (bekleyen, tahsil edilmiş, ciro edilmiş), vade tarihine veya cari hesaba göre grafiksel analiz
-              </p>
+              <p className="text-xs text-slate-500 mt-0.5">{reportSubtitle}</p>
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Evrak Tipi Filtresi */}
-          <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-            <button
-              type="button"
-              onClick={() => setInstrumentFilter("all")}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                instrumentFilter === "all"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400"
-              }`}
-            >
-              Tümü ({cheques.length + promissoryNotes.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setInstrumentFilter("cheque")}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                instrumentFilter === "cheque"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400"
-              }`}
-            >
-              Çek ({cheques.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setInstrumentFilter("note")}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                instrumentFilter === "note"
-                  ? "bg-purple-600 text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400"
-              }`}
-            >
-              Senet ({promissoryNotes.length})
-            </button>
-          </div>
+          {/* Evrak Tipi Filtresi (Sadece hem Çek hem Senet yetkisi varsa gösterilir) */}
+          {allowCheques && allowNotes && (
+            <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+              <button
+                type="button"
+                onClick={() => setInstrumentFilter("all")}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer tabular-nums ${
+                  effectiveInstrumentFilter === "all"
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Tümü ({cheques.length + promissoryNotes.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstrumentFilter("cheque")}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer tabular-nums ${
+                  effectiveInstrumentFilter === "cheque"
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Çek ({cheques.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstrumentFilter("note")}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer tabular-nums ${
+                  effectiveInstrumentFilter === "note"
+                    ? "bg-purple-600 text-white shadow-2xs"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Senet ({promissoryNotes.length})
+              </button>
+            </div>
+          )}
 
           {/* Gruplandırma Boyutu Seçici */}
           <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
@@ -296,7 +338,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
               type="button"
               onClick={() => setGroupBy("status")}
               className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                groupBy === "status"
+                effectiveGroupBy === "status"
                   ? "bg-indigo-600 text-white shadow-2xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
@@ -308,7 +350,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
               type="button"
               onClick={() => setGroupBy("dueDate")}
               className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                groupBy === "dueDate"
+                effectiveGroupBy === "dueDate"
                   ? "bg-indigo-600 text-white shadow-2xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
@@ -316,18 +358,20 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
               <Calendar className="w-3.5 h-3.5" />
               <span>Vade Tarihine Göre</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setGroupBy("contact")}
-              className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                groupBy === "contact"
-                  ? "bg-indigo-600 text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Cari Hesaba Göre</span>
-            </button>
+            {allowContacts && (
+              <button
+                type="button"
+                onClick={() => setGroupBy("contact")}
+                className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  effectiveGroupBy === "contact"
+                    ? "bg-indigo-600 text-white shadow-2xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Cari Hesaba Göre</span>
+              </button>
+            )}
           </div>
 
           {onNavigateToPortfolio && (
@@ -343,7 +387,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
         </div>
       </div>
 
-      {/* 4 Hızlı Durum KPI Kartı (Her Zaman Görünür) */}
+      {/* 4 Hızlı Durum KPI Kartı */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {statusSummary.map((st) => (
           <div
@@ -360,11 +404,11 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
                   {st.name}
                 </span>
               </div>
-              <div className="text-sm font-black font-mono text-slate-900 dark:text-white mt-1">
+              <div className="text-sm font-black font-mono tabular-nums text-slate-900 dark:text-white mt-1">
                 {formatCurrency(st.amount, "TRY")}
               </div>
             </div>
-            <span className={`px-2.5 py-1 rounded-lg text-xs font-black font-mono border shrink-0 ${st.badgeClass}`}>
+            <span className={`px-2.5 py-1 rounded-lg text-xs font-black font-mono tabular-nums border shrink-0 ${st.badgeClass}`}>
               {st.count} Adet
             </span>
           </div>
@@ -378,11 +422,15 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
               <BarChart3 className="w-4 h-4 text-indigo-600" />
-              {groupBy === "status"
+              {effectiveGroupBy === "status"
                 ? "Duruma Göre Tutar Dağılım Grafiği"
-                : groupBy === "dueDate"
+                : effectiveGroupBy === "dueDate"
                 ? "Vade Dilimlerine Göre Nakit Akış Projeksiyonu"
-                : "Cari Hesaplara Göre Çek/Senet Dağılımı"}
+                : allowCheques && allowNotes
+                ? "Cari Hesaplara Göre Çek/Senet Dağılımı"
+                : allowCheques
+                ? "Cari Hesaplara Göre Çek Dağılımı"
+                : "Cari Hesaplara Göre Senet Dağılımı"}
             </span>
           </div>
 
@@ -390,15 +438,15 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
             {unifiedItems.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
                 <PieChartIcon className="w-8 h-8 mb-2 opacity-40" />
-                <span>Gösterilecek çek veya senet kaydı bulunmuyor.</span>
+                <span>{emptyStateLabel}</span>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={
-                    groupBy === "status"
+                    effectiveGroupBy === "status"
                       ? statusSummary
-                      : groupBy === "dueDate"
+                      : effectiveGroupBy === "dueDate"
                       ? maturitySummary
                       : contactSummary
                   }
@@ -426,9 +474,9 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
                     }}
                   />
                   <Bar dataKey="amount" radius={[8, 8, 0, 0]}>
-                    {(groupBy === "status"
+                    {(effectiveGroupBy === "status"
                       ? statusSummary
-                      : groupBy === "dueDate"
+                      : effectiveGroupBy === "dueDate"
                       ? maturitySummary
                       : contactSummary
                     ).map((entry, index) => (
@@ -444,7 +492,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
         {/* SAĞ: Gruplandırılmış Detaylı Özet Tablosu */}
         <div className="lg:col-span-6 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900 flex flex-col justify-between">
           <div className="overflow-x-auto">
-            {groupBy === "status" && (
+            {effectiveGroupBy === "status" && (
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/90 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase">
@@ -479,7 +527,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
               </table>
             )}
 
-            {groupBy === "dueDate" && (
+            {effectiveGroupBy === "dueDate" && (
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/90 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase">
@@ -498,13 +546,13 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
                           <span>{row.name}</span>
                         </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
+                        <td className="py-2.5 px-3 text-center font-mono tabular-nums font-bold text-slate-700 dark:text-slate-300">
                           {row.count}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-500">
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500">
                           %{pct}
                         </td>
-                        <td className="py-2.5 px-3.5 text-right font-mono font-black text-slate-900 dark:text-white">
+                        <td className="py-2.5 px-3.5 text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
                           {formatCurrency(row.amount, "TRY")}
                         </td>
                       </tr>
@@ -514,7 +562,7 @@ export const ChequeNoteSummaryReport: React.FC<ChequeNoteSummaryReportProps> = (
               </table>
             )}
 
-            {groupBy === "contact" && (
+            {allowContacts && effectiveGroupBy === "contact" && (
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/90 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase">

@@ -65,6 +65,8 @@ interface ReportsProps {
   activeSubTab?: "reports" | "reports_advisor";
   onSelectSubTab?: (subTab: "reports" | "reports_advisor") => void;
   initialTab?: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor";
+  canAccessTaxReports?: boolean;
+  canAccessAdvisor?: boolean;
 }
 
 // 2026 Gelir Vergisi Tarifesi (GVK M.103) - Progressive Tax Bracket Calculation
@@ -139,29 +141,60 @@ export const Reports: React.FC<ReportsProps> = ({
   activeSubTab,
   onSelectSubTab,
   initialTab,
+  canAccessTaxReports = true,
+  canAccessAdvisor = true,
 }) => {
   const { theme } = useTheme();
+  const resolveAllowedReportTab = (
+    preferred: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor"
+  ): "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor" => {
+    if (preferred === "advisor") {
+      return canAccessAdvisor ? "advisor" : "monthly";
+    }
+    return canAccessTaxReports ? preferred : canAccessAdvisor ? "advisor" : preferred;
+  };
+
   const [activeTab, setActiveTab] = useState<
     "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor"
-  >(activeSubTab === "reports_advisor" ? "advisor" : initialTab || "monthly");
+  >(() =>
+    resolveAllowedReportTab(
+      activeSubTab === "reports_advisor" ? "advisor" : initialTab || "monthly"
+    )
+  );
 
   React.useEffect(() => {
-    if (activeSubTab === "reports_advisor") {
+    if (!canAccessTaxReports && canAccessAdvisor && activeTab !== "advisor") {
       setActiveTab("advisor");
-    } else if (activeSubTab === "reports" && activeTab === "advisor") {
+      if (onSelectSubTab && activeSubTab !== "reports_advisor") {
+        onSelectSubTab("reports_advisor");
+      }
+      return;
+    }
+    if (!canAccessAdvisor && activeTab === "advisor") {
+      setActiveTab("monthly");
+      if (onSelectSubTab && activeSubTab === "reports_advisor") {
+        onSelectSubTab("reports");
+      }
+      return;
+    }
+    if (activeSubTab === "reports_advisor" && canAccessAdvisor) {
+      setActiveTab("advisor");
+    } else if (activeSubTab === "reports" && activeTab === "advisor" && canAccessTaxReports) {
       setActiveTab("monthly");
     }
-  }, [activeSubTab]);
+  }, [activeSubTab, canAccessTaxReports, canAccessAdvisor]);
 
   React.useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      setActiveTab(resolveAllowedReportTab(initialTab));
     }
-  }, [initialTab]);
+  }, [initialTab, canAccessTaxReports, canAccessAdvisor]);
 
   const handleSelectReportTab = (
     tab: "monthly" | "periodic" | "guidelines" | "ledger" | "ai_insights" | "advisor"
   ) => {
+    if (tab === "advisor" && !canAccessAdvisor) return;
+    if (tab !== "advisor" && !canAccessTaxReports) return;
     setActiveTab(tab);
     if (onSelectSubTab) {
       if (tab === "advisor") {
@@ -813,6 +846,7 @@ export const Reports: React.FC<ReportsProps> = ({
       />
 
       {/* 5 SUMMARY STAT CARDS GRID */}
+      {canAccessTaxReports && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: 1 No.lu KDV */}
         <div
@@ -922,83 +956,92 @@ export const Reports: React.FC<ReportsProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* SUB-TAB NAVIGATION */}
       <div
         className="flex items-center gap-1.5 p-1.5 rounded-2xl border shadow-2xs overflow-x-auto"
         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
       >
-        <button
-          onClick={() => handleSelectReportTab("monthly")}
-          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "monthly"
-              ? "bg-[#0f6bae] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
-          }`}
-        >
-          <Receipt className="w-3.5 h-3.5" />
-          12 Aylık Vergi Detay Matrisi
-        </button>
+        {canAccessTaxReports && (
+          <>
+            <button
+              onClick={() => handleSelectReportTab("monthly")}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "monthly"
+                  ? "bg-[#0f6bae] text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              12 Aylık Vergi Detay Matrisi
+            </button>
 
-        <button
-          onClick={() => handleSelectReportTab("periodic")}
-          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "periodic"
-              ? "bg-[#0f6bae] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
-          }`}
-        >
-          <Percent className="w-3.5 h-3.5" />
-          4 Dönemlik Geçici Vergi
-        </button>
+            <button
+              onClick={() => handleSelectReportTab("periodic")}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "periodic"
+                  ? "bg-[#0f6bae] text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+              }`}
+            >
+              <Percent className="w-3.5 h-3.5" />
+              4 Dönemlik Geçici Vergi
+            </button>
 
-        <button
-          onClick={() => handleSelectReportTab("ledger")}
-          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "ledger"
-              ? "bg-[#0f6bae] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
-          }`}
-        >
-          <BarChart3 className="w-3.5 h-3.5" />
-          Genel Muavin & Defter Kayıtları
-        </button>
+            <button
+              onClick={() => handleSelectReportTab("ledger")}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "ledger"
+                  ? "bg-[#0f6bae] text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Genel Muavin & Defter Kayıtları
+            </button>
 
-        <button
-          onClick={() => handleSelectReportTab("guidelines")}
-          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "guidelines"
-              ? "bg-[#0f6bae] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
-          }`}
-        >
-          <Calendar className="w-3.5 h-3.5" />
-          Vergi Takvimi & Mevzuat Rehberi
-        </button>
+            <button
+              onClick={() => handleSelectReportTab("guidelines")}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === "guidelines"
+                  ? "bg-[#0f6bae] text-white shadow-xs"
+                  : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Vergi Takvimi & Mevzuat Rehberi
+            </button>
+          </>
+        )}
 
-        <button
-          onClick={() => handleSelectReportTab("advisor")}
-          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "advisor"
-              ? "bg-[#0f6bae] text-white shadow-xs"
-              : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
-          }`}
-        >
-          <Scale className="w-3.5 h-3.5" />
-          <span>Mali Müşavir</span>
-        </button>
+        {canAccessAdvisor && (
+          <button
+            onClick={() => handleSelectReportTab("advisor")}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "advisor"
+                ? "bg-[#0f6bae] text-white shadow-xs"
+                : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span>Mali Müşavir</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => handleSelectReportTab("ai_insights")}
-          className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "ai_insights"
-              ? "bg-gradient-to-r from-[#0f6bae] to-[#005289] text-white shadow-xs font-black"
-              : "text-blue-600 dark:text-blue-400 hover:text-blue-800 hover:bg-blue-50/70 dark:hover:bg-blue-950/40"
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-          <span>AI Gelir/Gider Örüntü Analitiği & Aksiyonlar</span>
-        </button>
+        {canAccessTaxReports && (
+          <button
+            onClick={() => handleSelectReportTab("ai_insights")}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "ai_insights"
+                ? "bg-gradient-to-r from-[#0f6bae] to-[#005289] text-white shadow-xs font-black"
+                : "text-blue-600 dark:text-blue-400 hover:text-blue-800 hover:bg-blue-50/70 dark:hover:bg-blue-950/40"
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>AI Gelir/Gider Örüntü Analitiği & Aksiyonlar</span>
+          </button>
+        )}
       </div>
 
       {/* ========================================================================= */}

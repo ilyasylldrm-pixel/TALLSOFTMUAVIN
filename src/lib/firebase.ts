@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
+import { resolveCentralUrl } from "../config/env";
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -36,7 +37,7 @@ import {
   deleteObject
 } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
-import { InvoiceTaxItem, AppModuleKey } from "../types";
+import { InvoiceTaxItem, AppModuleKey, isAdminOrSysAdmin } from "../types";
 import {
   safeGetStorageItem,
   safeSetStorageItem,
@@ -93,21 +94,17 @@ let memoryQuotaExhaustedUntil = 0;
 export function isFirestoreWriteQuotaExhausted(): boolean {
   const now = Date.now();
   if (memoryQuotaExhaustedUntil > now) return true;
-  if (typeof window !== "undefined") {
-    try {
-      const raw =
-        window.sessionStorage?.getItem(QUOTA_EXHAUSTED_STORAGE_KEY) ||
-        window.localStorage?.getItem(QUOTA_EXHAUSTED_STORAGE_KEY);
-      if (raw) {
-        const until = Number(raw);
-        if (!isNaN(until) && until > now) {
-          memoryQuotaExhaustedUntil = until;
-          return true;
-        }
+  try {
+    const raw = safeGetStorageItem(QUOTA_EXHAUSTED_STORAGE_KEY);
+    if (raw) {
+      const until = Number(raw);
+      if (!isNaN(until) && until > now) {
+        memoryQuotaExhaustedUntil = until;
+        return true;
       }
-    } catch {
-      // ignore storage errors
     }
+  } catch {
+    // ignore storage errors
   }
   return false;
 }
@@ -123,14 +120,7 @@ export function checkAndMarkFirestoreQuotaError(error: unknown): boolean {
   ) {
     const until = Date.now() + QUOTA_COOLDOWN_MS;
     memoryQuotaExhaustedUntil = until;
-    if (typeof window !== "undefined") {
-      try {
-        window.sessionStorage?.setItem(QUOTA_EXHAUSTED_STORAGE_KEY, String(until));
-        window.localStorage?.setItem(QUOTA_EXHAUSTED_STORAGE_KEY, String(until));
-      } catch {
-        // ignore
-      }
-    }
+    safeSetStorageItem(QUOTA_EXHAUSTED_STORAGE_KEY, String(until));
     return true;
   }
   return false;
@@ -377,12 +367,26 @@ function mergeUserProfilePreservingModules(
   incoming: UserProfileData
 ): UserProfileData {
   if (!existing) return incoming;
+  const existingTs = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+  const incomingTs = incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : 0;
+  const keepExistingModules =
+    existingTs > 0 &&
+    incomingTs > 0 &&
+    existingTs > incomingTs &&
+    Array.isArray(existing.allowedModules);
+
   return {
     ...existing,
     ...incoming,
     username: incoming.username || existing.username,
     passwordPlain: incoming.passwordPlain || existing.passwordPlain,
-    allowedModules: Array.isArray(incoming.allowedModules)
+    updatedAt:
+      existingTs > incomingTs
+        ? existing.updatedAt
+        : incoming.updatedAt || existing.updatedAt,
+    allowedModules: keepExistingModules
+      ? existing.allowedModules
+      : Array.isArray(incoming.allowedModules)
       ? incoming.allowedModules
       : existing.allowedModules,
   };
@@ -412,12 +416,10 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
     }
     saveLocalUsersBackup(existing);
 
-    // If the updated user is currently logged in, update active user session storage immediately
+    // If the updated user is currently logged in, update active user session immediately
     if (typeof window !== "undefined") {
       try {
-        const storedUserRaw =
-          window.localStorage?.getItem("muavin_active_user") ||
-          window.sessionStorage?.getItem("muavin_active_user");
+        const storedUserRaw = safeGetStorageItem("muavin_active_user");
         if (storedUserRaw) {
           const parsedU = JSON.parse(storedUserRaw);
           const isSameUser =
@@ -435,12 +437,7 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
               id: parsedU.id || user.userId,
               allowedModules: preservedModules,
             };
-            if (window.localStorage?.getItem("muavin_active_user")) {
-              window.localStorage.setItem("muavin_active_user", JSON.stringify(updatedActive));
-            }
-            if (window.sessionStorage?.getItem("muavin_active_user")) {
-              window.sessionStorage.setItem("muavin_active_user", JSON.stringify(updatedActive));
-            }
+            safeSetStorageItem("muavin_active_user", JSON.stringify(updatedActive));
             window.dispatchEvent(new CustomEvent("muavin:central-sync-broadcast"));
           }
         }
@@ -451,7 +448,7 @@ export async function saveUserProfile(user: UserProfileData): Promise<void> {
 
     // Sync to server-side cross-device cloud store immediately
     if (typeof window !== "undefined") {
-      fetch("/api/cloud-sync/system", {
+      fetch(resolveCentralUrl("/api/cloud-sync/system"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -517,12 +514,12 @@ function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnTy
   const isSysAdmin =
     user.userId === "admin" ||
     user.userId === "main_admin" ||
-    user.userId === "usr_admin_001" ||
-    user.email?.toLowerCase().includes("admin") ||
-    user.email?.toLowerCase() === "ilyasylldrm@gmail.com" ||
-    user.email?.toLowerCase() === "ilyasyildirim@outlook.com.tr" ||
-    user.role?.toLowerCase().includes("admin") ||
-    user.role === "Sistem Yöneticisi";
+    isAdminOrSysAdmin({
+      id: user.userId,
+      email: user.email,
+      role: user.role,
+      username: user.username,
+    });
 
   const derivedUsername =
     user.username?.trim() ||
@@ -546,30 +543,14 @@ function enrichUserProfileCredentials(user: UserProfileData, companies: ReturnTy
 
 // Admin Operations: Get all users from Firestore with local backup union and company users
 export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
-  // 0a. Pull from server-side cross-device cloud store first (instant, quota-free)
-  if (typeof window !== "undefined") {
-    try {
-      const resp = await fetch("/api/cloud-sync/state");
-      if (resp.ok) {
-        const srv = await resp.json();
-        if (Array.isArray(srv?.companiesRegistry) && srv.companiesRegistry.length > 0) {
-          saveCompaniesList(srv.companiesRegistry, false);
-        }
-        if (Array.isArray(srv?.usersRegistry) && srv.usersRegistry.length > 0) {
-          saveLocalUsersBackup(srv.usersRegistry, false);
-        }
-      }
-    } catch {
-      // ignore offline
-    }
-  }
-
-  // 0b. Check central_sync_state in Firestore so existing companies & users from central cloud registry are never lost
+  // 0a. Check central_sync_state in Firestore first as baseline
+  let firestoreSyncVersion = 0;
   if (!isFirestoreWriteQuotaExhausted()) {
     try {
       const syncSnap = await getDoc(doc(db, "system_settings", "central_sync_state"));
       if (syncSnap.exists()) {
         const syncData = syncSnap.data();
+        firestoreSyncVersion = Number(syncData?.version) || 0;
         if (Array.isArray(syncData?.companiesRegistry) && syncData.companiesRegistry.length > 0) {
           saveCompaniesList(syncData.companiesRegistry, false);
         }
@@ -579,6 +560,27 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
       }
     } catch (err) {
       checkAndMarkFirestoreQuotaError(err);
+    }
+  }
+
+  // 0b. Pull from server-side cross-device cloud store (instant, quota-free; overrides stale Firestore if newer)
+  if (typeof window !== "undefined") {
+    try {
+      const resp = await fetch(resolveCentralUrl("/api/cloud-sync/state"));
+      if (resp.ok) {
+        const srv = await resp.json();
+        const srvVersion = Number(srv?.version) || 0;
+        if (srvVersion >= firestoreSyncVersion) {
+          if (Array.isArray(srv?.companiesRegistry) && srv.companiesRegistry.length > 0) {
+            saveCompaniesList(srv.companiesRegistry, false);
+          }
+          if (Array.isArray(srv?.usersRegistry) && srv.usersRegistry.length > 0) {
+            saveLocalUsersBackup(srv.usersRegistry, false);
+          }
+        }
+      }
+    } catch {
+      // ignore offline
     }
   }
 
@@ -621,11 +623,11 @@ export async function getAllUsersProfiles(): Promise<UserProfileData[]> {
             u.userId === `usr_${cleanUser}` ||
             u.userId === `usr_comp_${comp.id}`)
       );
-      const resolvedAllowedModules = Array.isArray(existingLocalMatch?.allowedModules)
+      const resolvedAllowedModules: AppModuleKey[] = Array.isArray(existingLocalMatch?.allowedModules)
         ? existingLocalMatch.allowedModules
-        : comp.moduleRestrictionEnabled && Array.isArray(comp.allowedModules)
+        : Array.isArray(comp.allowedModules)
         ? (comp.allowedModules as AppModuleKey[])
-        : undefined;
+        : ["dashboard"];
 
       const compUser: UserProfileData = {
         userId: existingLocalMatch?.userId || `usr_${cleanUser}`,
@@ -791,9 +793,9 @@ export async function findUserProfileByEmail(identifier: string): Promise<UserPr
         selectedLogoName: "E-MUAVİN Kurumsal Logo",
         selectedLogoUrl: "/logo.svg",
         role: matchedComp.loginRole || "Firma Yöneticisi",
-        allowedModules: matchedComp.moduleRestrictionEnabled
+        allowedModules: Array.isArray(matchedComp.allowedModules)
           ? (matchedComp.allowedModules as AppModuleKey[])
-          : undefined,
+          : ["dashboard"],
         passwordPlain: matchedComp.loginPasswordPlain,
         createdByAdmin: true,
         createdAt: matchedComp.createdAt,
