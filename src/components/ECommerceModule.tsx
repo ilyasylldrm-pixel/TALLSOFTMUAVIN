@@ -13,7 +13,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { syncCompanyEcommerceToCloud } from "../services/systemSyncService";
 import { formatCurrency, formatDate } from "../utils/exportUtils";
 import { useTheme } from "../context/ThemeContext";
-import { mapTgoPackage, requestTgoPackages } from "../services/tgoMealClient";
+import { mapTgoPackage, notifyTgoInvoice, requestTgoPackages } from "../services/tgoMealClient";
 import {
   Globe,
   ShoppingCart,
@@ -51,6 +51,7 @@ import {
   Sliders,
   CheckCircle,
   Save,
+  UploadCloud,
 } from "lucide-react";
 
 export type MarketplaceId =
@@ -162,6 +163,12 @@ export interface ECommerceOrder {
   invoiceNumber?: string;
   syncedToOrders: boolean;
   linkedOrderId?: string;
+  /** TGO: fatura bildiriminde kullanılan paket kimliği (packageId). */
+  tgoPackageId?: string;
+  /** TGO: fatura linki bildiriminde kullanılan sipariş kimliği (orderId). */
+  tgoOrderId?: string;
+  /** TGO: faturanın TGO'ya bildirildiği zaman (ISO). */
+  tgoInvoiceNotifiedAt?: string;
 }
 
 interface ECommerceModuleProps {
@@ -1349,7 +1356,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           ...ecoOrders.filter((order) => !byId.has(order.id)),
           ...incoming.map((order) => {
             const existing = ecoOrders.find((item) => item.id === order.id);
-            return existing ? { ...order, invoiced: existing.invoiced, invoiceNumber: existing.invoiceNumber, syncedToOrders: existing.syncedToOrders, linkedOrderId: existing.linkedOrderId } : order;
+            return existing ? { ...order, invoiced: existing.invoiced, invoiceNumber: existing.invoiceNumber, syncedToOrders: existing.syncedToOrders, linkedOrderId: existing.linkedOrderId, tgoInvoiceNotifiedAt: existing.tgoInvoiceNotifiedAt } : order;
           }),
         ];
         const now = new Date().toISOString();
@@ -1770,18 +1777,95 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
     );
   };
 
+  // --- TGO fatura bildirimi ---
+  // Fatura kesildiğinde TGO paketini "Invoiced" yapar (ödeme hesabı için zorunlu),
+  // fatura linki varsa iletir. Hem otomatik (fatura kesilince) hem manuel butonla çalışır.
+  const [tgoNotifyingId, setTgoNotifyingId] = useState<string | null>(null);
+
+  const resolveTgoCredentials = (order: ECommerceOrder): MarketplaceStoreConfig | null => {
+    const tgoStores = stores.filter((store) => getStoreMarketplaceId(store) === "trendyol_go");
+    if (tgoStores.length === 0) return null;
+    // Sipariş kimliği "tgo_{supplierId}_{packageId}" biçimindedir.
+    const supplierId = order.id.startsWith("tgo_") ? order.id.split("_")[1] : undefined;
+    return (
+      tgoStores.find((store) => supplierId && store.supplierId === supplierId) ||
+      tgoStores.find(
+        (store) =>
+          store.apiKey?.trim() && store.apiSecret?.trim() && store.executorEmail?.trim(),
+      ) ||
+      tgoStores[0]
+    );
+  };
+
+  const resolveTgoPackageId = (order: ECommerceOrder): string => {
+    if (order.tgoPackageId) return order.tgoPackageId;
+    return order.id.startsWith("tgo_") ? order.id.split("_").slice(2).join("_") : "";
+  };
+
+  const notifyTgoInvoiceForOrder = async (order: ECommerceOrder): Promise<boolean> => {
+    const storeConfig = resolveTgoCredentials(order);
+    if (!storeConfig) {
+      showToast("TGO mağaza bağlantısı bulunamadı. Mağazalar bölümünden TGO API bilgilerini kaydedin.");
+      return false;
+    }
+    const packageId = resolveTgoPackageId(order);
+    if (!packageId) {
+      showToast("Bu sipariş için TGO paket kimliği bulunamadı; siparişi yeniden senkronize edin.");
+      return false;
+    }
+    setTgoNotifyingId(order.id);
+    try {
+      const result = await notifyTgoInvoice(storeConfig, {
+        packageId,
+        orderId: order.tgoOrderId,
+      });
+      const notifiedAt = new Date().toISOString();
+      setEcoOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, tgoInvoiceNotifiedAt: notifiedAt } : o))
+      );
+      showToast(
+        result.linkSent
+          ? `${order.marketplaceOrderNo} TGO'da faturalandı olarak işaretlendi ve fatura linki iletildi.`
+          : `${order.marketplaceOrderNo} TGO'da faturalandı (Invoiced) olarak işaretlendi.`
+      );
+      return true;
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "TGO fatura bildirimi başarısız oldu.",
+      );
+      return false;
+    } finally {
+      setTgoNotifyingId(null);
+    }
+  };
+
   // Convert E-Commerce Order to Official e-Arşiv / e-Fatura in Accounting
   const handleCreateInvoiceFromOrder = (ecoOrder: ECommerceOrder) => {
     if (ecoOrder.marketplace === "trendyol_go") {
-      showToast(
-        "TGO siparişinde KDV oranı ve fatura bilgileri API yanıtında bulunmuyor. Faturayı doğrulanmış bilgilerle Faturalar ekranından hazırlayın."
+      const kdvInput = window.prompt(
+        "TGO API yanıtı KDV oranı bilgisi içermiyor. Bu sipariş için uygulanacak KDV oranını (%) doğrulayarak girin:",
+        "10"
       );
+      if (kdvInput === null) return;
+      const tgoVatRate = Number(kdvInput.replace(",", "."));
+      if (!Number.isFinite(tgoVatRate) || tgoVatRate < 0 || tgoVatRate > 100) {
+        showToast("Geçersiz KDV oranı girildi; fatura kesilmedi.");
+        return;
+      }
+      handleCreateTgoInvoiceFromOrder(ecoOrder, tgoVatRate);
       return;
     }
     if (ecoOrder.invoiced) {
       showToast(`Bu sipariş için zaten fatura (${ecoOrder.invoiceNumber}) oluşturulmuş.`);
       return;
     }
+    handleCreateTgoInvoiceFromOrder(ecoOrder, null);
+  };
+
+  const handleCreateTgoInvoiceFromOrder = (
+    ecoOrder: ECommerceOrder,
+    tgoVatRate: number | null
+  ) => {
 
     const stMeta = MARKETPLACE_META[ecoOrder.marketplace];
     const subtotal = ecoOrder.items.reduce(
@@ -1840,7 +1924,8 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
       issueDate: new Date().toISOString().slice(0, 10),
       dueDate: ecoOrder.payoutDueDate,
       items: ecoOrder.items.map((item) => {
-        const net = item.totalWithVat / (1 + item.vatRate / 100);
+        const vatRate = tgoVatRate ?? item.vatRate;
+        const net = item.totalWithVat / (1 + vatRate / 100);
         const vat = item.totalWithVat - net;
         return {
           id: item.id,
@@ -1850,7 +1935,7 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
           quantity: item.quantity,
           unit: "Adet",
           unitPrice: Number((net / item.quantity).toFixed(2)),
-          vatRate: item.vatRate,
+          vatRate,
           totalWithoutVat: Number(net.toFixed(2)),
           vatAmount: Number(vat.toFixed(2)),
           totalWithVat: item.totalWithVat,
@@ -1879,6 +1964,10 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
         isCorporate ? "e-Fatura" : "e-Arşiv Fatura"
       } kesildi ve Gelir Faturalarına eklendi!`
     );
+    // Özellik: fatura kesilir kesilmez TGO'ya otomatik bildirim (Invoiced + fatura linki).
+    if (ecoOrder.marketplace === "trendyol_go") {
+      void notifyTgoInvoiceForOrder({ ...ecoOrder, invoiced: true, invoiceNumber });
+    }
   };
 
   // Record Marketplace Commission as Expense Invoice in Accounting
@@ -2542,6 +2631,33 @@ export const ECommerceModule: React.FC<ECommerceModuleProps> = ({
                               <Send className="w-3 h-3" />
                               <span>{order.syncedToOrders ? "Aktarıldı" : "Siparişe Aktar"}</span>
                             </button>
+
+                            {order.marketplace === "trendyol_go" && (
+                              <button
+                                type="button"
+                                onClick={() => void notifyTgoInvoiceForOrder(order)}
+                                disabled={tgoNotifyingId === order.id}
+                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer border transition-colors disabled:opacity-60 ${
+                                  order.tgoInvoiceNotifiedAt
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-orange-500 hover:bg-orange-600 text-white border-orange-500 shadow-2xs"
+                                }`}
+                                title={
+                                  order.tgoInvoiceNotifiedAt
+                                    ? `TGO'ya bildirildi: ${new Date(order.tgoInvoiceNotifiedAt).toLocaleString("tr-TR")} — tekrar bildirmek için tıklayın`
+                                    : "Kesilen faturayı TGO siparişine bildir (paket Invoiced yapılır, fatura linki varsa iletilir)"
+                                }
+                              >
+                                <UploadCloud className="w-3.5 h-3.5" />
+                                <span>
+                                  {tgoNotifyingId === order.id
+                                    ? "Bildiriliyor…"
+                                    : order.tgoInvoiceNotifiedAt
+                                      ? "TGO'ya Bildirildi"
+                                      : "TGO'ya Yükle"}
+                                </span>
+                              </button>
+                            )}
 
                             <button
                               type="button"

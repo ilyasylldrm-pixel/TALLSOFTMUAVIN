@@ -47,6 +47,43 @@ export async function requestTgoPackages(
   return data.packages as TgoPackage[];
 }
 
+export interface TgoInvoiceNotifyInput {
+  packageId: string;
+  /** Fatura linki iletilecekse zorunlu: TGO sipariş (orderId) kimliği. */
+  orderId?: string;
+  /** 10 yıl erişilebilir herkese açık fatura PDF linki (opsiyonel). */
+  invoiceLink?: string;
+}
+
+export interface TgoInvoiceNotifyResult {
+  statusNotified: boolean;
+  linkSent: boolean;
+}
+
+/**
+ * Kesilen faturayı TGO'ya bildirir: paketi "Invoiced" yapar,
+ * fatura linki verilmişse onu da iletir.
+ */
+export async function notifyTgoInvoice(
+  credentials: Pick<MarketplaceStoreConfig, "supplierId" | "apiKey" | "apiSecret" | "executorEmail">,
+  input: TgoInvoiceNotifyInput,
+): Promise<TgoInvoiceNotifyResult> {
+  const response = await fetch("/api/marketplace/tgo-meal/notify-invoiced", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...credentials, ...input }),
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    statusNotified?: boolean;
+    linkSent?: boolean;
+  };
+  if (!response.ok) {
+    throw new Error(data.error || `TGO fatura bildirimi başarısız (${response.status}).`);
+  }
+  return { statusNotified: Boolean(data.statusNotified), linkSent: Boolean(data.linkSent) };
+}
+
 export function mapTgoPackage(pkg: TgoPackage, store: MarketplaceStoreConfig): ECommerceOrder {
   if (!pkg.id || !Array.isArray(pkg.lines)) {
     throw new Error("TGO paketinde kimlik veya ürün satırları eksik.");
@@ -112,5 +149,7 @@ export function mapTgoPackage(pkg: TgoPackage, store: MarketplaceStoreConfig): E
     payoutDueDate: dateString,
     invoiced: pkg.packageStatus === "Invoiced",
     syncedToOrders: false,
+    tgoPackageId: String(pkg.id),
+    tgoOrderId: pkg.orderId ? String(pkg.orderId) : undefined,
   };
 }
